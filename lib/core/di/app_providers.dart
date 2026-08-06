@@ -25,6 +25,7 @@ import '../../features/light_pollution_map/viewmodel/light_pollution_map_view_mo
 import '../../features/main/viewmodel/main_back_navigation_view_model.dart';
 import '../../features/settings/viewmodel/equipment_view_model.dart';
 import '../../features/settings/viewmodel/settings_view_model.dart';
+import '../../features/settings/viewmodel/tc_backend_view_model.dart';
 import '../../services/stats_analytics_service.dart';
 import '../../features/sky_map/viewmodel/sky_map_view_model.dart';
 import '../../features/stats/viewmodel/stats_view_model.dart';
@@ -61,6 +62,7 @@ import '../../services/tonight_shooting_plan_service.dart';
 import '../../services/splash_image_service.dart';
 import '../../services/weather_cache_service.dart';
 import '../../services/weather_service.dart';
+import '../../services/tc_backend_settings_service.dart';
 import '../navigation/app_navigation_notifier.dart';
 
 class AppProviders {
@@ -78,6 +80,7 @@ class AppProviders {
     final photoService = PhotoService(photoRepository, exifService);
     final geocodingService = GeocodingService();
     final apiKeyService = ApiKeyService();
+    final tcBackendSettingsService = TcBackendSettingsService();
     final metadataService = MetadataService();
     final catalogSearchService = CatalogSearchService();
     final metadataPipeline = PhotoMetadataPipeline(
@@ -219,6 +222,9 @@ class AppProviders {
       ]),
     );
 
+    final tcBackendViewModel =
+        TcBackendViewModel(tcBackendSettingsService);
+
     final equipmentViewModel = EquipmentViewModel(equipmentRepository);
 
     final skyMapViewModel = SkyMapViewModel(
@@ -244,6 +250,7 @@ class AppProviders {
       Provider<ExifService>.value(value: exifService),
       Provider<GeocodingService>.value(value: geocodingService),
       Provider<ApiKeyService>.value(value: apiKeyService),
+      Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
       Provider<MetadataService>.value(value: metadataService),
       Provider<CatalogSearchService>.value(value: catalogSearchService),
       Provider<PhotoMetadataPipeline>.value(value: metadataPipeline),
@@ -293,6 +300,7 @@ class AppProviders {
       ChangeNotifierProvider.value(value: lightPollutionMapViewModel),
       ChangeNotifierProvider.value(value: statsViewModel),
       ChangeNotifierProvider.value(value: settingsViewModel),
+      ChangeNotifierProvider.value(value: tcBackendViewModel),
       ChangeNotifierProvider.value(value: equipmentViewModel),
       ChangeNotifierProvider.value(value: skyMapViewModel),
     ];

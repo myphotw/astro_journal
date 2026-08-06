@@ -19,6 +19,7 @@ import '../../../services/base_exposure_settings_service.dart';
 import '../../../services/weather_service.dart';
 import '../viewmodel/equipment_view_model.dart';
 import '../viewmodel/settings_view_model.dart';
+import '../widgets/tc_backend_settings_section.dart';
 import 'api_settings_screen.dart';
 import 'equipment_list_screen.dart';
 import 'exif_debug_screen.dart';
@@ -83,6 +84,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _ApiSection(),
                 const SizedBox(height: 12),
                 _ApiTestSection(),
+                const SizedBox(height: 24),
+                _SectionHeader(
+                  title: 'TC-Backend',
+                  icon: Icons.cloud_outlined,
+                ),
+                const TcBackendSettingsSection(),
                 const SizedBox(height: 24),
                 _SectionHeader(
                   title: '백업 / 가져오기',
