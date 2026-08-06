@@ -1,0 +1,167 @@
+name: astro_journal
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # MVVM 상태 관리
+  provider: ^6.1.5
+
+  # SQLite 로컬 저장
+  sqflite: ^2.4.2
+  sqflite_common_ffi: ^2.3.6
+  sqlite3_flutter_libs: ^0.5.28
+  path: ^1.9.1
+  path_provider: ^2.1.5
+
+  # 촬영 기록 ID 생성
+  uuid: ^4.5.1
+
+  # 갤러리 사진 선택
+  image_picker: ^1.1.2
+  photo_manager: ^3.7.1
+
+  # EXIF 자동 추출
+  native_exif: ^0.6.0
+
+  # API Key 저장 (SharedPreferences)
+  shared_preferences: ^2.3.5
+
+  # ZIP 백업 생성/압축 해제
+  archive: ^3.6.1
+
+  # 백업 파일 선택
+  file_picker: ^8.1.7
+
+  # 백업 파일 공유/내보내기
+  share_plus: ^10.1.4
+
+  # Geocoding API HTTP 호출
+  http: ^1.4.0
+
+  # Plate Solve 업로드용 이미지 리사이즈
+  image: ^4.3.0
+
+  # Google Maps 지도 위젯
+  google_maps_flutter: ^2.10.0
+  google_maps_flutter_android: ^2.19.0
+  google_maps_flutter_platform_interface: ^2.14.0
+
+  # Google Maps 앱 실행
+  url_launcher: ^6.3.1
+  flutter_secure_storage: ^10.3.1
+  geolocator: ^14.0.2
+  permission_handler: ^12.0.3
+
+  # 통계 Dashboard 차트
+  fl_chart: ^0.70.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon/app_icon.png
+  adaptive_icon_background: "#080B14"
+  adaptive_icon_foreground: assets/icon/app_icon.png
+  web:
+    generate: true
+    image_path: assets/icon/app_icon.png
+    background_color: "#080B14"
+    theme_color: "#080B14"
+  windows:
+    generate: true
+    image_path: assets/icon/app_icon.png
+    icon_size: 256
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  assets:
+    - assets/catalog/messier.json
+    - assets/catalog/seestar_raw.json
+    - assets/catalog/seestar_catalog.json
+    - assets/catalog/catalog_equivalence.json
+    - assets/catalog/common_names.json
+    - assets/catalog/id_remap.json
+    - assets/catalog/solar.json
+    - assets/catalog/stars.json
+    - assets/catalog/milkyway.json
+    - assets/catalog/search_aliases.json
+    - assets/catalog/search_cross_catalog.json
+    - assets/catalog/display_name_dictionary.json
+    - assets/database/bortle.db
+    - assets/database/catalog_seed.db
+    - assets/icon/app_icon.png
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

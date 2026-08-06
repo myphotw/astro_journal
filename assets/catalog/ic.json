@@ -1,0 +1,152 @@
+[
+  {
+    "id": "IC342",
+    "number": 342,
+    "name": "숨겨진 은하",
+    "type": "은하",
+    "constellation": "기린자리",
+    "ra": "03h 46m",
+    "dec": "+68°06'",
+    "magnitude": "9.1"
+  },
+  {
+    "id": "IC405",
+    "number": 405,
+    "name": "불꽃별 성운",
+    "type": "성운",
+    "constellation": "마차부자리",
+    "ra": "05h 16m",
+    "dec": "+34°16'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC410",
+    "number": 410,
+    "name": "올챙이 성운",
+    "type": "성운",
+    "constellation": "마차부자리",
+    "ra": "05h 22m",
+    "dec": "+33°24'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC434",
+    "number": 434,
+    "name": "말머리 성운",
+    "type": "성운",
+    "constellation": "오리온자리",
+    "ra": "05h 41m",
+    "dec": "-02°24'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC443",
+    "number": 443,
+    "name": "해파리 성운",
+    "type": "성운",
+    "constellation": "쌍둥이자리",
+    "ra": "06h 17m",
+    "dec": "+22°47'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC1318",
+    "number": 1318,
+    "name": "나비 성운",
+    "type": "성운",
+    "constellation": "백조자리",
+    "ra": "20h 18m",
+    "dec": "+40°00'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC1396",
+    "number": 1396,
+    "name": "코끼리 코 성운",
+    "type": "성운",
+    "constellation": "세페우스자리",
+    "ra": "21h 39m",
+    "dec": "+57°30'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC1805",
+    "number": 1805,
+    "name": "하트 성운",
+    "type": "성운",
+    "constellation": "카시오페아자리",
+    "ra": "02h 32m",
+    "dec": "+61°27'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC1848",
+    "number": 1848,
+    "name": "영혼 성운",
+    "type": "성운",
+    "constellation": "카시오페아자리",
+    "ra": "02h 51m",
+    "dec": "+60°25'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC2118",
+    "number": 2118,
+    "name": "마녀머리 성운",
+    "type": "성운",
+    "constellation": "에리다누스자리",
+    "ra": "05h 06m",
+    "dec": "-07°13'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC2177",
+    "number": 2177,
+    "name": "갈매기 성운",
+    "type": "성운",
+    "constellation": "외뿔소자리",
+    "ra": "07h 05m",
+    "dec": "-10°42'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC4592",
+    "number": 4592,
+    "name": "파란 말머리 성운",
+    "type": "성운",
+    "constellation": "전갈자리",
+    "ra": "16h 12m",
+    "dec": "-19°28'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC4628",
+    "number": 4628,
+    "name": "새우 성운",
+    "type": "성운",
+    "constellation": "전갈자리",
+    "ra": "16h 57m",
+    "dec": "-40°20'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC5067",
+    "number": 5067,
+    "name": "펠리칸 성운",
+    "type": "성운",
+    "constellation": "백조자리",
+    "ra": "20h 50m",
+    "dec": "+44°21'",
+    "magnitude": "-"
+  },
+  {
+    "id": "IC5146",
+    "number": 5146,
+    "name": "고치 성운",
+    "type": "성운",
+    "constellation": "백조자리",
+    "ra": "21h 53m",
+    "dec": "+47°16'",
+    "magnitude": "-"
+  }
+]

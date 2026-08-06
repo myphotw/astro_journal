@@ -1,0 +1,302 @@
+[
+  {
+    "id": "NGC55",
+    "number": 55,
+    "name": "NGC 55",
+    "type": "은하",
+    "constellation": "조각가자리",
+    "ra": "00h 15m",
+    "dec": "-39°11'",
+    "magnitude": "7.9"
+  },
+  {
+    "id": "NGC253",
+    "number": 253,
+    "name": "조각가 은하",
+    "type": "은하",
+    "constellation": "조각가자리",
+    "ra": "00h 47m",
+    "dec": "-25°17'",
+    "magnitude": "7.1"
+  },
+  {
+    "id": "NGC300",
+    "number": 300,
+    "name": "NGC 300",
+    "type": "은하",
+    "constellation": "조각가자리",
+    "ra": "00h 54m",
+    "dec": "-37°41'",
+    "magnitude": "8.1"
+  },
+  {
+    "id": "NGC869",
+    "number": 869,
+    "name": "이중 성단",
+    "type": "산개성단",
+    "constellation": "페르세우스자리",
+    "ra": "02h 19m",
+    "dec": "+57°08'",
+    "magnitude": "3.8"
+  },
+  {
+    "id": "NGC884",
+    "number": 884,
+    "name": "이중성단 χ",
+    "type": "산개성단",
+    "constellation": "페르세우스자리",
+    "ra": "02h 22m",
+    "dec": "+57°07'",
+    "magnitude": "3.6"
+  },
+  {
+    "id": "NGC1232",
+    "number": 1232,
+    "name": "NGC 1232",
+    "type": "은하",
+    "constellation": "에리다누스자리",
+    "ra": "03h 09m",
+    "dec": "-20°35'",
+    "magnitude": "9.9"
+  },
+  {
+    "id": "NGC1499",
+    "number": 1499,
+    "name": "캘리포니아 성운",
+    "type": "성운",
+    "constellation": "페르세우스자리",
+    "ra": "04h 03m",
+    "dec": "+36°22'",
+    "magnitude": "-"
+  },
+  {
+    "id": "NGC1579",
+    "number": 1579,
+    "name": "북쪽 삼렬 성운",
+    "type": "성운",
+    "constellation": "페르세우스자리",
+    "ra": "04h 30m",
+    "dec": "+35°16'",
+    "magnitude": "-"
+  },
+  {
+    "id": "NGC2244",
+    "number": 2244,
+    "name": "장미 성단",
+    "type": "산개성단",
+    "constellation": "외뿔소자리",
+    "ra": "06h 31m",
+    "dec": "+04°52'",
+    "magnitude": "4.8"
+  },
+  {
+    "id": "NGC2264",
+    "number": 2264,
+    "name": "크리스마스 트리 성단",
+    "type": "산개성단",
+    "constellation": "외뿔소자리",
+    "ra": "06h 41m",
+    "dec": "+09°53'",
+    "magnitude": "3.9"
+  },
+  {
+    "id": "NGC2392",
+    "number": 2392,
+    "name": "에스키모 성운",
+    "type": "성운",
+    "constellation": "쌍둥이자리",
+    "ra": "07h 29m",
+    "dec": "+20°55'",
+    "magnitude": "9.9"
+  },
+  {
+    "id": "NGC2903",
+    "number": 2903,
+    "name": "NGC 2903",
+    "type": "은하",
+    "constellation": "사자자리",
+    "ra": "09h 32m",
+    "dec": "+21°30'",
+    "magnitude": "8.9"
+  },
+  {
+    "id": "NGC3372",
+    "number": 3372,
+    "name": "에타 카리나 성운",
+    "type": "성운",
+    "constellation": "용골자리",
+    "ra": "10h 43m",
+    "dec": "-59°52'",
+    "magnitude": "1.0"
+  },
+  {
+    "id": "NGC3628",
+    "number": 3628,
+    "name": "팬케이크 은하",
+    "type": "은하",
+    "constellation": "사자자리",
+    "ra": "11h 20m",
+    "dec": "+13°35'",
+    "magnitude": "9.5"
+  },
+  {
+    "id": "NGC4038",
+    "number": 4038,
+    "name": "안테나 은하",
+    "type": "은하",
+    "constellation": "까마귀자리",
+    "ra": "12h 01m",
+    "dec": "-18°52'",
+    "magnitude": "10.3"
+  },
+  {
+    "id": "NGC4244",
+    "number": 4244,
+    "name": "NGC 4244",
+    "type": "은하",
+    "constellation": "사냥개자리",
+    "ra": "12h 17m",
+    "dec": "+37°49'",
+    "magnitude": "10.4"
+  },
+  {
+    "id": "NGC4565",
+    "number": 4565,
+    "name": "바늘 은하",
+    "type": "은하",
+    "constellation": "머리털자리",
+    "ra": "12h 36m",
+    "dec": "+25°59'",
+    "magnitude": "9.6"
+  },
+  {
+    "id": "NGC4631",
+    "number": 4631,
+    "name": "고래 은하",
+    "type": "은하",
+    "constellation": "사냥개자리",
+    "ra": "12h 42m",
+    "dec": "+32°32'",
+    "magnitude": "9.2"
+  },
+  {
+    "id": "NGC5128",
+    "number": 5128,
+    "name": "센타우루스 A",
+    "type": "은하",
+    "constellation": "센타우루스자리",
+    "ra": "13h 25m",
+    "dec": "-43°01'",
+    "magnitude": "6.8"
+  },
+  {
+    "id": "NGC5139",
+    "number": 5139,
+    "name": "오메가 센타우리",
+    "type": "구상성단",
+    "constellation": "센타우루스자리",
+    "ra": "13h 26m",
+    "dec": "-47°29'",
+    "magnitude": "3.9"
+  },
+  {
+    "id": "NGC6188",
+    "number": 6188,
+    "name": "가장자리 성운",
+    "type": "성운",
+    "constellation": "제단자리",
+    "ra": "16h 40m",
+    "dec": "-48°47'",
+    "magnitude": "-"
+  },
+  {
+    "id": "NGC6334",
+    "number": 6334,
+    "name": "고양이 발 성운",
+    "type": "성운",
+    "constellation": "전갈자리",
+    "ra": "17h 19m",
+    "dec": "-35°57'",
+    "magnitude": "-"
+  },
+  {
+    "id": "NGC6357",
+    "number": 6357,
+    "name": "전쟁과 평화 성운",
+    "type": "성운",
+    "constellation": "전갈자리",
+    "ra": "17h 24m",
+    "dec": "-34°12'",
+    "magnitude": "-"
+  },
+  {
+    "id": "NGC6543",
+    "number": 6543,
+    "name": "고양이 눈 성운",
+    "type": "성운",
+    "constellation": "용자리",
+    "ra": "17h 58m",
+    "dec": "+66°38'",
+    "magnitude": "8.1"
+  },
+  {
+    "id": "NGC6822",
+    "number": 6822,
+    "name": "바너드 은하",
+    "type": "은하",
+    "constellation": "궁수자리",
+    "ra": "19h 44m",
+    "dec": "-14°48'",
+    "magnitude": "9.3"
+  },
+  {
+    "id": "NGC6992",
+    "number": 6992,
+    "name": "동쪽 베일 성운",
+    "type": "성운",
+    "constellation": "백조자리",
+    "ra": "20h 56m",
+    "dec": "+31°43'",
+    "magnitude": "-"
+  },
+  {
+    "id": "NGC7000",
+    "number": 7000,
+    "name": "북아메리카 성운",
+    "type": "성운",
+    "constellation": "백조자리",
+    "ra": "20h 58m",
+    "dec": "+44°20'",
+    "magnitude": "-"
+  },
+  {
+    "id": "NGC7293",
+    "number": 7293,
+    "name": "쌍가락지 성운",
+    "type": "성운",
+    "constellation": "물병자리",
+    "ra": "22h 29m",
+    "dec": "-20°50'",
+    "magnitude": "7.3"
+  },
+  {
+    "id": "NGC7331",
+    "number": 7331,
+    "name": "NGC 7331",
+    "type": "은하",
+    "constellation": "페가수스자리",
+    "ra": "22h 37m",
+    "dec": "+34°25'",
+    "magnitude": "9.5"
+  },
+  {
+    "id": "NGC7789",
+    "number": 7789,
+    "name": "캐롤라인의 장미",
+    "type": "산개성단",
+    "constellation": "카시오페아자리",
+    "ra": "23h 57m",
+    "dec": "+56°44'",
+    "magnitude": "6.7"
+  }
+]

@@ -1,0 +1,59 @@
+import '../../core/constants/angular_size_class.dart';
+import '../../core/constants/imaging_difficulty.dart';
+import '../../core/constants/object_type.dart';
+import '../../core/constants/surface_brightness_class.dart';
+
+/// Per-target imaging characteristics used by exposure and score engines.
+class ObjectImagingProfile {
+  const ObjectImagingProfile({
+    required this.objectType,
+    required this.imagingDifficulty,
+    required this.surfaceBrightnessClass,
+    required this.angularSizeClass,
+    required this.baseExposureMinutes,
+    required this.minimumRecommendedBortle,
+    required this.recommendedBortle,
+    required this.supportsNarrowband,
+    required this.recommendedFilters,
+  });
+
+  final ObjectType objectType;
+  final ImagingDifficulty imagingDifficulty;
+  final SurfaceBrightnessClass surfaceBrightnessClass;
+  final AngularSizeClass angularSizeClass;
+  final int baseExposureMinutes;
+
+  /// Worst acceptable Bortle scale (higher = more light pollution tolerated).
+  final int minimumRecommendedBortle;
+
+  /// Ideal observation site Bortle (lower = darker sky).
+  final int recommendedBortle;
+  final bool supportsNarrowband;
+  final List<String> recommendedFilters;
+
+  ObjectImagingProfile copyWith({
+    ObjectType? objectType,
+    ImagingDifficulty? imagingDifficulty,
+    SurfaceBrightnessClass? surfaceBrightnessClass,
+    AngularSizeClass? angularSizeClass,
+    int? baseExposureMinutes,
+    int? minimumRecommendedBortle,
+    int? recommendedBortle,
+    bool? supportsNarrowband,
+    List<String>? recommendedFilters,
+  }) {
+    return ObjectImagingProfile(
+      objectType: objectType ?? this.objectType,
+      imagingDifficulty: imagingDifficulty ?? this.imagingDifficulty,
+      surfaceBrightnessClass:
+          surfaceBrightnessClass ?? this.surfaceBrightnessClass,
+      angularSizeClass: angularSizeClass ?? this.angularSizeClass,
+      baseExposureMinutes: baseExposureMinutes ?? this.baseExposureMinutes,
+      minimumRecommendedBortle:
+          minimumRecommendedBortle ?? this.minimumRecommendedBortle,
+      recommendedBortle: recommendedBortle ?? this.recommendedBortle,
+      supportsNarrowband: supportsNarrowband ?? this.supportsNarrowband,
+      recommendedFilters: recommendedFilters ?? this.recommendedFilters,
+    );
+  }
+}

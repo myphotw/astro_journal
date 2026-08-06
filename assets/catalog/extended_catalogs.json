@@ -1,0 +1,21 @@
+[
+  {
+    "id": "Sh2-276",
+    "catalog": "sh2",
+    "number": 276,
+    "commonName": "바나드 고리",
+    "name": "바나드 고리",
+    "objectType": "발광성운",
+    "constellation": "오리온자리",
+    "ra": "05h 27m 00s",
+    "dec": "+03° 00' 00\"",
+    "magnitude": "-",
+    "angularSize": "600' × 400'",
+    "aliases": [
+      "Barnard Loop",
+      "Barnard's Loop",
+      "Sh2 276"
+    ],
+    "seestarSupported": true
+  }
+]

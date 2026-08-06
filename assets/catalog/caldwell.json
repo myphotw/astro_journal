@@ -1,0 +1,312 @@
+[
+  {
+    "id": "C1",
+    "number": 1,
+    "name": "NGC 188",
+    "type": "산개성단",
+    "constellation": "세페우스자리",
+    "ra": "00h 44m",
+    "dec": "+85°20'",
+    "magnitude": "8.1"
+  },
+  {
+    "id": "C2",
+    "number": 2,
+    "name": "불꽃별 성운",
+    "type": "성운",
+    "constellation": "마차부자리",
+    "ra": "05h 16m",
+    "dec": "+34°16'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C3",
+    "number": 3,
+    "name": "NGC 4236",
+    "type": "은하",
+    "constellation": "용자리",
+    "ra": "12h 16m",
+    "dec": "+69°28'",
+    "magnitude": "10.0"
+  },
+  {
+    "id": "C4",
+    "number": 4,
+    "name": "붓꽃 성운",
+    "type": "성운",
+    "constellation": "세페우스자리",
+    "ra": "21h 00m",
+    "dec": "+68°10'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C5",
+    "number": 5,
+    "name": "숨겨진 은하",
+    "type": "은하",
+    "constellation": "기린자리",
+    "ra": "03h 46m",
+    "dec": "+68°06'",
+    "magnitude": "9.1"
+  },
+  {
+    "id": "C6",
+    "number": 6,
+    "name": "고양이 눈 성운",
+    "type": "행성상성운",
+    "constellation": "용자리",
+    "ra": "17h 58m",
+    "dec": "+66°38'",
+    "magnitude": "8.1"
+  },
+  {
+    "id": "C7",
+    "number": 7,
+    "name": "NGC 2403",
+    "type": "은하",
+    "constellation": "기린자리",
+    "ra": "07h 36m",
+    "dec": "+65°36'",
+    "magnitude": "8.5"
+  },
+  {
+    "id": "C8",
+    "number": 8,
+    "name": "NGC 559",
+    "type": "산개성단",
+    "constellation": "카시오페아자리",
+    "ra": "01h 29m",
+    "dec": "+63°18'",
+    "magnitude": "9.5"
+  },
+  {
+    "id": "C9",
+    "number": 9,
+    "name": "동굴 성운",
+    "type": "성운",
+    "constellation": "세페우스자리",
+    "ra": "22h 56m",
+    "dec": "+62°37'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C11",
+    "number": 11,
+    "name": "거품 성운",
+    "type": "성운",
+    "constellation": "카시오페아자리",
+    "ra": "23h 20m",
+    "dec": "+61°55'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C12",
+    "number": 12,
+    "name": "불꽃놀이 은하",
+    "type": "은하",
+    "constellation": "백조자리",
+    "ra": "20h 34m",
+    "dec": "+60°09'",
+    "magnitude": "9.9"
+  },
+  {
+    "id": "C13",
+    "number": 13,
+    "name": "올빼미 성단",
+    "type": "산개성단",
+    "constellation": "카시오페아자리",
+    "ra": "01h 19m",
+    "dec": "+58°20'",
+    "magnitude": "6.4"
+  },
+  {
+    "id": "C14",
+    "number": 14,
+    "name": "이중 성단",
+    "type": "산개성단",
+    "constellation": "페르세우스자리",
+    "ra": "02h 19m",
+    "dec": "+57°08'",
+    "magnitude": "3.7"
+  },
+  {
+    "id": "C15",
+    "number": 15,
+    "name": "깜박이는 행성상성운",
+    "type": "행성상성운",
+    "constellation": "백조자리",
+    "ra": "19h 44m",
+    "dec": "+50°31'",
+    "magnitude": "8.8"
+  },
+  {
+    "id": "C16",
+    "number": 16,
+    "name": "NGC 7243",
+    "type": "산개성단",
+    "constellation": "도마뱀자리",
+    "ra": "22h 15m",
+    "dec": "+49°53'",
+    "magnitude": "6.4"
+  },
+  {
+    "id": "C17",
+    "number": 17,
+    "name": "NGC 147",
+    "type": "은하",
+    "constellation": "카시오페아자리",
+    "ra": "00h 33m",
+    "dec": "+48°30'",
+    "magnitude": "9.3"
+  },
+  {
+    "id": "C18",
+    "number": 18,
+    "name": "NGC 185",
+    "type": "은하",
+    "constellation": "카시오페아자리",
+    "ra": "00h 39m",
+    "dec": "+48°20'",
+    "magnitude": "9.2"
+  },
+  {
+    "id": "C19",
+    "number": 19,
+    "name": "NGC 278",
+    "type": "은하",
+    "constellation": "카시오페아자리",
+    "ra": "00h 52m",
+    "dec": "+47°33'",
+    "magnitude": "9.3"
+  },
+  {
+    "id": "C20",
+    "number": 20,
+    "name": "북아메리카 성운",
+    "type": "성운",
+    "constellation": "백조자리",
+    "ra": "20h 58m",
+    "dec": "+44°20'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C21",
+    "number": 21,
+    "name": "NGC 4449",
+    "type": "은하",
+    "constellation": "사냥개자리",
+    "ra": "12h 28m",
+    "dec": "+44°06'",
+    "magnitude": "9.4"
+  },
+  {
+    "id": "C23",
+    "number": 23,
+    "name": "NGC 891",
+    "type": "은하",
+    "constellation": "안드로메다자리",
+    "ra": "02h 22m",
+    "dec": "+42°21'",
+    "magnitude": "9.9"
+  },
+  {
+    "id": "C27",
+    "number": 27,
+    "name": "초승달 성운",
+    "type": "성운",
+    "constellation": "백조자리",
+    "ra": "20h 12m",
+    "dec": "+38°21'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C30",
+    "number": 30,
+    "name": "NGC 7331",
+    "type": "은하",
+    "constellation": "페가수스자리",
+    "ra": "22h 37m",
+    "dec": "+34°25'",
+    "magnitude": "9.5"
+  },
+  {
+    "id": "C33",
+    "number": 33,
+    "name": "동쪽 베일 성운",
+    "type": "초신성잔해",
+    "constellation": "백조자리",
+    "ra": "20h 56m",
+    "dec": "+31°43'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C39",
+    "number": 39,
+    "name": "에스키모 성운",
+    "type": "행성상성운",
+    "constellation": "상둠이",
+    "ra": "07h 29m",
+    "dec": "+20°55'",
+    "magnitude": "9.2"
+  },
+  {
+    "id": "C41",
+    "number": 41,
+    "name": "유령 행성 성운",
+    "type": "행성상성운",
+    "constellation": "바다뱀",
+    "ra": "10h 24m",
+    "dec": "-18°38'",
+    "magnitude": "7.7"
+  },
+  {
+    "id": "C48",
+    "number": 48,
+    "name": "NGC 2775",
+    "type": "은하",
+    "constellation": "게자리",
+    "ra": "09h 10m",
+    "dec": "+07°02'",
+    "magnitude": "10.4"
+  },
+  {
+    "id": "C49",
+    "number": 49,
+    "name": "장미 성운",
+    "type": "성운",
+    "constellation": "외뿔소자리",
+    "ra": "06h 32m",
+    "dec": "+04°57'",
+    "magnitude": "-"
+  },
+  {
+    "id": "C57",
+    "number": 57,
+    "name": "바너드 은하",
+    "type": "은하",
+    "constellation": "궁수자리",
+    "ra": "19h 45m",
+    "dec": "-14°48'",
+    "magnitude": "9.0"
+  },
+  {
+    "id": "C63",
+    "number": 63,
+    "name": "쌍가락지 성운",
+    "type": "행성상성운",
+    "constellation": "물병자리",
+    "ra": "22h 29m",
+    "dec": "-20°50'",
+    "magnitude": "7.3"
+  },
+  {
+    "id": "C80",
+    "number": 80,
+    "name": "오메가 센타우리",
+    "type": "구상성단",
+    "constellation": "센타우루스자리",
+    "ra": "13h 26m",
+    "dec": "-47°29'",
+    "magnitude": "3.7"
+  }
+]

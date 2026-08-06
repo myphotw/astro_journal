@@ -1,0 +1,97 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Local IDE / Android build state
+.vscode/
+/android/.gradle/
+/android/local.properties
+
+# Android release artifacts
+*.apk
+*.aab
+*.apks
+*.aar
+
+# Local logs, temporary files, and diagnostic/build probes
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+/tmp/
+/_build_probe/
+/_gradle_probe/
+
+# Credentials and local configuration (never commit)
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+google-services.json
+GoogleService-Info.plist
+*service-account*.json
+*service_account*.json
+
+# Runtime-only application data. Seed databases in assets/ are intentional.
+/astro_journal.db
+/astro_journal.db-*
+/assets/user_photos/
+/user_photos/
+/photos/
+/backups/
+*.sqlite
+*.sqlite3
+*.zip
+
+# Transfer package and reverse-engineering / extracted binary data
+/astro_journal_transfer/
+/tools/seestar_apk_extract/
+/tools/seestar_stardb/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release

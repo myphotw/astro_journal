@@ -1,0 +1,504 @@
+{
+  "M1": [
+    "Crab Nebula",
+    "Crab"
+  ],
+  "M6": [
+    "Butterfly Cluster"
+  ],
+  "M7": [
+    "Ptolemy Cluster"
+  ],
+  "M8": [
+    "Lagoon Nebula",
+    "Lagoon"
+  ],
+  "M11": [
+    "Wild Duck Cluster"
+  ],
+  "M13": [
+    "Great Hercules Cluster",
+    "Hercules Globular",
+    "Great Globular Cluster"
+  ],
+  "M16": [
+    "Eagle Nebula",
+    "Pillars of Creation",
+    "Star Queen Nebula"
+  ],
+  "M17": [
+    "Omega Nebula",
+    "Swan Nebula",
+    "Horseshoe Nebula",
+    "Checkmark Nebula"
+  ],
+  "M20": [
+    "Trifid Nebula",
+    "Trifid"
+  ],
+  "M22": [
+    "Sagittarius Cluster"
+  ],
+  "M24": [
+    "Sagittarius Star Cloud",
+    "Delphinus Nebula"
+  ],
+  "M27": [
+    "Dumbbell Nebula",
+    "Dumbbell"
+  ],
+  "M31": [
+    "Andromeda Galaxy",
+    "Andromeda"
+  ],
+  "M33": [
+    "Triangulum Galaxy",
+    "Triangulum",
+    "Pinwheel Galaxy"
+  ],
+  "M40": [
+    "Winnecke 4"
+  ],
+  "M42": [
+    "Orion Nebula",
+    "Orion",
+    "Great Orion Nebula"
+  ],
+  "M43": [
+    "De Mairan Nebula"
+  ],
+  "M44": [
+    "Beehive Cluster",
+    "Praesepe"
+  ],
+  "M45": [
+    "Pleiades",
+    "Seven Sisters",
+    "Subaru"
+  ],
+  "M50": [
+    "Heart-Shaped Cluster"
+  ],
+  "M51": [
+    "Whirlpool Galaxy",
+    "Whirlpool"
+  ],
+  "M57": [
+    "Ring Nebula",
+    "Ring"
+  ],
+  "M63": [
+    "Sunflower Galaxy"
+  ],
+  "M64": [
+    "Black Eye Galaxy",
+    "Sleeping Beauty Galaxy"
+  ],
+  "M74": [
+    "Phantom Galaxy"
+  ],
+  "M76": [
+    "Little Dumbbell Nebula",
+    "Cork Nebula",
+    "Butterfly Nebula"
+  ],
+  "M81": [
+    "Bode Galaxy",
+    "Bode's Galaxy"
+  ],
+  "M82": [
+    "Cigar Galaxy",
+    "Cigar"
+  ],
+  "M83": [
+    "Southern Pinwheel Galaxy",
+    "Southern Pinwheel"
+  ],
+  "M87": [
+    "Virgo A",
+    "Virgo A Galaxy"
+  ],
+  "M97": [
+    "Owl Nebula",
+    "Owl"
+  ],
+  "M101": [
+    "Pinwheel Galaxy",
+    "Pinwheel"
+  ],
+  "M102": [
+    "Spindle Galaxy"
+  ],
+  "M104": [
+    "Sombrero Galaxy",
+    "Sombrero"
+  ],
+  "NGC55": [
+    "Sculptor Galaxy",
+    "Sculptor Bar Galaxy"
+  ],
+  "NGC253": [
+    "Sculptor Galaxy",
+    "Silver Coin Galaxy",
+    "Silver Dollar Galaxy"
+  ],
+  "NGC300": [
+    "Sculptor Pinwheel"
+  ],
+  "NGC869": [
+    "h Persei",
+    "h Persei Cluster",
+    "Double Cluster"
+  ],
+  "NGC884": [
+    "chi Persei",
+    "chi Persei Cluster",
+    "Double Cluster"
+  ],
+  "NGC1232": [
+    "Eridanus Spiral Galaxy"
+  ],
+  "NGC1499": [
+    "California Nebula",
+    "California"
+  ],
+  "NGC1579": [
+    "Northern Trifid Nebula",
+    "Trifid Nebula North"
+  ],
+  "NGC2244": [
+    "Rosette Cluster"
+  ],
+  "NGC2264": [
+    "Christmas Tree Cluster",
+    "Cone Nebula Cluster"
+  ],
+  "NGC2392": [
+    "Eskimo Nebula",
+    "Eskimo",
+    "Clownface Nebula"
+  ],
+  "NGC2903": [
+    "Leo Spiral Galaxy"
+  ],
+  "NGC3372": [
+    "Eta Carinae Nebula",
+    "Carina Nebula",
+    "Great Carina Nebula"
+  ],
+  "NGC3628": [
+    "Pancake Galaxy",
+    "Hamburger Galaxy"
+  ],
+  "NGC4038": [
+    "Antennae Galaxies",
+    "Antennae",
+    "Ringtail Galaxy"
+  ],
+  "NGC4244": [
+    "Calwell 26",
+    "Silver Needle Galaxy"
+  ],
+  "NGC4565": [
+    "Needle Galaxy",
+    "Needle"
+  ],
+  "NGC4631": [
+    "Whale Galaxy",
+    "Whale",
+    "Hockey Stick Galaxy"
+  ],
+  "NGC5128": [
+    "Centaurus A",
+    "Cen A"
+  ],
+  "NGC5139": [
+    "Omega Centauri",
+    "Omega Cen"
+  ],
+  "NGC6188": [
+    "Rim Nebula",
+    "Fighting Dragons of Ara"
+  ],
+  "NGC6334": [
+    "Cat Paw Nebula",
+    "Cat's Paw Nebula"
+  ],
+  "NGC6357": [
+    "War and Peace Nebula",
+    "Lobster Nebula"
+  ],
+  "NGC6543": [
+    "Cat Eye Nebula",
+    "Cat's Eye Nebula",
+    "Cat Eye"
+  ],
+  "NGC6822": [
+    "Barnard Galaxy",
+    "Barnard's Galaxy"
+  ],
+  "NGC6992": [
+    "Eastern Veil Nebula",
+    "Veil Nebula East",
+    "Network Nebula"
+  ],
+  "NGC7000": [
+    "North America Nebula",
+    "North America",
+    "NA Nebula"
+  ],
+  "NGC7293": [
+    "Helix Nebula",
+    "Helix",
+    "Eye of God"
+  ],
+  "NGC7331": [
+    "Deer Lick Group"
+  ],
+  "NGC7789": [
+    "Caroline's Rose",
+    "White Rose Cluster"
+  ],
+  "IC342": [
+    "Hidden Galaxy"
+  ],
+  "IC405": [
+    "Flaming Star Nebula",
+    "Flaming Star"
+  ],
+  "IC410": [
+    "Tadpoles Nebula",
+    "Tadpoles"
+  ],
+  "IC434": [
+    "Horsehead Nebula",
+    "Horsehead",
+    "Barnard 33",
+    "B33"
+  ],
+  "IC443": [
+    "Jellyfish Nebula",
+    "Jellyfish"
+  ],
+  "IC1318": [
+    "Butterfly Nebula",
+    "Gamma Cygni Nebula"
+  ],
+  "IC1396": [
+    "Elephant Trunk Nebula",
+    "Elephant Trunk"
+  ],
+  "IC1805": [
+    "Heart Nebula",
+    "Heart"
+  ],
+  "IC1848": [
+    "Soul Nebula",
+    "Soul"
+  ],
+  "IC2118": [
+    "Witch Head Nebula",
+    "Witch Head"
+  ],
+  "IC2177": [
+    "Seagull Nebula",
+    "Seagull"
+  ],
+  "IC4592": [
+    "Blue Horsehead Nebula"
+  ],
+  "IC4628": [
+    "Prawn Nebula",
+    "Prawn"
+  ],
+  "IC5067": [
+    "Pelican Nebula",
+    "Pelican"
+  ],
+  "IC5146": [
+    "Cocoon Nebula",
+    "Cocoon"
+  ],
+  "Sh2-27": [
+    "Rho Ophiuchi Nebula",
+    "Rho Ophiuchi"
+  ],
+  "Sh2-101": [
+    "Tulip Nebula",
+    "Tulip"
+  ],
+  "Sh2-106": [
+    "Celestial Snow Angel",
+    "Snow Angel Nebula"
+  ],
+  "Sh2-132": [
+    "Lion Nebula",
+    "Lion"
+  ],
+  "NGC1975": [
+    "Running Man Nebula",
+    "Running Man"
+  ],
+  "NGC3199": [
+    "Waffle Nebula"
+  ],
+  "NGC3576": [
+    "Statue of Liberty Nebula",
+    "Statue of Liberty"
+  ],
+  "Sh2-155": [
+    "Cave Nebula",
+    "Cave"
+  ],
+  "Sh2-157": [
+    "Lobster Claw Nebula",
+    "Lobster Claw"
+  ],
+  "Sh2-185": [
+    "Cassiopeia Ghost",
+    "Ghost of Cassiopeia"
+  ],
+  "Sh2-240": [
+    "Spaghetti Nebula",
+    "Simeis 147"
+  ],
+  "Sh2-264": [
+    "Lambda Orionis Ring",
+    "Lambda Ori Ring"
+  ],
+  "Sh2-276": [
+    "Barnard Loop",
+    "Barnard's Loop"
+  ],
+  "Sh2-298": [
+    "Thor's Helmet",
+    "Thor Helmet"
+  ],
+  "Sh2-308": [
+    "Dolphin Nebula",
+    "Dolphin",
+    "Gourd Nebula"
+  ],
+  "star_sirius": [
+    "시리우스",
+    "Sirius",
+    "Alpha Canis Majoris",
+    "α CMa"
+  ],
+  "star_betelgeuse": [
+    "베텔게우스",
+    "Betelgeuse",
+    "Alpha Orionis",
+    "α Ori"
+  ],
+  "star_rigel": [
+    "리겔",
+    "Rigel",
+    "Beta Orionis",
+    "β Ori"
+  ],
+  "star_vega": [
+    "베가",
+    "Vega",
+    "Alpha Lyrae",
+    "α Lyr"
+  ],
+  "star_altair": [
+    "알타이르",
+    "Altair",
+    "Alpha Aquilae",
+    "α Aql"
+  ],
+  "star_deneb": [
+    "데네브",
+    "Deneb",
+    "Alpha Cygni",
+    "α Cyg"
+  ],
+  "star_antares": [
+    "안타레스",
+    "Antares",
+    "Alpha Scorpii",
+    "α Sco"
+  ],
+  "star_arcturus": [
+    "아크투루스",
+    "Arcturus",
+    "Alpha Boötis",
+    "α Boo"
+  ],
+  "star_capella": [
+    "카펠라",
+    "Capella",
+    "Alpha Aurigae",
+    "α Aur"
+  ],
+  "star_aldebaran": [
+    "알데바란",
+    "Aldebaran",
+    "Alpha Tauri",
+    "α Tau"
+  ],
+  "star_polaris": [
+    "폴라리스",
+    "Polaris",
+    "Alpha Ursae Minoris",
+    "α UMi",
+    "북극성"
+  ],
+  "star_procyon": [
+    "프로키온",
+    "Procyon",
+    "Alpha Canis Minoris",
+    "α CMi"
+  ],
+  "star_spica": [
+    "스피카",
+    "Spica",
+    "Alpha Virginis",
+    "α Vir"
+  ],
+  "star_regulus": [
+    "레굴루스",
+    "Regulus",
+    "Alpha Leonis",
+    "α Leo"
+  ],
+  "star_fomalhaut": [
+    "포말하우트",
+    "Fomalhaut",
+    "Alpha Piscis Austrini",
+    "α PsA"
+  ],
+  "star_castor": [
+    "카스토르",
+    "Castor",
+    "Alpha Geminorum",
+    "α Gem"
+  ],
+  "star_pollux": [
+    "폴룩스",
+    "Pollux",
+    "Beta Geminorum",
+    "β Gem"
+  ],
+  "star_mizar": [
+    "미자르",
+    "Mizar",
+    "Zeta Ursae Majoris",
+    "ζ UMa",
+    "Alcor"
+  ],
+  "star_orion_belt": [
+    "오리온 삼태성",
+    "Orion's Belt",
+    "Orion Belt",
+    "Three Kings",
+    "알니탁",
+    "알닐람",
+    "민타카",
+    "Alnitak",
+    "Alnilam",
+    "Mintaka"
+  ]
+}

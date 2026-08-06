@@ -1,0 +1,1034 @@
+[
+  {
+    "catalog": "ic",
+    "number": 63
+  },
+  {
+    "catalog": "ic",
+    "number": 342
+  },
+  {
+    "catalog": "ic",
+    "number": 353
+  },
+  {
+    "catalog": "ic",
+    "number": 360
+  },
+  {
+    "catalog": "ic",
+    "number": 405
+  },
+  {
+    "catalog": "ic",
+    "number": 410
+  },
+  {
+    "catalog": "ic",
+    "number": 417
+  },
+  {
+    "catalog": "ic",
+    "number": 430
+  },
+  {
+    "catalog": "ic",
+    "number": 434
+  },
+  {
+    "catalog": "ic",
+    "number": 443
+  },
+  {
+    "catalog": "ic",
+    "number": 444
+  },
+  {
+    "catalog": "ic",
+    "number": 447
+  },
+  {
+    "catalog": "ic",
+    "number": 448
+  },
+  {
+    "catalog": "ic",
+    "number": 1284
+  },
+  {
+    "catalog": "ic",
+    "number": 1287
+  },
+  {
+    "catalog": "ic",
+    "number": 1318
+  },
+  {
+    "catalog": "ic",
+    "number": 1318,
+    "suffix": "A"
+  },
+  {
+    "catalog": "ic",
+    "number": 1318,
+    "suffix": "B"
+  },
+  {
+    "catalog": "ic",
+    "number": 1396
+  },
+  {
+    "catalog": "ic",
+    "number": 1396,
+    "suffix": "A"
+  },
+  {
+    "catalog": "ic",
+    "number": 1396,
+    "suffix": "B"
+  },
+  {
+    "catalog": "ic",
+    "number": 1613
+  },
+  {
+    "catalog": "ic",
+    "number": 1795
+  },
+  {
+    "catalog": "ic",
+    "number": 1805
+  },
+  {
+    "catalog": "ic",
+    "number": 1848
+  },
+  {
+    "catalog": "ic",
+    "number": 1995
+  },
+  {
+    "catalog": "ic",
+    "number": 2118
+  },
+  {
+    "catalog": "ic",
+    "number": 2177
+  },
+  {
+    "catalog": "ic",
+    "number": 2574
+  },
+  {
+    "catalog": "ic",
+    "number": 2872
+  },
+  {
+    "catalog": "ic",
+    "number": 2944
+  },
+  {
+    "catalog": "ic",
+    "number": 4591
+  },
+  {
+    "catalog": "ic",
+    "number": 4592
+  },
+  {
+    "catalog": "ic",
+    "number": 4601
+  },
+  {
+    "catalog": "ic",
+    "number": 4603
+  },
+  {
+    "catalog": "ic",
+    "number": 4604
+  },
+  {
+    "catalog": "ic",
+    "number": 4605
+  },
+  {
+    "catalog": "ic",
+    "number": 4628
+  },
+  {
+    "catalog": "ic",
+    "number": 4685
+  },
+  {
+    "catalog": "ic",
+    "number": 4701
+  },
+  {
+    "catalog": "ic",
+    "number": 4895
+  },
+  {
+    "catalog": "ic",
+    "number": 5068
+  },
+  {
+    "catalog": "ic",
+    "number": 5070
+  },
+  {
+    "catalog": "ic",
+    "number": 5146
+  },
+  {
+    "catalog": "ngc",
+    "number": 55
+  },
+  {
+    "catalog": "ngc",
+    "number": 147
+  },
+  {
+    "catalog": "ngc",
+    "number": 247
+  },
+  {
+    "catalog": "ngc",
+    "number": 253
+  },
+  {
+    "catalog": "ngc",
+    "number": 281
+  },
+  {
+    "catalog": "ngc",
+    "number": 292
+  },
+  {
+    "catalog": "ngc",
+    "number": 300
+  },
+  {
+    "catalog": "ngc",
+    "number": 346
+  },
+  {
+    "catalog": "ngc",
+    "number": 456
+  },
+  {
+    "catalog": "ngc",
+    "number": 891
+  },
+  {
+    "catalog": "ngc",
+    "number": 925
+  },
+  {
+    "catalog": "ngc",
+    "number": 1269
+  },
+  {
+    "catalog": "ngc",
+    "number": 1316
+  },
+  {
+    "catalog": "ngc",
+    "number": 1365
+  },
+  {
+    "catalog": "ngc",
+    "number": 1432
+  },
+  {
+    "catalog": "ngc",
+    "number": 1435
+  },
+  {
+    "catalog": "ngc",
+    "number": 1491
+  },
+  {
+    "catalog": "ngc",
+    "number": 1499
+  },
+  {
+    "catalog": "ngc",
+    "number": 1532
+  },
+  {
+    "catalog": "ngc",
+    "number": 1579
+  },
+  {
+    "catalog": "ngc",
+    "number": 1750
+  },
+  {
+    "catalog": "ngc",
+    "number": 1966
+  },
+  {
+    "catalog": "ngc",
+    "number": 1975
+  },
+  {
+    "catalog": "ngc",
+    "number": 1990
+  },
+  {
+    "catalog": "ngc",
+    "number": 2024
+  },
+  {
+    "catalog": "ngc",
+    "number": 2052
+  },
+  {
+    "catalog": "ngc",
+    "number": 2070
+  },
+  {
+    "catalog": "ngc",
+    "number": 2077
+  },
+  {
+    "catalog": "ngc",
+    "number": 2175
+  },
+  {
+    "catalog": "ngc",
+    "number": 2237
+  },
+  {
+    "catalog": "ngc",
+    "number": 2403
+  },
+  {
+    "catalog": "ngc",
+    "number": 2678
+  },
+  {
+    "catalog": "ngc",
+    "number": 2736
+  },
+  {
+    "catalog": "ngc",
+    "number": 2903
+  },
+  {
+    "catalog": "ngc",
+    "number": 3109
+  },
+  {
+    "catalog": "ngc",
+    "number": 3199
+  },
+  {
+    "catalog": "ngc",
+    "number": 3324
+  },
+  {
+    "catalog": "ngc",
+    "number": 3372
+  },
+  {
+    "catalog": "ngc",
+    "number": 3521
+  },
+  {
+    "catalog": "ngc",
+    "number": 3576
+  },
+  {
+    "catalog": "ngc",
+    "number": 3621
+  },
+  {
+    "catalog": "ngc",
+    "number": 3628
+  },
+  {
+    "catalog": "ngc",
+    "number": 4236
+  },
+  {
+    "catalog": "ngc",
+    "number": 4244
+  },
+  {
+    "catalog": "ngc",
+    "number": 4395
+  },
+  {
+    "catalog": "ngc",
+    "number": 4437
+  },
+  {
+    "catalog": "ngc",
+    "number": 4559
+  },
+  {
+    "catalog": "ngc",
+    "number": 4565
+  },
+  {
+    "catalog": "ngc",
+    "number": 4631
+  },
+  {
+    "catalog": "ngc",
+    "number": 4656
+  },
+  {
+    "catalog": "ngc",
+    "number": 4725
+  },
+  {
+    "catalog": "ngc",
+    "number": 4945
+  },
+  {
+    "catalog": "ngc",
+    "number": 5033
+  },
+  {
+    "catalog": "ngc",
+    "number": 5128
+  },
+  {
+    "catalog": "ngc",
+    "number": 5284
+  },
+  {
+    "catalog": "ngc",
+    "number": 5907
+  },
+  {
+    "catalog": "ngc",
+    "number": 6188
+  },
+  {
+    "catalog": "ngc",
+    "number": 6334
+  },
+  {
+    "catalog": "ngc",
+    "number": 6357
+  },
+  {
+    "catalog": "ngc",
+    "number": 6729
+  },
+  {
+    "catalog": "ngc",
+    "number": 6744
+  },
+  {
+    "catalog": "ngc",
+    "number": 6888
+  },
+  {
+    "catalog": "ngc",
+    "number": 6946
+  },
+  {
+    "catalog": "ngc",
+    "number": 6960
+  },
+  {
+    "catalog": "ngc",
+    "number": 6992
+  },
+  {
+    "catalog": "ngc",
+    "number": 6995
+  },
+  {
+    "catalog": "ngc",
+    "number": 7000
+  },
+  {
+    "catalog": "ngc",
+    "number": 7023
+  },
+  {
+    "catalog": "ngc",
+    "number": 7293
+  },
+  {
+    "catalog": "ngc",
+    "number": 7331
+  },
+  {
+    "catalog": "ngc",
+    "number": 7635
+  },
+  {
+    "catalog": "ngc",
+    "number": 7640
+  },
+  {
+    "catalog": "sh2",
+    "number": 1
+  },
+  {
+    "catalog": "sh2",
+    "number": 3
+  },
+  {
+    "catalog": "sh2",
+    "number": 54
+  },
+  {
+    "catalog": "sh2",
+    "number": 103
+  },
+  {
+    "catalog": "sh2",
+    "number": 108
+  },
+  {
+    "catalog": "sh2",
+    "number": 140
+  },
+  {
+    "catalog": "sh2",
+    "number": 142
+  },
+  {
+    "catalog": "sh2",
+    "number": 157
+  },
+  {
+    "catalog": "sh2",
+    "number": 158
+  },
+  {
+    "catalog": "sh2",
+    "number": 171
+  },
+  {
+    "catalog": "sh2",
+    "number": 235
+  },
+  {
+    "catalog": "sh2",
+    "number": 273
+  },
+  {
+    "catalog": "sh2",
+    "number": 296
+  },
+  {
+    "catalog": "sh2",
+    "number": 298
+  },
+  {
+    "catalog": "sh2",
+    "number": 311
+  },
+  {
+    "catalog": "caldwell",
+    "number": 1
+  },
+  {
+    "catalog": "caldwell",
+    "number": 2
+  },
+  {
+    "catalog": "caldwell",
+    "number": 3
+  },
+  {
+    "catalog": "caldwell",
+    "number": 4
+  },
+  {
+    "catalog": "caldwell",
+    "number": 5
+  },
+  {
+    "catalog": "caldwell",
+    "number": 6
+  },
+  {
+    "catalog": "caldwell",
+    "number": 7
+  },
+  {
+    "catalog": "caldwell",
+    "number": 8
+  },
+  {
+    "catalog": "caldwell",
+    "number": 9
+  },
+  {
+    "catalog": "caldwell",
+    "number": 10
+  },
+  {
+    "catalog": "caldwell",
+    "number": 11
+  },
+  {
+    "catalog": "caldwell",
+    "number": 12
+  },
+  {
+    "catalog": "caldwell",
+    "number": 13
+  },
+  {
+    "catalog": "caldwell",
+    "number": 14
+  },
+  {
+    "catalog": "caldwell",
+    "number": 15
+  },
+  {
+    "catalog": "caldwell",
+    "number": 16
+  },
+  {
+    "catalog": "caldwell",
+    "number": 17
+  },
+  {
+    "catalog": "caldwell",
+    "number": 18
+  },
+  {
+    "catalog": "caldwell",
+    "number": 19
+  },
+  {
+    "catalog": "caldwell",
+    "number": 20
+  },
+  {
+    "catalog": "caldwell",
+    "number": 21
+  },
+  {
+    "catalog": "caldwell",
+    "number": 22
+  },
+  {
+    "catalog": "caldwell",
+    "number": 23
+  },
+  {
+    "catalog": "caldwell",
+    "number": 24
+  },
+  {
+    "catalog": "caldwell",
+    "number": 25
+  },
+  {
+    "catalog": "caldwell",
+    "number": 26
+  },
+  {
+    "catalog": "caldwell",
+    "number": 27
+  },
+  {
+    "catalog": "caldwell",
+    "number": 28
+  },
+  {
+    "catalog": "caldwell",
+    "number": 29
+  },
+  {
+    "catalog": "caldwell",
+    "number": 30
+  },
+  {
+    "catalog": "caldwell",
+    "number": 31
+  },
+  {
+    "catalog": "caldwell",
+    "number": 32
+  },
+  {
+    "catalog": "caldwell",
+    "number": 33
+  },
+  {
+    "catalog": "caldwell",
+    "number": 34
+  },
+  {
+    "catalog": "caldwell",
+    "number": 35
+  },
+  {
+    "catalog": "caldwell",
+    "number": 36
+  },
+  {
+    "catalog": "caldwell",
+    "number": 37
+  },
+  {
+    "catalog": "caldwell",
+    "number": 38
+  },
+  {
+    "catalog": "caldwell",
+    "number": 39
+  },
+  {
+    "catalog": "caldwell",
+    "number": 40
+  },
+  {
+    "catalog": "caldwell",
+    "number": 41
+  },
+  {
+    "catalog": "caldwell",
+    "number": 42
+  },
+  {
+    "catalog": "caldwell",
+    "number": 43
+  },
+  {
+    "catalog": "caldwell",
+    "number": 44
+  },
+  {
+    "catalog": "caldwell",
+    "number": 45
+  },
+  {
+    "catalog": "caldwell",
+    "number": 46
+  },
+  {
+    "catalog": "caldwell",
+    "number": 47
+  },
+  {
+    "catalog": "caldwell",
+    "number": 48
+  },
+  {
+    "catalog": "caldwell",
+    "number": 49
+  },
+  {
+    "catalog": "caldwell",
+    "number": 50
+  },
+  {
+    "catalog": "caldwell",
+    "number": 51
+  },
+  {
+    "catalog": "caldwell",
+    "number": 52
+  },
+  {
+    "catalog": "caldwell",
+    "number": 53
+  },
+  {
+    "catalog": "caldwell",
+    "number": 54
+  },
+  {
+    "catalog": "caldwell",
+    "number": 55
+  },
+  {
+    "catalog": "caldwell",
+    "number": 56
+  },
+  {
+    "catalog": "caldwell",
+    "number": 57
+  },
+  {
+    "catalog": "caldwell",
+    "number": 58
+  },
+  {
+    "catalog": "caldwell",
+    "number": 59
+  },
+  {
+    "catalog": "caldwell",
+    "number": 60
+  },
+  {
+    "catalog": "caldwell",
+    "number": 61
+  },
+  {
+    "catalog": "caldwell",
+    "number": 62
+  },
+  {
+    "catalog": "caldwell",
+    "number": 63
+  },
+  {
+    "catalog": "caldwell",
+    "number": 64
+  },
+  {
+    "catalog": "caldwell",
+    "number": 65
+  },
+  {
+    "catalog": "caldwell",
+    "number": 66
+  },
+  {
+    "catalog": "caldwell",
+    "number": 67
+  },
+  {
+    "catalog": "caldwell",
+    "number": 68
+  },
+  {
+    "catalog": "caldwell",
+    "number": 69
+  },
+  {
+    "catalog": "caldwell",
+    "number": 70
+  },
+  {
+    "catalog": "caldwell",
+    "number": 71
+  },
+  {
+    "catalog": "caldwell",
+    "number": 72
+  },
+  {
+    "catalog": "caldwell",
+    "number": 73
+  },
+  {
+    "catalog": "caldwell",
+    "number": 74
+  },
+  {
+    "catalog": "caldwell",
+    "number": 75
+  },
+  {
+    "catalog": "caldwell",
+    "number": 76
+  },
+  {
+    "catalog": "caldwell",
+    "number": 77
+  },
+  {
+    "catalog": "caldwell",
+    "number": 78
+  },
+  {
+    "catalog": "caldwell",
+    "number": 79
+  },
+  {
+    "catalog": "caldwell",
+    "number": 80
+  },
+  {
+    "catalog": "caldwell",
+    "number": 81
+  },
+  {
+    "catalog": "caldwell",
+    "number": 82
+  },
+  {
+    "catalog": "caldwell",
+    "number": 83
+  },
+  {
+    "catalog": "caldwell",
+    "number": 84
+  },
+  {
+    "catalog": "caldwell",
+    "number": 85
+  },
+  {
+    "catalog": "caldwell",
+    "number": 86
+  },
+  {
+    "catalog": "caldwell",
+    "number": 87
+  },
+  {
+    "catalog": "caldwell",
+    "number": 88
+  },
+  {
+    "catalog": "caldwell",
+    "number": 89
+  },
+  {
+    "catalog": "caldwell",
+    "number": 90
+  },
+  {
+    "catalog": "caldwell",
+    "number": 91
+  },
+  {
+    "catalog": "caldwell",
+    "number": 92
+  },
+  {
+    "catalog": "caldwell",
+    "number": 93
+  },
+  {
+    "catalog": "caldwell",
+    "number": 94
+  },
+  {
+    "catalog": "caldwell",
+    "number": 95
+  },
+  {
+    "catalog": "caldwell",
+    "number": 96
+  },
+  {
+    "catalog": "caldwell",
+    "number": 97
+  },
+  {
+    "catalog": "caldwell",
+    "number": 98
+  },
+  {
+    "catalog": "caldwell",
+    "number": 99
+  },
+  {
+    "catalog": "caldwell",
+    "number": 100
+  },
+  {
+    "catalog": "caldwell",
+    "number": 101
+  },
+  {
+    "catalog": "caldwell",
+    "number": 102
+  },
+  {
+    "catalog": "caldwell",
+    "number": 103
+  },
+  {
+    "catalog": "caldwell",
+    "number": 104
+  },
+  {
+    "catalog": "caldwell",
+    "number": 105
+  },
+  {
+    "catalog": "caldwell",
+    "number": 106
+  },
+  {
+    "catalog": "caldwell",
+    "number": 107
+  },
+  {
+    "catalog": "caldwell",
+    "number": 108
+  },
+  {
+    "catalog": "caldwell",
+    "number": 109
+  },
+  {
+    "catalog": "rcw",
+    "number": 57
+  },
+  {
+    "catalog": "rcw",
+    "number": 77
+  },
+  {
+    "catalog": "rcw",
+    "number": 98
+  },
+  {
+    "catalog": "rcw",
+    "number": 100
+  },
+  {
+    "catalog": "rcw",
+    "number": 101
+  },
+  {
+    "catalog": "rcw",
+    "number": 114
+  },
+  {
+    "catalog": "vdb",
+    "number": 31
+  },
+  {
+    "catalog": "vdb",
+    "number": 38
+  },
+  {
+    "catalog": "vdb",
+    "number": 106
+  },
+  {
+    "catalog": "vdb",
+    "number": 107
+  },
+  {
+    "catalog": "vdb",
+    "number": 123
+  },
+  {
+    "catalog": "vdb",
+    "number": 126
+  },
+  {
+    "catalog": "vdb",
+    "number": 136
+  },
+  {
+    "catalog": "vdb",
+    "number": 140
+  },
+  {
+    "catalog": "vdb",
+    "number": 141
+  },
+  {
+    "catalog": "vdb",
+    "number": 150
+  },
+  {
+    "catalog": "vdb",
+    "number": 152
+  }
+]

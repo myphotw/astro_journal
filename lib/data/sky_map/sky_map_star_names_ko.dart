@@ -1,0 +1,187 @@
+/// 영문 항성 고유명 → 한글 표기 (성도 검색·표시용).
+///
+/// HYG/Stellarium 카탈로그의 `name`/`nameKo`가 영문인 경우가 많아
+/// 검색 시 한글 별칭을 추가로 매칭한다. 키는 소문자 영문 이름.
+abstract final class SkyMapStarNamesKo {
+  /// 영문 고유명(소문자) → 한글.
+  static const Map<String, String> byEnglishName = {
+    'sirius': '시리우스',
+    'canopus': '카노푸스',
+    'arcturus': '아크투루스',
+    'rigil kentaurus': '리길 켄타우루스',
+    'vega': '베가',
+    'capella': '카펠라',
+    'rigel': '리겔',
+    'procyon': '프로키온',
+    'achernar': '아케르나르',
+    'betelgeuse': '베텔게우스',
+    'hadar': '하다르',
+    'altair': '알타이르',
+    'acrux': '아크룩스',
+    'aldebaran': '알데바란',
+    'spica': '스피카',
+    'antares': '안타레스',
+    'pollux': '폴룩스',
+    'fomalhaut': '포말하우트',
+    'mimosa': '미모사',
+    'deneb': '데네브',
+    'regulus': '레굴루스',
+    'adhara': '아다라',
+    'castor': '카스토르',
+    'gacrux': '가크룩스',
+    'shaula': '샤울라',
+    'bellatrix': '벨라트릭스',
+    'elnath': '엘나스',
+    'miaplacidus': '미아플라시두스',
+    'alnilam': '알닐람',
+    'alnair': '알나이르',
+    'alnitak': '알니탁',
+    'alioth': '알리오트',
+    'mirfak': '미르팍',
+    'kaus australis': '카우스 아우스트랄리스',
+    'dubhe': '두베',
+    'wezen': '웨젠',
+    'alkaid': '알카이드',
+    'avior': '아비오르',
+    'sargas': '사르가스',
+    'menkalinan': '멘칼리난',
+    'atria': '아트리아',
+    'alhena': '알헤나',
+    'peacock': '피콕',
+    'alphard': '알파르드',
+    'polaris': '폴라리스',
+    'mirzam': '미르잠',
+    'alpheratz': '알페라츠',
+    'hamal': '하말',
+    'algol': '알골',
+    'diphda': '디프다',
+    'nunki': '눈키',
+    'schedar': '셰다르',
+    'caph': '카프',
+    'merak': '메라크',
+    'phecda': '페크다',
+    'megrez': '메그레즈',
+    'mizar': '미자르',
+    'alcor': '알코르',
+    'kochab': '코카브',
+    'pherkad': '페르카드',
+    'thuban': '투반',
+    'eltanin': '엘타닌',
+    'rastaban': '라스타반',
+    'alwaid': '알와이드',
+    'alderamin': '알데라민',
+    'alfirk': '알피르크',
+    'errai': '에라이',
+    'sadr': '사드르',
+    'albireo': '알비레오',
+    'gienah': '기에나',
+    'sheliak': '셸리아크',
+    'sulafat': '술라파트',
+    'tarazed': '타라제드',
+    'alshain': '알샤인',
+    'enif': '에니프',
+    'markab': '마르카브',
+    'scheat': '스케아트',
+    'algenib': '알게니브',
+    'mirach': '미라크',
+    'almach': '알마크',
+    'denebola': '데네볼라',
+    'algieba': '알기바',
+    'zosma': '조스마',
+    'chertan': '체르탄',
+    'rasalhague': '라살하게',
+    'cebalrai': '세발라이',
+    'sabik': '사비크',
+    'unukalhai': '우누크알하이',
+    'kornephoros': '코르네포로스',
+    'rasalgethi': '라살게티',
+    'alphecca': '알페카',
+    'izaar': '이자르',
+    'muphrid': '무프리드',
+    'nekkar': '네카르',
+    'seginus': '세기누스',
+    'porrima': '포리마',
+    'vindemiatrix': '빈데미아트릭스',
+    'zavijava': '자비자바',
+    'zubenelgenubi': '주벤엘게누비',
+    'zubeneschamali': '주베네샤말리',
+    'dschubba': '주바',
+    'acrab': '아크라브',
+    'menkar': '멘카르',
+    'mira': '미라',
+    'cursa': '쿠르사',
+    'zaurak': '자우라크',
+    'acamar': '아카마르',
+    'mintaka': '민타카',
+    'saiph': '사이프',
+    'meissa': '메이사',
+    'ain': '아인',
+    'wasat': '와사트',
+    'mebsuta': '메브수타',
+    'tejat': '테자트',
+    'mekbuda': '메크부다',
+    'gomeisa': '고메이사',
+    'hassaleh': '하살레',
+    'mahasim': '마하심',
+    'sadalmelik': '사달멜리크',
+    'sadalsuud': '사달수드',
+    'skat': '스카트',
+    'albali': '알발리',
+    'deneb algedi': '데네브 알게디',
+    'dabih': '다비흐',
+    'algedi': '알게디',
+    'nashira': '나시라',
+    'alrescha': '알레샤',
+    'sheratan': '셰라탄',
+    'mesarthim': '메사르팀',
+    'acubens': '아쿠벤스',
+    'altarf': '알타르프',
+    'asellus borealis': '북당나귀',
+    'asellus australis': '남당나귀',
+    'arneb': '아르넵',
+    'nihal': '니할',
+    'sualocin': '수알로신',
+    'rotanev': '로타네브',
+    'mothallah': '모탈라',
+    'regor': '레고르',
+    'suhail': '수하일',
+    'menkent': '멘켄트',
+    'kaus media': '카우스 메디아',
+    'kaus borealis': '카우스 보레알리스',
+    'alnasl': '알나슬',
+    'ascella': '아셀라',
+    'ruchbah': '루크바',
+    'segin': '세긴',
+    'yildun': '일둔',
+  };
+
+  /// 영문 이름(또는 이미 한글)에서 표시용 한글명을 반환.
+  static String displayName(String englishName, {String? fallbackKo}) {
+    final mapped = lookup(englishName);
+    if (mapped != null) return mapped;
+    if (fallbackKo != null &&
+        fallbackKo.trim().isNotEmpty &&
+        fallbackKo != englishName) {
+      return fallbackKo;
+    }
+    return englishName;
+  }
+
+  /// 소문자 영문 고유명으로 한글 조회.
+  static String? lookup(String englishName) {
+    final key = englishName.trim().toLowerCase();
+    if (key.isEmpty) return null;
+    return byEnglishName[key];
+  }
+
+  /// 검색용 문자열에 넣을 한글·영문 별칭.
+  static String searchHaystack({
+    required String name,
+    String? nameKo,
+    required String id,
+  }) {
+    final ko = displayName(name, fallbackKo: nameKo);
+    final parts = <String>{name, ?nameKo, ko, id};
+    return parts.join(' ').toLowerCase();
+  }
+}

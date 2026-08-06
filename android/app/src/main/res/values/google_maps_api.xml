@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Placeholder only. Runtime value is synced from ApiKeyService (SecureStorage)
+      via GoogleMapsNativeKeyService before any GoogleMap widget is shown.
+    -->
+    <string name="google_maps_api_key" translatable="false">DUMMY-KEY-HERE</string>
+</resources>

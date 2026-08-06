@@ -1,0 +1,159 @@
+import 'dart:async';
+import 'dart:collection';
+
+import 'package:flutter/foundation.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import '../../../data/models/bortle_metadata.dart';
+import '../../../services/app_logger.dart';
+import '../../../services/observation_condition_service.dart';
+import 'light_pollution_tile_cache.dart';
+import 'light_pollution_tile_disk_cache.dart';
+import 'light_pollution_tile_constants.dart';
+import 'light_pollution_tile_generator.dart';
+import 'light_pollution_tile_mercator.dart';
+
+/// [TileProvider] that renders light-pollution brightness as map tiles.
+class LightPollutionTileProvider implements TileProvider {
+  LightPollutionTileProvider({
+    required this._observationConditionService,
+    required this._metadata,
+    LightPollutionTileCache? cache,
+    LightPollutionTileDiskCache? diskCache,
+  })  : _cache = cache ?? LightPollutionTileCache(),
+        _diskCache = diskCache ?? LightPollutionTileDiskCache();
+
+  static const _tag = 'BORTLE TILE';
+  static const _maxConcurrent = 1;
+  static const _gapBetweenTiles = Duration(milliseconds: 40);
+  /// 캐시 키 버전 — 바꾸면 디스크에 남은 이전 알고리즘 타일을 쓰지 않음.
+  static const _cacheVersion = 'bilin1';
+
+  final ObservationConditionService _observationConditionService;
+  BortleMetadata _metadata;
+  final LightPollutionTileCache _cache;
+  final LightPollutionTileDiskCache _diskCache;
+  final _inFlight = <String, Future<Tile>>{};
+  final _waitQueue = Queue<Completer<void>>();
+  var _activeLoads = 0;
+
+  BortleMetadata get metadata => _metadata;
+
+  void updateMetadata(BortleMetadata metadata) {
+    _metadata = metadata;
+  }
+
+  void clearCache() {
+    _cache.clear();
+    unawaited(_diskCache.clear());
+  }
+
+  static String cacheKey(int x, int y, int zoom) => '$_cacheVersion/$zoom/$x/$y';
+
+  @override
+  Future<Tile> getTile(int x, int y, int? zoom) async {
+    final z = zoom ?? 0;
+    final key = cacheKey(x, y, z);
+
+    final cached = _cache.get(key);
+    if (cached != null) {
+      return Tile(
+        LightPollutionTileConstants.tileSize,
+        LightPollutionTileConstants.tileSize,
+        cached,
+      );
+    }
+
+    final diskCached = await _diskCache.get(key);
+    if (diskCached != null) {
+      _cache.put(key, diskCached);
+      return Tile(
+        LightPollutionTileConstants.tileSize,
+        LightPollutionTileConstants.tileSize,
+        diskCached,
+      );
+    }
+
+    return _inFlight.putIfAbsent(key, () => _loadTile(x, y, z, key));
+  }
+
+  Future<void> _acquireSlot() async {
+    if (_activeLoads < _maxConcurrent) {
+      _activeLoads++;
+      return;
+    }
+    final completer = Completer<void>();
+    _waitQueue.add(completer);
+    await completer.future;
+    _activeLoads++;
+  }
+
+  void _releaseSlot() {
+    _activeLoads = (_activeLoads - 1).clamp(0, _maxConcurrent);
+    if (_waitQueue.isNotEmpty) {
+      _waitQueue.removeFirst().complete();
+    }
+  }
+
+  Future<Tile> _loadTile(int x, int y, int z, String key) async {
+    await _acquireSlot();
+    try {
+      await Future<void>.delayed(_gapBetweenTiles);
+
+      final bounds = LightPollutionTileMercator.tileBounds(x, y, z);
+      if (!LightPollutionTileGenerator.intersectsDataBounds(
+        _metadata,
+        south: bounds.south,
+        west: bounds.west,
+        north: bounds.north,
+        east: bounds.east,
+      )) {
+        return TileProvider.noTile;
+      }
+
+      final queryStarted = DateTime.now();
+      // 셀 리스트 다운샘플 제거 — sparse lookup 구멍·위치 어긋남 방지.
+      final cells = await _observationConditionService.getBrightnessInBounds(
+        south: bounds.south,
+        west: bounds.west,
+        north: bounds.north,
+        east: bounds.east,
+      );
+      final queryMs = DateTime.now().difference(queryStarted).inMilliseconds;
+
+      await Future<void>.delayed(Duration.zero);
+
+      final png = await LightPollutionTileGenerator.generatePng(
+        metadata: _metadata,
+        cells: cells,
+        tileX: x,
+        tileY: y,
+        zoom: z,
+      );
+
+      if (kDebugMode) {
+        AppLogger.info(
+          _tag,
+          'tile $key cells=${cells.length} query=${queryMs}ms '
+          'cache=${_cache.length}',
+        );
+      }
+
+      if (png == null) return TileProvider.noTile;
+
+      _cache.put(key, png);
+      unawaited(_diskCache.put(key, png));
+      return Tile(
+        LightPollutionTileConstants.tileSize,
+        LightPollutionTileConstants.tileSize,
+        png,
+      );
+    } catch (error, stack) {
+      AppLogger.error(_tag, error, stack);
+      return TileProvider.noTile;
+    } finally {
+      _inFlight.remove(key);
+      _releaseSlot();
+    }
+  }
+}
