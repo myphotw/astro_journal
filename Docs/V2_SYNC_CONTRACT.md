@@ -407,3 +407,71 @@ and one-time mapping. They must not become externally visible backend IDs.
    size/eviction rules.
 7. Whether a separate ObservationSession entity is needed before supporting
    multi-frame stacks, mosaics, or multiple target records per file.
+
+## 13. A5-01 implemented mutation contract
+
+The v31 `sync_outbox` now routes three durable operation types without a
+schema migration:
+
+| Operation | Durable identity/payload | Completion |
+|---|---|---|
+| `PHOTO_UPLOAD_AND_RECORD` | Stable `client_file_id` and `client_record_id`; the record UUID is sent on every create/replay | Stores `backend_file_id`, `backend_record_id`, and returned revision before `SYNCED` |
+| `RECORD_PATCH` | `backend_record_id`, baseline `revision`, and sparse changed fields only | Applies canonical response fields/revision to Gallery cache, then `SYNCED` |
+| `RECORD_DELETE` | `backend_record_id`; no invented revision because B5-01 DELETE does not require one | Accepts the idempotent soft-delete tombstone, removes cached projection, then `SYNCED` |
+
+Gallery favorite, memo, representative, and delete actions are local-first.
+The local SQLite record or canonical Gallery cache changes before the outbox
+operation is created. A backend outage does not roll back that user change;
+the operation remains queued or failed for a later drain. A record without a
+`backend_record_id` never creates an orphan PATCH: its latest local values are
+read when the existing upload operation creates the remote record.
+
+Queued PATCH operations for the same record and revision baseline are
+coalesced by merging their sparse payload. Processing PATCH operations are
+never rewritten. Enqueuing DELETE terminally cancels queued/failed PATCH work
+for that record. Deleting a local-only record marks its unfinished upload
+operation `CANCELLED`; if a FileAsset was already created before cancellation,
+physical backend cleanup remains a follow-up task.
+
+`409 REVISION_CONFLICT` is stored as non-retryable `FAILED`. The original local
+value is retained, and `current_revision` is copied into the durable payload
+and diagnostic error when supplied. No automatic merge is performed.
+
+Still not implemented:
+
+- conflict resolution UI;
+- physical cleanup of an uploaded orphan FileAsset;
+- PhotoObject and Equipment synchronization.
+
+## 14. A5-02 incremental pull implementation
+
+`GET /api/common/changes` is consumed with `service_name=AstroJournal` and an
+opaque cursor. The cursor is stored durably in SQLite v31 by reserving the
+`gallery_cache` key `sync:checkpoint:common_changes:AstroJournal`; no schema or
+database-version change is required. Each page is applied completely before
+its `next_cursor` is committed. A request or detail-fetch failure therefore
+restarts at the last completed page after app restart.
+
+Sprint A5-02 supports `ObservationRecord` CREATE, UPDATE, and DELETE events:
+
+- CREATE/UPDATE fetch the canonical Astro Gallery detail and upsert the local
+  Gallery projection only when its revision is newer.
+- DELETE removes the cached projection, stores a revisioned tombstone under
+  `astro:gallery:tombstone:{record_id}`, and removes an exactly linked V1 local
+  `shooting_records` row.
+- Duplicate or older changes are ignored by comparing cached/tombstone
+  revisions.
+- Push and pull coordinators share one serialized sync gate. Existing push
+  outbox ordering and duplicate-drain behavior remain unchanged.
+
+The startup resume runner performs durable push drain first and incremental
+pull second. Both remain non-blocking from the app UI because startup invokes
+the runner without awaiting it.
+
+Still not implemented:
+
+- background/periodic pull while the app remains open;
+- conflict-aware merging when an unsent local PATCH and a newer remote UPDATE
+  coexist;
+- full-resync recovery when the backend expires a cursor;
+- PhotoObject, Equipment, and other resource types in the changes feed.

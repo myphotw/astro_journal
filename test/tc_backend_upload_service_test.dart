@@ -93,6 +93,35 @@ void main() {
     expect(body['location_name'], 'Seoul');
   });
 
+  test('stage create forwards durable client_record_id', () async {
+    await settings.save(
+      const TcBackendSettings(
+        baseUrl: 'https://backend.example',
+        enabled: true,
+      ),
+    );
+    late http.Request sent;
+    final service = TcBackendUploadService(
+      settingsService: settings,
+      client: MockClient((request) async {
+        sent = request;
+        return http.Response(
+          jsonEncode({'record_id': 'record-1', 'revision': 2}),
+          201,
+        );
+      }),
+    );
+
+    await service.createObservationRecord(
+      record(),
+      'sha-file',
+      clientRecordId: 'durable-client-record',
+    );
+
+    final body = jsonDecode(sent.body) as Map<String, dynamic>;
+    expect(body['client_record_id'], 'durable-client-record');
+  });
+
   test('returns job failure and lowercase streaming SHA-256', () async {
     await settings.save(
       const TcBackendSettings(
@@ -150,43 +179,76 @@ void main() {
     );
   });
 
-  test('polling continues from WAITING and PROCESSING until completed', () async {
-    await settings.save(const TcBackendSettings(
-      baseUrl: 'https://backend.example', enabled: true,
-    ));
-    for (final initial in ['WAITING', 'PROCESSING']) {
-      var calls = 0;
-      final service = TcBackendUploadService(
-        settingsService: settings,
-        delay: (_) async {},
-        client: MockClient((_) async {
-          calls++;
-          return http.Response(jsonEncode(calls == 1
-              ? {'status': initial}
-              : {'status': 'COMPLETED', 'backend_file_id': 'file-$initial'}), 200);
-        }),
+  test(
+    'polling continues from WAITING and PROCESSING until completed',
+    () async {
+      await settings.save(
+        const TcBackendSettings(
+          baseUrl: 'https://backend.example',
+          enabled: true,
+        ),
       );
-      final result = await service.pollUploadJob('job-$initial');
-      expect(result.status, TcBackendUploadJobStatus.completed);
-      expect(result.backendFileId, 'file-$initial');
-      expect(calls, 2);
-    }
-  });
+      for (final initial in ['WAITING', 'PROCESSING']) {
+        var calls = 0;
+        final service = TcBackendUploadService(
+          settingsService: settings,
+          delay: (_) async {},
+          client: MockClient((_) async {
+            calls++;
+            return http.Response(
+              jsonEncode(
+                calls == 1
+                    ? {'status': initial}
+                    : {
+                        'status': 'COMPLETED',
+                        'backend_file_id': 'file-$initial',
+                      },
+              ),
+              200,
+            );
+          }),
+        );
+        final result = await service.pollUploadJob('job-$initial');
+        expect(result.status, TcBackendUploadJobStatus.completed);
+        expect(result.backendFileId, 'file-$initial');
+        expect(calls, 2);
+      }
+    },
+  );
 
-  test('polling rejects malformed, failed, and unknown job responses', () async {
-    await settings.save(const TcBackendSettings(
-      baseUrl: 'https://backend.example', enabled: true,
-    ));
-    Future<void> expectJob(Map<String, dynamic> body, BackendUploadErrorType type) async {
-      final service = TcBackendUploadService(
-        settingsService: settings,
-        delay: (_) async {},
-        client: MockClient((_) async => http.Response(jsonEncode(body), 200)),
+  test(
+    'polling rejects malformed, failed, and unknown job responses',
+    () async {
+      await settings.save(
+        const TcBackendSettings(
+          baseUrl: 'https://backend.example',
+          enabled: true,
+        ),
       );
-      await expectLater(service.pollUploadJob('job'), throwsA(isA<TcBackendUploadException>().having((e) => e.type, 'type', type)));
-    }
-    await expectJob({'status': 'COMPLETED'}, BackendUploadErrorType.malformedResponse);
-    await expectJob({'status': 'FAILED'}, BackendUploadErrorType.jobFailed);
-    await expectJob({'status': 'UNKNOWN'}, BackendUploadErrorType.malformedResponse);
-  });
+      Future<void> expectJob(
+        Map<String, dynamic> body,
+        BackendUploadErrorType type,
+      ) async {
+        final service = TcBackendUploadService(
+          settingsService: settings,
+          delay: (_) async {},
+          client: MockClient((_) async => http.Response(jsonEncode(body), 200)),
+        );
+        await expectLater(
+          service.pollUploadJob('job'),
+          throwsA(
+            isA<TcBackendUploadException>().having((e) => e.type, 'type', type),
+          ),
+        );
+      }
+
+      await expectJob({
+        'status': 'COMPLETED',
+      }, BackendUploadErrorType.malformedResponse);
+      await expectJob({'status': 'FAILED'}, BackendUploadErrorType.jobFailed);
+      await expectJob({
+        'status': 'UNKNOWN',
+      }, BackendUploadErrorType.malformedResponse);
+    },
+  );
 }

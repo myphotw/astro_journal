@@ -8,6 +8,7 @@ import '../../data/repositories/equipment_repository.dart';
 import '../../data/repositories/equipment_repository_impl.dart';
 import '../../data/datasources/gallery_cache_local_datasource.dart';
 import '../../data/datasources/gallery_record_link_datasource.dart';
+import '../../data/datasources/sync_checkpoint_datasource.dart';
 import '../../data/repositories/gallery_repository.dart';
 import '../../data/repositories/gallery_shooting_record_repository_adapter.dart';
 import '../../data/repositories/hybrid_gallery_repository.dart';
@@ -71,8 +72,12 @@ import '../../services/weather_cache_service.dart';
 import '../../services/weather_service.dart';
 import '../../services/tc_backend_settings_service.dart';
 import '../../services/tc_backend_upload_service.dart';
+import '../../services/tc_backend_record_service.dart';
 import '../../services/tc_backend_sync_coordinator.dart';
 import '../../services/tc_backend_startup_resume_service.dart';
+import '../../services/tc_backend_changes_service.dart';
+import '../../services/tc_backend_pull_sync_coordinator.dart';
+import '../../services/tc_backend_sync_gate.dart';
 import '../navigation/app_navigation_notifier.dart';
 
 class AppProviders {
@@ -91,23 +96,45 @@ class AppProviders {
     final geocodingService = GeocodingService();
     final apiKeyService = ApiKeyService();
     final tcBackendSettingsService = TcBackendSettingsService();
+    final galleryCache = GalleryCacheLocalDataSource();
+    final galleryRecordLinks = SyncOutboxGalleryRecordLinkDataSource();
     final galleryRepository = HybridGalleryRepository(
       settingsService: tcBackendSettingsService,
-      cache: GalleryCacheLocalDataSource(),
+      cache: galleryCache,
     );
     final tcBackendUploadService = TcBackendUploadService(
       settingsService: tcBackendSettingsService,
     );
+    final tcBackendRecordService = TcBackendRecordService(
+      settingsService: tcBackendSettingsService,
+    );
     final syncOutboxRepository = SyncOutboxRepositoryImpl();
+    final syncGate = TcBackendSyncGate();
     final syncCoordinator = TcBackendSyncCoordinator(
       syncOutboxRepository,
       shootingRecordRepository,
       tcBackendSettingsService,
       tcBackendUploadService,
+      recordService: tcBackendRecordService,
+      galleryRepository: galleryRepository,
+      syncGate: syncGate,
+    );
+    final syncCheckpoints = GalleryCacheSyncCheckpointDataSource(galleryCache);
+    final changesService = TcBackendChangesService(
+      settingsService: tcBackendSettingsService,
+    );
+    final pullSyncCoordinator = TcBackendPullSyncCoordinator(
+      changesApi: changesService,
+      checkpoints: syncCheckpoints,
+      galleryRepository: galleryRepository,
+      shootingRecordRepository: shootingRecordRepository,
+      recordLinks: galleryRecordLinks,
+      settingsService: tcBackendSettingsService,
+      syncGate: syncGate,
     );
     final startupResumeService = TcBackendStartupResumeService(
       tcBackendSettingsService,
-      syncCoordinator,
+      TcBackendCompositeSyncRunner([syncCoordinator, pullSyncCoordinator]),
     );
     final metadataService = MetadataService();
     final catalogSearchService = CatalogSearchService();
@@ -119,7 +146,9 @@ class AppProviders {
           projectionMapper: GalleryObservationProjectionMapper(
             catalogSearchService,
           ),
-          linkDataSource: SyncOutboxGalleryRecordLinkDataSource(),
+          linkDataSource: galleryRecordLinks,
+          syncOutboxRepository: syncOutboxRepository,
+          syncCoordinator: syncCoordinator,
         );
     final metadataPipeline = PhotoMetadataPipeline(
       metadataService: metadataService,
@@ -299,8 +328,13 @@ class AppProviders {
       Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
       Provider<GalleryRepository>.value(value: galleryRepository),
       Provider<TcBackendUploadService>.value(value: tcBackendUploadService),
+      Provider<TcBackendRecordService>.value(value: tcBackendRecordService),
+      Provider<TcBackendChangesService>.value(value: changesService),
       Provider<SyncOutboxRepository>.value(value: syncOutboxRepository),
+      Provider<SyncCheckpointDataSource>.value(value: syncCheckpoints),
+      Provider<TcBackendSyncGate>.value(value: syncGate),
       Provider<TcBackendSyncCoordinator>.value(value: syncCoordinator),
+      Provider<TcBackendPullSyncCoordinator>.value(value: pullSyncCoordinator),
       Provider<TcBackendStartupResumeService>.value(
         value: startupResumeService,
       ),

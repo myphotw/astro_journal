@@ -9,8 +9,10 @@ import 'package:astro_journal/data/repositories/gallery_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_shooting_record_repository_adapter.dart';
 import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/shooting_record_repository.dart';
+import 'package:astro_journal/data/repositories/sync_outbox_repository.dart';
 import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
+import 'package:astro_journal/services/tc_backend_sync_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -46,6 +48,8 @@ void main() {
     Map<String, String> links = const {},
     List<CatalogObject> catalogObjects = catalog,
     GalleryItem? detail,
+    _FakeOutbox? outbox,
+    _FakeDrain? drain,
   }) {
     final gallery = _FakeGalleryRepository(snapshot, detail: detail);
     final localRepository = _FakeLocalRepository(local);
@@ -60,18 +64,20 @@ void main() {
           CatalogSearchService(),
         ),
         linkDataSource: _FakeLinks(links),
+        syncOutboxRepository: outbox,
+        syncCoordinator: drain,
       ),
       catalogRepository,
+      outbox,
     );
   }
 
   test('record_id revision and catalog_object_id form projection identity', () {
-    final projection = GalleryObservationProjectionMapper(
-      CatalogSearchService(),
-    ).toProjection(
-      _item('record-1', 'sha-1', 'M42', capturedAt),
-      catalog: catalog,
-    );
+    final projection =
+        GalleryObservationProjectionMapper(CatalogSearchService()).toProjection(
+          _item('record-1', 'sha-1', 'M42', capturedAt),
+          catalog: catalog,
+        );
 
     expect(projection.backendRecordId, 'record-1');
     expect(projection.revision, 7);
@@ -82,41 +88,38 @@ void main() {
     expect(projection.originalUrl, '/original/sha-1');
   });
 
-  test('unmatched catalog item is retained with canonical fallback name', () async {
-    final item = _item('record-x', 'sha-x', 'CUSTOM-1', capturedAt);
-    final result = harness(
-      snapshot: _remoteSnapshot([item]),
-      catalogObjects: const [],
-    );
-    final records = await result.adapter.getAll();
+  test(
+    'unmatched catalog item is retained with canonical fallback name',
+    () async {
+      final item = _item('record-x', 'sha-x', 'CUSTOM-1', capturedAt);
+      final result = harness(
+        snapshot: _remoteSnapshot([item]),
+        catalogObjects: const [],
+      );
+      final records = await result.adapter.getAll();
 
-    expect(records.single.backendRecordId, 'record-x');
-    expect(records.single.celestialObjectId, 'CUSTOM-1');
-    expect(records.single.remoteTargetName, 'CUSTOM-1');
+      expect(records.single.backendRecordId, 'record-x');
+      expect(records.single.celestialObjectId, 'CUSTOM-1');
+      expect(records.single.remoteTargetName, 'CUSTOM-1');
 
-    final viewModel = GalleryViewModel(
-      result.adapter,
-      result.catalog,
-      CatalogSearchService(),
-    );
-    await viewModel.load();
-    expect(viewModel.filteredRecords, hasLength(1));
-    expect(viewModel.targetGroups, hasLength(1));
-  });
+      final viewModel = GalleryViewModel(
+        result.adapter,
+        result.catalog,
+        CatalogSearchService(),
+      );
+      await viewModel.load();
+      expect(viewModel.filteredRecords, hasLength(1));
+      expect(viewModel.targetGroups, hasLength(1));
+    },
+  );
 
   test('exact outbox record link merges canonical and local fields', () async {
-    final local = _local(
-      'local-1',
-      'M42',
-      capturedAt,
-      filename: 'same.fit',
-    ).copyWith(
-      exif: ExifInfo.placeholder(filename: 'same.fit').copyWith(
-        locationName: 'Old local site',
-        lat: 1,
-        lng: 2,
-      ),
-    );
+    final local = _local('local-1', 'M42', capturedAt, filename: 'same.fit')
+        .copyWith(
+          exif: ExifInfo.placeholder(
+            filename: 'same.fit',
+          ).copyWith(locationName: 'Old local site', lat: 1, lng: 2),
+        );
     final remote = _item(
       'record-1',
       'sha-1',
@@ -146,24 +149,27 @@ void main() {
     expect(record.exif?.locationName, 'Jeju');
   });
 
-  test('same filename is not used as canonical remote merge evidence', () async {
-    final local = _local('local-1', 'M42', capturedAt, filename: 'same.fit');
-    final remote = _item(
-      'record-1',
-      'sha-1',
-      'M42',
-      capturedAt,
-      filename: 'same.fit',
-    );
-    final result = await harness(
-      snapshot: _remoteSnapshot([remote]),
-      local: [local],
-    ).adapter.getAll();
+  test(
+    'same filename is not used as canonical remote merge evidence',
+    () async {
+      final local = _local('local-1', 'M42', capturedAt, filename: 'same.fit');
+      final remote = _item(
+        'record-1',
+        'sha-1',
+        'M42',
+        capturedAt,
+        filename: 'same.fit',
+      );
+      final result = await harness(
+        snapshot: _remoteSnapshot([remote]),
+        local: [local],
+      ).adapter.getAll();
 
-    expect(result, hasLength(2));
-    expect(result.any((record) => record.id == 'remote:record-1'), isTrue);
-    expect(result.any((record) => record.id == 'local-1'), isTrue);
-  });
+      expect(result, hasLength(2));
+      expect(result.any((record) => record.id == 'remote:record-1'), isTrue);
+      expect(result.any((record) => record.id == 'local-1'), isTrue);
+    },
+  );
 
   test('Backend OFF cache precedes local SQLite fallback', () async {
     final result = await harness(
@@ -233,13 +239,7 @@ void main() {
   test('Gallery search favorite and date sorting remain unchanged', () async {
     final result = harness(
       snapshot: _remoteSnapshot([
-        _item(
-          'newest',
-          'sha-new',
-          'M42',
-          capturedAt,
-          favorite: true,
-        ),
+        _item('newest', 'sha-new', 'M42', capturedAt, favorite: true),
         _item(
           'oldest',
           'sha-old',
@@ -264,6 +264,89 @@ void main() {
     viewModel.setSortOrder(GallerySortOrder.oldestFirst);
     expect(viewModel.filteredRecords.first.backendRecordId, 'oldest');
   });
+
+  test(
+    'remote favorite and memo are local-first durable PATCH operations',
+    () async {
+      final outbox = _FakeOutbox();
+      final drain = _FakeDrain();
+      final result = harness(
+        snapshot: _remoteSnapshot([
+          _item('record-1', 'sha-1', 'M42', capturedAt),
+        ]),
+        outbox: outbox,
+        drain: drain,
+      );
+      final record = (await result.adapter.getAll()).single;
+
+      await result.adapter.update(record.copyWith(isFavorite: true));
+      await result.adapter.update(
+        record.copyWith(isFavorite: true, memo: 'new memo'),
+      );
+
+      expect(outbox.patches, hasLength(2));
+      expect(outbox.patches.first.fields, {'favorite': true});
+      expect(outbox.patches.last.fields, {'memo': 'new memo'});
+      expect(result.gallery.localPatches.last['memo'], 'new memo');
+      expect(drain.calls, 2);
+    },
+  );
+
+  test('representative queues only the selected canonical record', () async {
+    final outbox = _FakeOutbox();
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item('record-1', 'sha-1', 'M42', capturedAt),
+        _item('record-2', 'sha-2', 'M42', capturedAt),
+      ]),
+      outbox: outbox,
+    );
+    final selected = (await result.adapter.getAll()).first;
+
+    await result.adapter.setRepresentative(selected.id);
+
+    expect(outbox.patches, hasLength(1));
+    expect(outbox.patches.single.recordId, 'record-1');
+    expect(outbox.patches.single.fields, {'representative': true});
+  });
+
+  test('remote delete updates local projection then queues DELETE', () async {
+    final outbox = _FakeOutbox();
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item('record-1', 'sha-1', 'M42', capturedAt),
+      ]),
+      outbox: outbox,
+    );
+    final record = (await result.adapter.getAll()).single;
+
+    await result.adapter.delete(record.id);
+
+    expect(result.gallery.localDeletes, ['record-1']);
+    expect(outbox.deletes, ['record-1']);
+  });
+
+  test(
+    'local-only mutation creates no orphan PATCH and delete cancels upload',
+    () async {
+      final outbox = _FakeOutbox();
+      final result = harness(
+        snapshot: const GallerySnapshot(
+          items: [],
+          source: GallerySnapshotSource.none,
+          backendEnabled: false,
+        ),
+        local: [_local('local-1', 'M42', capturedAt)],
+        outbox: outbox,
+      );
+      final local = (await result.adapter.getAll()).single;
+
+      await result.adapter.update(local.copyWith(memo: 'latest local value'));
+      expect(outbox.patches, isEmpty);
+      await result.adapter.delete(local.id);
+      expect(outbox.cancelledLocalIds, ['local-1']);
+    },
+  );
 }
 
 GallerySnapshot _remoteSnapshot(List<GalleryItem> items) => GallerySnapshot(
@@ -312,10 +395,11 @@ ShootingRecord _local(
 );
 
 class _Harness {
-  const _Harness(this.gallery, this.adapter, this.catalog);
+  const _Harness(this.gallery, this.adapter, this.catalog, this.outbox);
   final _FakeGalleryRepository gallery;
   final GalleryShootingRecordRepositoryAdapter adapter;
   final _FakeCatalogRepository catalog;
+  final _FakeOutbox? outbox;
 }
 
 class _FakeGalleryRepository implements GalleryRepository {
@@ -323,6 +407,8 @@ class _FakeGalleryRepository implements GalleryRepository {
   final GallerySnapshot snapshot;
   final GalleryItem? detail;
   final List<String> detailIds = [];
+  final List<Map<String, Object?>> localPatches = [];
+  final List<String> localDeletes = [];
 
   @override
   Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async =>
@@ -342,6 +428,20 @@ class _FakeGalleryRepository implements GalleryRepository {
   }
 
   @override
+  Future<void> applyLocalPatch(
+    String backendRecordId,
+    Map<String, Object?> fields, {
+    int? revision,
+  }) async {
+    localPatches.add({'record_id': backendRecordId, ...fields});
+  }
+
+  @override
+  Future<void> applyLocalDelete(String backendRecordId) async {
+    localDeletes.add(backendRecordId);
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -354,7 +454,8 @@ class _FakeLinks implements GalleryRecordLinkDataSource {
 }
 
 class _FakeLocalRepository implements ShootingRecordRepository {
-  _FakeLocalRepository(this.records);
+  _FakeLocalRepository(List<ShootingRecord> records)
+    : records = List<ShootingRecord>.from(records);
   final List<ShootingRecord> records;
 
   @override
@@ -369,7 +470,69 @@ class _FakeLocalRepository implements ShootingRecordRepository {
   }
 
   @override
+  Future<void> update(ShootingRecord record) async {
+    final index = records.indexWhere((item) => item.id == record.id);
+    if (index >= 0) records[index] = record;
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    records.removeWhere((record) => record.id == id);
+  }
+
+  @override
+  Future<void> setRepresentative(String recordId) async {}
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _PatchCall {
+  const _PatchCall(this.recordId, this.revision, this.fields);
+  final String recordId;
+  final int revision;
+  final Map<String, Object?> fields;
+}
+
+class _FakeOutbox implements SyncOutboxRepository {
+  final List<_PatchCall> patches = [];
+  final List<String> deletes = [];
+  final List<String> cancelledLocalIds = [];
+
+  @override
+  Future<void> enqueueRecordPatch({
+    required String backendRecordId,
+    required int expectedRevision,
+    required Map<String, Object?> fields,
+    String? localRecordId,
+  }) async {
+    patches.add(_PatchCall(backendRecordId, expectedRevision, fields));
+  }
+
+  @override
+  Future<void> enqueueRecordDelete({
+    required String backendRecordId,
+    String? localRecordId,
+  }) async {
+    deletes.add(backendRecordId);
+  }
+
+  @override
+  Future<void> cancelPendingUpload(String localRecordId) async {
+    cancelledLocalIds.add(localRecordId);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeDrain implements TcBackendDrainRunner {
+  int calls = 0;
+
+  @override
+  Future<void> drain() async {
+    calls++;
+  }
 }
 
 class _FakeCatalogRepository implements CatalogRepository {

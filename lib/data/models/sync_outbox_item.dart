@@ -7,18 +7,34 @@ enum SyncOutboxState {
   recordCreating,
   synced,
   failed,
+  cancelled,
 }
 
-enum SyncOperationType { photoUploadAndRecord }
+enum SyncOperationType { photoUploadAndRecord, recordPatch, recordDelete }
+
+extension SyncOperationTypeStorage on SyncOperationType {
+  String get databaseValue => switch (this) {
+    SyncOperationType.photoUploadAndRecord => 'PHOTO_UPLOAD_AND_RECORD',
+    SyncOperationType.recordPatch => 'RECORD_PATCH',
+    SyncOperationType.recordDelete => 'RECORD_DELETE',
+  };
+
+  static SyncOperationType fromDatabase(Object? value) => switch (value) {
+    'RECORD_PATCH' => SyncOperationType.recordPatch,
+    'RECORD_DELETE' => SyncOperationType.recordDelete,
+    _ => SyncOperationType.photoUploadAndRecord,
+  };
+}
 
 class SyncOutboxItem {
   const SyncOutboxItem({
     required this.operationId,
-    required this.localRecordId,
-    required this.clientFileId,
-    required this.clientRecordId,
     required this.payload,
     this.id,
+    this.operationType = SyncOperationType.photoUploadAndRecord,
+    this.localRecordId,
+    this.clientFileId,
+    this.clientRecordId,
     this.state = SyncOutboxState.queued,
     this.retryCount = 0,
     this.nextRetryAt,
@@ -29,9 +45,10 @@ class SyncOutboxItem {
   });
   final int? id;
   final String operationId;
-  final String localRecordId;
-  final String clientFileId;
-  final String clientRecordId;
+  final SyncOperationType operationType;
+  final String? localRecordId;
+  final String? clientFileId;
+  final String? clientRecordId;
   final Map<String, dynamic> payload;
   final SyncOutboxState state;
   final int retryCount;
@@ -44,7 +61,7 @@ class SyncOutboxItem {
     final now = DateTime.now().toUtc().toIso8601String();
     return {
       'operation_id': operationId,
-      'operation_type': 'PHOTO_UPLOAD_AND_RECORD',
+      'operation_type': operationType.databaseValue,
       'local_record_id': localRecordId,
       'client_file_id': clientFileId,
       'client_record_id': clientRecordId,
@@ -64,9 +81,10 @@ class SyncOutboxItem {
   factory SyncOutboxItem.fromMap(Map<String, dynamic> map) => SyncOutboxItem(
     id: map['id'] as int?,
     operationId: map['operation_id'] as String,
-    localRecordId: map['local_record_id'] as String,
-    clientFileId: map['client_file_id'] as String,
-    clientRecordId: map['client_record_id'] as String,
+    operationType: SyncOperationTypeStorage.fromDatabase(map['operation_type']),
+    localRecordId: map['local_record_id'] as String?,
+    clientFileId: map['client_file_id'] as String?,
+    clientRecordId: map['client_record_id'] as String?,
     payload:
         jsonDecode(map['payload_json'] as String? ?? '{}')
             as Map<String, dynamic>,

@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import '../../services/catalog_search_service.dart';
+import '../../services/app_logger.dart';
+import '../../services/tc_backend_sync_coordinator.dart';
 import '../datasources/gallery_record_link_datasource.dart';
 import '../models/catalog_object.dart';
 import '../models/gallery_item.dart';
@@ -7,6 +11,7 @@ import '../models/shooting_record.dart';
 import 'catalog_repository.dart';
 import 'gallery_repository.dart';
 import 'shooting_record_repository.dart';
+import 'sync_outbox_repository.dart';
 
 class GalleryObservationProjectionMapper {
   GalleryObservationProjectionMapper(this._catalogSearchService);
@@ -48,12 +53,16 @@ class GalleryShootingRecordRepositoryAdapter
     required GalleryObservationProjectionMapper projectionMapper,
     GalleryRecordLinkDataSource linkDataSource =
         const EmptyGalleryRecordLinkDataSource(),
+    SyncOutboxRepository? syncOutboxRepository,
+    TcBackendDrainRunner? syncCoordinator,
   }) => GalleryShootingRecordRepositoryAdapter._(
     galleryRepository,
     localRepository,
     catalogRepository,
     projectionMapper,
     linkDataSource,
+    syncOutboxRepository,
+    syncCoordinator,
   );
 
   GalleryShootingRecordRepositoryAdapter._(
@@ -62,6 +71,8 @@ class GalleryShootingRecordRepositoryAdapter
     this._catalogRepository,
     this._projectionMapper,
     this._linkDataSource,
+    this._syncOutboxRepository,
+    this._syncCoordinator,
   );
 
   final GalleryRepository _galleryRepository;
@@ -69,6 +80,8 @@ class GalleryShootingRecordRepositoryAdapter
   final CatalogRepository _catalogRepository;
   final GalleryObservationProjectionMapper _projectionMapper;
   final GalleryRecordLinkDataSource _linkDataSource;
+  final SyncOutboxRepository? _syncOutboxRepository;
+  final TcBackendDrainRunner? _syncCoordinator;
   Map<String, ShootingRecord> _lastRemoteRecords = const {};
 
   @override
@@ -90,7 +103,9 @@ class GalleryShootingRecordRepositoryAdapter
 
     for (final item in snapshot.items) {
       final linkedLocalId = links[item.backendRecordId];
-      final localRecord = linkedLocalId == null ? null : localById[linkedLocalId];
+      final localRecord = linkedLocalId == null
+          ? null
+          : localById[linkedLocalId];
       if (localRecord != null) matchedLocalIds.add(localRecord.id);
       projected.add(
         _projectionMapper
@@ -135,7 +150,9 @@ class GalleryShootingRecordRepositoryAdapter
 
   @override
   Future<List<ShootingRecord>> getByCelestialObjectId(String id) async =>
-      (await getAll()).where((record) => record.celestialObjectId == id).toList();
+      (await getAll())
+          .where((record) => record.celestialObjectId == id)
+          .toList();
 
   @override
   Future<ShootingRecord?> findByOriginalFilename(String filename) async {
@@ -165,22 +182,43 @@ class GalleryShootingRecordRepositoryAdapter
 
   @override
   Future<void> update(ShootingRecord record) async {
-    if (_isRemoteOnly(record.id)) {
-      _lastRemoteRecords = {..._lastRemoteRecords, record.id: record};
-      return;
+    final previous = _lastRemoteRecords[record.id];
+    if (!_isRemoteOnly(record.id)) {
+      await _localRepository.update(record);
     }
-    await _localRepository.update(record);
+    _lastRemoteRecords = {..._lastRemoteRecords, record.id: record};
+    if (previous == null || previous.backendRecordId == null) return;
+
+    final fields = <String, Object?>{};
+    if (previous.isFavorite != record.isFavorite) {
+      fields['favorite'] = record.isFavorite;
+    }
+    if (previous.memo != record.memo) fields['memo'] = record.memo;
+    if (previous.isRepresentative != record.isRepresentative) {
+      fields['representative'] = record.isRepresentative;
+    }
+    await _queuePatch(record, fields);
   }
 
   @override
   Future<void> delete(String id) async {
-    if (_isRemoteOnly(id)) {
-      final updated = Map<String, ShootingRecord>.from(_lastRemoteRecords)
-        ..remove(id);
-      _lastRemoteRecords = updated;
+    final record = _lastRemoteRecords[id];
+    if (record?.backendRecordId == null) {
+      await _localRepository.delete(id);
+      await _syncOutboxRepository?.cancelPendingUpload(id);
       return;
     }
-    await _localRepository.delete(id);
+    final remoteOnly = _isRemoteOnly(id);
+    if (!remoteOnly) await _localRepository.delete(id);
+    await _galleryRepository.applyLocalDelete(record!.backendRecordId!);
+    final updated = Map<String, ShootingRecord>.from(_lastRemoteRecords)
+      ..remove(id);
+    _lastRemoteRecords = updated;
+    await _syncOutboxRepository?.enqueueRecordDelete(
+      backendRecordId: record.backendRecordId!,
+      localRecordId: remoteOnly ? null : id,
+    );
+    _requestDrain();
   }
 
   @override
@@ -189,7 +227,60 @@ class GalleryShootingRecordRepositoryAdapter
 
   @override
   Future<void> setRepresentative(String recordId) async {
-    if (_isRemoteOnly(recordId)) return;
-    await _localRepository.setRepresentative(recordId);
+    final record = _lastRemoteRecords[recordId];
+    if (record?.backendRecordId == null) {
+      await _localRepository.setRepresentative(recordId);
+      return;
+    }
+    final remoteOnly = _isRemoteOnly(recordId);
+    if (!remoteOnly) await _localRepository.setRepresentative(recordId);
+    await _galleryRepository.applyLocalPatch(record!.backendRecordId!, const {
+      'representative': true,
+    });
+    _lastRemoteRecords = {
+      for (final entry in _lastRemoteRecords.entries)
+        entry.key: entry.value.celestialObjectId == record.celestialObjectId
+            ? entry.value.copyWith(isRepresentative: entry.key == recordId)
+            : entry.value,
+    };
+    final revision = record.backendRevision;
+    if (revision != null) {
+      await _syncOutboxRepository?.enqueueRecordPatch(
+        backendRecordId: record.backendRecordId!,
+        expectedRevision: revision,
+        fields: const {'representative': true},
+        localRecordId: remoteOnly ? null : recordId,
+      );
+      _requestDrain();
+    }
+  }
+
+  Future<void> _queuePatch(
+    ShootingRecord record,
+    Map<String, Object?> fields,
+  ) async {
+    if (fields.isEmpty ||
+        record.backendRecordId == null ||
+        record.backendRevision == null) {
+      return;
+    }
+    await _galleryRepository.applyLocalPatch(record.backendRecordId!, fields);
+    await _syncOutboxRepository?.enqueueRecordPatch(
+      backendRecordId: record.backendRecordId!,
+      expectedRevision: record.backendRevision!,
+      fields: fields,
+      localRecordId: _isRemoteOnly(record.id) ? null : record.id,
+    );
+    _requestDrain();
+  }
+
+  void _requestDrain() {
+    final coordinator = _syncCoordinator;
+    if (coordinator == null) return;
+    unawaited(
+      coordinator.drain().catchError((Object error, StackTrace stack) {
+        AppLogger.error('GalleryMutationSync', error, stack);
+      }),
+    );
   }
 }

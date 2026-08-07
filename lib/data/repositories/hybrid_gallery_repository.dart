@@ -19,8 +19,7 @@ class HybridGalleryRepository implements GalleryRepository {
   }) => HybridGalleryRepository._(
     settingsService,
     cache,
-    remoteFactory ??
-        ((baseUrl) => RemoteGalleryDataSource(baseUrl: baseUrl)),
+    remoteFactory ?? ((baseUrl) => RemoteGalleryDataSource(baseUrl: baseUrl)),
     now ?? DateTime.now,
     listTtl,
     detailTtl,
@@ -123,12 +122,15 @@ class HybridGalleryRepository implements GalleryRepository {
   }) async {
     final normalized = query.trim().toLowerCase();
     if (normalized.isEmpty) return getAll(forceRefresh: forceRefresh);
-    return (await getAll(forceRefresh: forceRefresh)).where((item) {
-      return item.catalogObjectId.toLowerCase().contains(normalized) ||
-          (item.originalFilename?.toLowerCase().contains(normalized) ?? false) ||
-          (item.location?.toLowerCase().contains(normalized) ?? false) ||
-          item.memo.toLowerCase().contains(normalized);
-    }).toList(growable: false);
+    return (await getAll(forceRefresh: forceRefresh))
+        .where((item) {
+          return item.catalogObjectId.toLowerCase().contains(normalized) ||
+              (item.originalFilename?.toLowerCase().contains(normalized) ??
+                  false) ||
+              (item.location?.toLowerCase().contains(normalized) ?? false) ||
+              item.memo.toLowerCase().contains(normalized);
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -136,7 +138,8 @@ class HybridGalleryRepository implements GalleryRepository {
     final buckets = <String, int>{};
     for (final item in await getAll(forceRefresh: forceRefresh)) {
       final date = item.capturedAt;
-      final key = '${date.year.toString().padLeft(4, '0')}-'
+      final key =
+          '${date.year.toString().padLeft(4, '0')}-'
           '${date.month.toString().padLeft(2, '0')}';
       buckets[key] = (buckets[key] ?? 0) + 1;
     }
@@ -153,6 +156,147 @@ class HybridGalleryRepository implements GalleryRepository {
       'favorites': items.where((item) => item.favorite).length,
     };
   }
+
+  @override
+  Future<void> applyLocalPatch(
+    String backendRecordId,
+    Map<String, Object?> fields, {
+    int? revision,
+  }) async {
+    const listKey = 'astro:gallery:list';
+    final listEntry = await _cache.read(listKey);
+    final items = _cachedItems(listEntry);
+    GalleryItem? target;
+    for (final item in items) {
+      if (item.backendRecordId == backendRecordId) {
+        target = item;
+        break;
+      }
+    }
+    if (target != null) {
+      final updated = _applyFields(target, fields, revision: revision);
+      final representative = fields['representative'] == true;
+      final rewritten = items
+          .map((item) {
+            if (item.backendRecordId == backendRecordId) return updated;
+            if (representative &&
+                item.catalogObjectId == target!.catalogObjectId) {
+              return item.copyWith(representative: false);
+            }
+            return item;
+          })
+          .toList(growable: false);
+      await _write(listKey, rewritten.map((item) => item.toJson()).toList());
+    }
+
+    final detailKey = 'astro:gallery:detail:$backendRecordId';
+    final detail = _cachedItem(await _cache.read(detailKey));
+    if (detail != null) {
+      await _write(
+        detailKey,
+        _applyFields(detail, fields, revision: revision).toJson(),
+      );
+    }
+  }
+
+  @override
+  Future<void> applyLocalDelete(String backendRecordId) async {
+    const listKey = 'astro:gallery:list';
+    final entry = await _cache.read(listKey);
+    if (entry != null) {
+      final remaining = _cachedItems(entry)
+          .where((item) => item.backendRecordId != backendRecordId)
+          .map((item) => item.toJson())
+          .toList(growable: false);
+      await _write(listKey, remaining);
+    }
+    // An invalidated detail entry parses as null and cannot resurrect a
+    // locally deleted record while the durable DELETE is pending.
+    await _write('astro:gallery:detail:$backendRecordId', const {});
+  }
+
+  @override
+  Future<int?> getCachedRevision(String backendRecordId) async {
+    final revisions = <int>[];
+    final detail = _cachedItem(
+      await _cache.read('astro:gallery:detail:$backendRecordId'),
+    );
+    if (detail != null) revisions.add(detail.revision);
+    for (final item in _cachedItems(await _cache.read('astro:gallery:list'))) {
+      if (item.backendRecordId == backendRecordId) {
+        revisions.add(item.revision);
+        break;
+      }
+    }
+    final tombstone = _tombstone(
+      await _cache.read('astro:gallery:tombstone:$backendRecordId'),
+    );
+    if (tombstone != null) revisions.add(tombstone.revision);
+    if (revisions.isEmpty) return null;
+    return revisions.reduce((left, right) => left > right ? left : right);
+  }
+
+  @override
+  Future<bool> upsertPulledItem(GalleryItem item) async {
+    final currentRevision = await getCachedRevision(item.backendRecordId);
+    if (currentRevision != null && currentRevision >= item.revision) {
+      return false;
+    }
+    const listKey = 'astro:gallery:list';
+    final current = _cachedItems(await _cache.read(listKey));
+    final synced = item.copyWith(syncedAt: _now(), syncState: 'SYNCED');
+    var replaced = false;
+    final updated = current.map((existing) {
+      if (existing.backendRecordId != item.backendRecordId) return existing;
+      replaced = true;
+      return synced;
+    }).toList();
+    if (!replaced) updated.add(synced);
+    await _write(listKey, updated.map((entry) => entry.toJson()).toList());
+    await _write(
+      'astro:gallery:detail:${item.backendRecordId}',
+      synced.toJson(),
+    );
+    return true;
+  }
+
+  @override
+  Future<bool> applyPulledDelete(
+    String backendRecordId, {
+    required int revision,
+    DateTime? deletedAt,
+  }) async {
+    final tombstoneKey = 'astro:gallery:tombstone:$backendRecordId';
+    final existingTombstone = _tombstone(await _cache.read(tombstoneKey));
+    if (existingTombstone != null && existingTombstone.revision >= revision) {
+      return false;
+    }
+    final currentRevision = await getCachedRevision(backendRecordId);
+    if (currentRevision != null && currentRevision > revision) return false;
+    await applyLocalDelete(backendRecordId);
+    await _write(tombstoneKey, {
+      'record_id': backendRecordId,
+      'revision': revision,
+      'deleted_at': (deletedAt ?? _now()).toUtc().toIso8601String(),
+    });
+    return true;
+  }
+
+  GalleryItem _applyFields(
+    GalleryItem item,
+    Map<String, Object?> fields, {
+    int? revision,
+  }) => item.copyWith(
+    revision: revision,
+    favorite: fields.containsKey('favorite')
+        ? fields['favorite'] as bool?
+        : null,
+    representative: fields.containsKey('representative')
+        ? fields['representative'] as bool?
+        : null,
+    memo: fields.containsKey('memo') ? fields['memo'] as String? : null,
+    syncState: revision == null ? 'QUEUED' : 'SYNCED',
+  );
 
   bool _isFresh(GalleryCacheEntry? entry, Duration ttl) =>
       entry != null && _now().difference(entry.cachedAt) <= ttl;
@@ -181,6 +325,20 @@ class HybridGalleryRepository implements GalleryRepository {
         Map<String, dynamic>.from(jsonDecode(entry.payloadJson) as Map),
       ).copyWith(syncedAt: entry.cachedAt);
     } on Object {
+      return null;
+    }
+  }
+
+  ({int revision, DateTime? deletedAt})? _tombstone(GalleryCacheEntry? entry) {
+    if (entry == null) return null;
+    try {
+      final decoded = jsonDecode(entry.payloadJson);
+      if (decoded is! Map || decoded['revision'] is! num) return null;
+      return (
+        revision: (decoded['revision'] as num).toInt(),
+        deletedAt: DateTime.tryParse(decoded['deleted_at']?.toString() ?? ''),
+      );
+    } on FormatException {
       return null;
     }
   }

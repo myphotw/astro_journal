@@ -19,8 +19,9 @@ abstract class TcBackendUploadStages {
   Future<UploadJobResult> pollUploadJob(String uploadJobId);
   Future<ObservationRecordResult> createObservationRecord(
     ShootingRecord record,
-    String backendFileId,
-  );
+    String backendFileId, {
+    String? clientRecordId,
+  });
 }
 
 /// Best-effort A2 adapter. It deliberately has no SQLite/outbox dependency.
@@ -90,8 +91,9 @@ class TcBackendUploadService implements TcBackendUploadStages {
   @override
   Future<ObservationRecordResult> createObservationRecord(
     ShootingRecord record,
-    String backendFileId,
-  ) async {
+    String backendFileId, {
+    String? clientRecordId,
+  }) async {
     final settings = await settingsService.load();
     final base = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     if (!settings.enabled || base == null) {
@@ -100,7 +102,12 @@ class TcBackendUploadService implements TcBackendUploadStages {
         'TC-Backend is not configured.',
       );
     }
-    final result = await _createRecord(base, backendFileId, record);
+    final result = await _createRecord(
+      base,
+      backendFileId,
+      record,
+      clientRecordId: clientRecordId,
+    );
     return ObservationRecordResult(
       backendRecordId: result.id,
       revision: result.revision,
@@ -311,9 +318,14 @@ class TcBackendUploadService implements TcBackendUploadStages {
   Future<_RecordResponse> _createRecord(
     String baseUrl,
     String backendFileId,
-    ShootingRecord record,
-  ) async {
-    final payload = observationRecordPayload(record, backendFileId);
+    ShootingRecord record, {
+    String? clientRecordId,
+  }) async {
+    final payload = observationRecordPayload(
+      record,
+      backendFileId,
+      clientRecordId: clientRecordId,
+    );
     final request =
         http.Request('POST', Uri.parse('$baseUrl/api/astro/records'))
           ..headers.addAll(const {
@@ -339,19 +351,26 @@ class TcBackendUploadService implements TcBackendUploadStages {
 
   Map<String, dynamic> observationRecordPayload(
     ShootingRecord record,
-    String backendFileId,
-  ) => <String, dynamic>{
-    'file_id': backendFileId,
-    'catalog_object_id': record.celestialObjectId,
-    'captured_at': record.capturedAt.toUtc().toIso8601String(),
-    'latitude': record.exif?.lat,
-    'longitude': record.exif?.lng,
-    'location_name': record.location ?? record.exif?.locationName,
-    'memo': record.memo,
-    'favorite': record.isFavorite,
-    'representative': record.isRepresentative,
-    'equipment_id': null,
-  };
+    String backendFileId, {
+    String? clientRecordId,
+  }) {
+    final payload = <String, dynamic>{
+      'file_id': backendFileId,
+      'catalog_object_id': record.celestialObjectId,
+      'captured_at': record.capturedAt.toUtc().toIso8601String(),
+      'latitude': record.exif?.lat,
+      'longitude': record.exif?.lng,
+      'location_name': record.location ?? record.exif?.locationName,
+      'memo': record.memo,
+      'favorite': record.isFavorite,
+      'representative': record.isRepresentative,
+      'equipment_id': null,
+    };
+    if (clientRecordId != null) {
+      payload['client_record_id'] = clientRecordId;
+    }
+    return payload;
+  }
 
   Future<http.Response> _send(http.BaseRequest request) async {
     try {

@@ -20,4 +20,16 @@ abstract class SyncOutboxRepository {
   });
   Future<void> patch(String operationId, Map<String, Object?> values);
   Future<void> retryAllFailed();
+  Future<void> enqueueRecordPatch({
+    required String backendRecordId,
+    required int expectedRevision,
+    required Map<String, Object?> fields,
+    String? localRecordId,
+  });
+  Future<void> enqueueRecordDelete({
+    required String backendRecordId,
+    String? localRecordId,
+  });
+  Future<void> cancelPendingUpload(String localRecordId);
+  Future<void> rebaseQueuedRecordPatches(String backendRecordId, int revision);
 }

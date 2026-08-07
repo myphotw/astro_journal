@@ -23,10 +23,20 @@ abstract class GalleryRepository {
     String backendRecordId, {
     bool forceRefresh = false,
   });
-  Future<List<GalleryItem>> search(
-    String query, {
-    bool forceRefresh = false,
-  });
+  Future<List<GalleryItem>> search(String query, {bool forceRefresh = false});
   Future<Map<String, dynamic>> getTimeline({bool forceRefresh = false});
   Future<Map<String, dynamic>> getStatistics({bool forceRefresh = false});
+  Future<void> applyLocalPatch(
+    String backendRecordId,
+    Map<String, Object?> fields, {
+    int? revision,
+  });
+  Future<void> applyLocalDelete(String backendRecordId);
+  Future<int?> getCachedRevision(String backendRecordId);
+  Future<bool> upsertPulledItem(GalleryItem item);
+  Future<bool> applyPulledDelete(
+    String backendRecordId, {
+    required int revision,
+    DateTime? deletedAt,
+  });
 }

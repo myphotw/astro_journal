@@ -41,13 +41,20 @@ class GalleryItem {
   final DateTime? syncedAt;
   final String? syncState;
 
-  GalleryItem copyWith({DateTime? syncedAt}) => GalleryItem(
+  GalleryItem copyWith({
+    int? revision,
+    bool? favorite,
+    bool? representative,
+    String? memo,
+    DateTime? syncedAt,
+    String? syncState,
+  }) => GalleryItem(
     backendRecordId: backendRecordId,
-    revision: revision,
+    revision: revision ?? this.revision,
     catalogObjectId: catalogObjectId,
     capturedAt: capturedAt,
-    favorite: favorite,
-    representative: representative,
+    favorite: favorite ?? this.favorite,
+    representative: representative ?? this.representative,
     backendFileId: backendFileId,
     thumbnailUrl: thumbnailUrl,
     previewUrl: previewUrl,
@@ -58,9 +65,9 @@ class GalleryItem {
     latitude: latitude,
     longitude: longitude,
     location: location,
-    memo: memo,
+    memo: memo ?? this.memo,
     syncedAt: syncedAt ?? this.syncedAt,
-    syncState: syncState,
+    syncState: syncState ?? this.syncState,
   );
 
   Map<String, dynamic> toJson() => {
@@ -128,10 +135,7 @@ class GalleryItem {
     throw FormatException('Gallery item has no valid $key.');
   }
 
-  static DateTime _requiredDateTime(
-    Map<String, dynamic> json,
-    String key,
-  ) {
+  static DateTime _requiredDateTime(Map<String, dynamic> json, String key) {
     final value = _dateTime(json[key]);
     if (value == null) throw FormatException('Gallery item has no valid $key.');
     return value;

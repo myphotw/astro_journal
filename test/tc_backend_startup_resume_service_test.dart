@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:astro_journal/services/tc_backend_startup_resume_service.dart';
+import 'package:astro_journal/services/tc_backend_pull_sync_coordinator.dart';
 import 'package:astro_journal/services/tc_backend_sync_coordinator.dart';
 
 void main() {
@@ -57,6 +58,24 @@ void main() {
     await Future.wait([service.resume(), service.resume()]);
     expect(runner.calls, 1);
   });
+
+  test('startup composite runs push before incremental pull', () async {
+    await settings.save(
+      const TcBackendSettings(
+        baseUrl: 'https://backend.example',
+        enabled: true,
+      ),
+    );
+    final order = <String>[];
+    final runner = TcBackendCompositeSyncRunner([
+      _OrderRunner('push', order),
+      _OrderRunner('pull', order),
+    ]);
+
+    await TcBackendStartupResumeService(settings, runner).resume();
+
+    expect(order, ['push', 'pull']);
+  });
 }
 
 class _FakeRunner implements TcBackendDrainRunner {
@@ -80,5 +99,16 @@ class _DuplicateProtectedRunner implements TcBackendDrainRunner {
     calls++;
     await Future<void>.delayed(Duration.zero);
     _running = false;
+  }
+}
+
+class _OrderRunner implements TcBackendDrainRunner {
+  _OrderRunner(this.name, this.order);
+  final String name;
+  final List<String> order;
+
+  @override
+  Future<void> drain() async {
+    order.add(name);
   }
 }

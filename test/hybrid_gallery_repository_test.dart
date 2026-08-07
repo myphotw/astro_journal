@@ -52,11 +52,9 @@ void main() {
   });
 
   test('backend failure falls back to expired SQLite cache', () async {
-    cache.putItems(
-      'astro:gallery:list',
-      [_item('fallback')],
-      now.subtract(const Duration(hours: 2)),
-    );
+    cache.putItems('astro:gallery:list', [
+      _item('fallback'),
+    ], now.subtract(const Duration(hours: 2)));
     remote.failure = const RemoteGalleryException('offline');
 
     final result = await repository().getAll();
@@ -67,16 +65,11 @@ void main() {
 
   test('backend off uses SQLite cache only', () async {
     await settings.save(
-      const TcBackendSettings(
-        baseUrl: 'https://backend.test',
-        enabled: false,
-      ),
+      const TcBackendSettings(baseUrl: 'https://backend.test', enabled: false),
     );
-    cache.putItems(
-      'astro:gallery:list',
-      [_item('offline')],
-      now.subtract(const Duration(days: 5)),
-    );
+    cache.putItems('astro:gallery:list', [
+      _item('offline'),
+    ], now.subtract(const Duration(days: 5)));
 
     final result = await repository().getAll();
 
@@ -85,11 +78,9 @@ void main() {
   });
 
   test('expired cache refreshes from backend', () async {
-    cache.putItems(
-      'astro:gallery:list',
-      [_item('expired')],
-      now.subtract(const Duration(minutes: 31)),
-    );
+    cache.putItems('astro:gallery:list', [
+      _item('expired'),
+    ], now.subtract(const Duration(minutes: 31)));
     remote.items = [_item('fresh')];
 
     final result = await repository().getAll();
@@ -100,10 +91,7 @@ void main() {
 
   test('legacy Common Gallery cache key is not reused', () async {
     await settings.save(
-      const TcBackendSettings(
-        baseUrl: 'https://backend.test',
-        enabled: false,
-      ),
+      const TcBackendSettings(baseUrl: 'https://backend.test', enabled: false),
     );
     cache.putItems('gallery:list', [_item('legacy')], now);
 
@@ -111,6 +99,67 @@ void main() {
 
     expect(result, isEmpty);
     expect(remote.galleryCalls, 0);
+  });
+
+  test(
+    'local mutation updates and deletes the durable Gallery cache',
+    () async {
+      await settings.save(
+        const TcBackendSettings(
+          baseUrl: 'https://backend.test',
+          enabled: false,
+        ),
+      );
+      cache.putItems('astro:gallery:list', [_item('cached')], now);
+      final subject = repository();
+
+      await subject.applyLocalPatch('record-cached', const {
+        'favorite': true,
+        'memo': 'local memo',
+      }, revision: 2);
+      final updated = (await subject.getAll()).single;
+      expect(updated.favorite, isTrue);
+      expect(updated.memo, 'local memo');
+      expect(updated.revision, 2);
+
+      await subject.applyLocalDelete('record-cached');
+      expect(await subject.getAll(), isEmpty);
+    },
+  );
+
+  test('pull projection is revision-aware and tombstone-safe', () async {
+    await settings.save(
+      const TcBackendSettings(baseUrl: 'https://backend.test', enabled: false),
+    );
+    final subject = repository();
+    final revision1 = _item('pulled');
+    final revision2 = GalleryItem(
+      backendRecordId: revision1.backendRecordId,
+      revision: 2,
+      catalogObjectId: revision1.catalogObjectId,
+      capturedAt: revision1.capturedAt,
+      favorite: true,
+      representative: revision1.representative,
+      backendFileId: revision1.backendFileId,
+      thumbnailUrl: revision1.thumbnailUrl,
+      previewUrl: revision1.previewUrl,
+      originalUrl: revision1.originalUrl,
+    );
+
+    expect(await subject.upsertPulledItem(revision1), isTrue);
+    expect(await subject.upsertPulledItem(revision1), isFalse);
+    expect(await subject.upsertPulledItem(revision2), isTrue);
+    expect(await subject.getCachedRevision('record-pulled'), 2);
+    expect(
+      await subject.applyPulledDelete(
+        'record-pulled',
+        revision: 3,
+        deletedAt: now,
+      ),
+      isTrue,
+    );
+    expect(await subject.upsertPulledItem(revision2), isFalse);
+    expect(await subject.getAll(), isEmpty);
   });
 }
 
@@ -161,5 +210,4 @@ class _FakeRemote implements GalleryRemoteDataSource {
 
   @override
   Future<GalleryItem> getDetail(String fileId) async => _item(fileId);
-
 }
