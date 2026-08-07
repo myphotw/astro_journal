@@ -120,6 +120,7 @@ class AppDatabase {
     await _createPhotoObjectsTable(db);
     await _createEquipmentTables(db);
     await _createObservationSiteFavoritesTable(db);
+    await _createSyncOutboxTable(db);
     await _createIndexes(db);
     await CatalogFtsService.ensureSchema(db);
   }
@@ -414,6 +415,38 @@ class AppDatabase {
         ADD COLUMN ${DatabaseConstants.colAnalysisStatus} TEXT NOT NULL DEFAULT 'COMPLETED'
       ''');
     }
+    if (oldVersion < 30) {
+      await _createSyncOutboxTable(db);
+    }
+  }
+
+  static Future<void> _createSyncOutboxTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableSyncOutbox} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_id TEXT NOT NULL UNIQUE,
+        operation_type TEXT NOT NULL,
+        local_record_id TEXT,
+        local_photo_id TEXT,
+        client_file_id TEXT,
+        client_record_id TEXT,
+        backend_file_id TEXT,
+        backend_record_id TEXT,
+        upload_job_id TEXT,
+        state TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        payload_json TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_sync_outbox_pending
+      ON ${DatabaseConstants.tableSyncOutbox} (state, next_retry_at, created_at)
+    ''');
   }
 
   static Future<void> _createIndexes(Database db) async {
@@ -513,8 +546,7 @@ class AppDatabase {
     final rows = await db.query(
       DatabaseConstants.tableCelestialObjects,
       columns: [DatabaseConstants.colId],
-      where:
-          '${DatabaseConstants.colCatalog} IN (?, ?)',
+      where: '${DatabaseConstants.colCatalog} IN (?, ?)',
       whereArgs: ['barnard', 'ldn'],
     );
     if (rows.isEmpty) return;
@@ -551,8 +583,7 @@ class AppDatabase {
     await db.update(
       DatabaseConstants.tableShootingRecords,
       {DatabaseConstants.colCelestialObjectId: newMilkyId},
-      where:
-          '${DatabaseConstants.colCelestialObjectId} IN (?, ?, ?, ?, ?)',
+      where: '${DatabaseConstants.colCelestialObjectId} IN (?, ?, ?, ?, ?)',
       whereArgs: oldMilkyIds,
     );
 
@@ -609,8 +640,7 @@ class AppDatabase {
 
     final assigned = <String>{};
     for (final row in rows) {
-      final objectId =
-          row[DatabaseConstants.colCelestialObjectId] as String;
+      final objectId = row[DatabaseConstants.colCelestialObjectId] as String;
       final photoUri = row[DatabaseConstants.colPhotoUri] as String?;
       if (assigned.contains(objectId)) continue;
       if (photoUri == null || photoUri.isEmpty) continue;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +19,7 @@ import 'services/api_key_service.dart';
 import 'services/base_exposure_settings_service.dart';
 import 'services/recommendation_settings_service.dart';
 import 'services/splash_image_service.dart';
+import 'services/tc_backend_startup_resume_service.dart';
 import 'shared/widgets/main_shell.dart';
 
 class AstroJournalApp extends StatelessWidget {
@@ -55,8 +58,8 @@ class _AppStartupGateState extends State<_AppStartupGate> {
       apiKeyService: context.read<ApiKeyService>(),
       settingsViewModel: context.read<SettingsViewModel>(),
       equipmentViewModel: context.read<EquipmentViewModel>(),
-      recommendationSettingsService:
-          context.read<RecommendationSettingsService>(),
+      recommendationSettingsService: context
+          .read<RecommendationSettingsService>(),
       baseExposureSettingsService: context.read<BaseExposureSettingsService>(),
       homeViewModel: context.read<HomeViewModel>(),
       catalogViewModel: context.read<CatalogViewModel>(),
@@ -68,6 +71,7 @@ class _AppStartupGateState extends State<_AppStartupGate> {
     );
     _startup.addListener(_onStartupChanged);
     _startup.run();
+    unawaited(context.read<TcBackendStartupResumeService>().resume());
   }
 
   void _onStartupChanged() {

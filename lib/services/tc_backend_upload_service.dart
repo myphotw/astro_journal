@@ -11,8 +11,20 @@ import '../data/models/backend_upload_result.dart';
 import '../data/models/shooting_record.dart';
 import 'tc_backend_settings_service.dart';
 
+abstract class TcBackendUploadStages {
+  Future<UploadStartResult> startUpload(
+    ShootingRecord record, {
+    required String clientFileId,
+  });
+  Future<UploadJobResult> pollUploadJob(String uploadJobId);
+  Future<ObservationRecordResult> createObservationRecord(
+    ShootingRecord record,
+    String backendFileId,
+  );
+}
+
 /// Best-effort A2 adapter. It deliberately has no SQLite/outbox dependency.
-class TcBackendUploadService {
+class TcBackendUploadService implements TcBackendUploadStages {
   TcBackendUploadService({
     required this.settingsService,
     http.Client? client,
@@ -29,7 +41,76 @@ class TcBackendUploadService {
   final Future<void> Function(Duration) _delay;
   final Map<String, _HashCacheEntry> _hashCache = {};
 
-  Future<BackendUploadResult> uploadRecord(ShootingRecord record) async {
+  /// Coordinator stage API; A2 [uploadRecord] remains the compatibility API.
+  @override
+  Future<UploadStartResult> startUpload(
+    ShootingRecord record, {
+    required String clientFileId,
+  }) async {
+    final settings = await settingsService.load();
+    final base = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
+    if (!settings.enabled || base == null) {
+      throw const _UploadException(
+        BackendUploadErrorType.notConfigured,
+        'TC-Backend is not configured.',
+      );
+    }
+    final file = File(record.photoUri ?? '');
+    if (!await file.exists()) {
+      throw const _UploadException(
+        BackendUploadErrorType.uploadRejected,
+        'Local photo file is unavailable.',
+      );
+    }
+    final response = await _upload(
+      base,
+      file,
+      clientFileId,
+      await contentSha256(file),
+    );
+    return UploadStartResult(
+      uploadJobId: response.jobId,
+      backendFileId: response.backendFileId,
+    );
+  }
+
+  @override
+  Future<UploadJobResult> pollUploadJob(String uploadJobId) async {
+    final settings = await settingsService.load();
+    final base = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
+    if (!settings.enabled || base == null) {
+      throw const _UploadException(
+        BackendUploadErrorType.notConfigured,
+        'TC-Backend is not configured.',
+      );
+    }
+    return _pollUploadJob(base, uploadJobId);
+  }
+
+  @override
+  Future<ObservationRecordResult> createObservationRecord(
+    ShootingRecord record,
+    String backendFileId,
+  ) async {
+    final settings = await settingsService.load();
+    final base = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
+    if (!settings.enabled || base == null) {
+      throw const _UploadException(
+        BackendUploadErrorType.notConfigured,
+        'TC-Backend is not configured.',
+      );
+    }
+    final result = await _createRecord(base, backendFileId, record);
+    return ObservationRecordResult(
+      backendRecordId: result.id,
+      revision: result.revision,
+    );
+  }
+
+  Future<BackendUploadResult> uploadRecord(
+    ShootingRecord record, {
+    String? clientFileId,
+  }) async {
     final settings = await settingsService.load();
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     if (!settings.enabled) return const BackendUploadResult.notAttempted();
@@ -44,7 +125,7 @@ class TcBackendUploadService {
       );
     }
 
-    final clientFileId = const Uuid().v4();
+    final resolvedClientFileId = clientFileId ?? const Uuid().v4();
     String? sha256;
     String? jobId;
     String? backendFileId;
@@ -54,23 +135,37 @@ class TcBackendUploadService {
         return BackendUploadResult(
           attempted: true,
           success: false,
-          clientFileId: clientFileId,
+          clientFileId: resolvedClientFileId,
           errorType: BackendUploadErrorType.uploadRejected,
           errorMessage: 'Local photo file is unavailable.',
         );
       }
       sha256 = await contentSha256(file);
-      final upload = await _upload(baseUrl, file, clientFileId, sha256);
+      final upload = await _upload(baseUrl, file, resolvedClientFileId, sha256);
       jobId = upload.jobId;
       backendFileId = upload.backendFileId;
-      if (backendFileId == null) {
-        backendFileId = await _pollForFileId(baseUrl, jobId);
+      backendFileId ??= (await _pollUploadJob(baseUrl, jobId)).backendFileId;
+      // A2 compatibility: the public all-in-one result has historically
+      // represented every ObservationRecord-create failure with this type.
+      final _RecordResponse created;
+      try {
+        created = await _createRecord(baseUrl, backendFileId!, record);
+      } on TcBackendUploadException catch (error) {
+        return BackendUploadResult(
+          attempted: true,
+          success: false,
+          clientFileId: resolvedClientFileId,
+          contentSha256: sha256,
+          uploadJobId: jobId,
+          backendFileId: backendFileId,
+          errorType: BackendUploadErrorType.recordCreateFailed,
+          errorMessage: error.message,
+        );
       }
-      final created = await _createRecord(baseUrl, backendFileId, record);
       return BackendUploadResult(
         attempted: true,
         success: true,
-        clientFileId: clientFileId,
+        clientFileId: resolvedClientFileId,
         contentSha256: sha256,
         uploadJobId: jobId,
         backendFileId: backendFileId,
@@ -81,7 +176,7 @@ class TcBackendUploadService {
       return BackendUploadResult(
         attempted: true,
         success: false,
-        clientFileId: clientFileId,
+        clientFileId: resolvedClientFileId,
         contentSha256: sha256,
         uploadJobId: jobId,
         backendFileId: backendFileId,
@@ -92,7 +187,7 @@ class TcBackendUploadService {
       return BackendUploadResult(
         attempted: true,
         success: false,
-        clientFileId: clientFileId,
+        clientFileId: resolvedClientFileId,
         contentSha256: sha256,
         uploadJobId: jobId,
         backendFileId: backendFileId,
@@ -107,8 +202,9 @@ class TcBackendUploadService {
     final cached = _hashCache[file.path];
     if (cached != null &&
         cached.length == stat.size &&
-        cached.modified == stat.modified)
+        cached.modified == stat.modified) {
       return cached.value;
+    }
     final sink = _DigestSink();
     final converter = sha256.startChunkedConversion(sink);
     await for (final chunk in file.openRead()) {
@@ -157,36 +253,51 @@ class TcBackendUploadService {
     return _UploadResponse(jobId, _string(json['backend_file_id']));
   }
 
-  Future<String> _pollForFileId(String baseUrl, String jobId) async {
+  Future<UploadJobResult> _getUploadJobStatus(
+    String baseUrl,
+    String jobId,
+  ) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/api/common/upload/jobs/$jobId'),
+    );
+    final map = _responseMap(response, BackendUploadErrorType.jobFailed);
+    final raw = _string(map['status'])?.toUpperCase();
+    final status = switch (raw) {
+      'WAITING' => TcBackendUploadJobStatus.waiting,
+      'PROCESSING' => TcBackendUploadJobStatus.processing,
+      'COMPLETED' => TcBackendUploadJobStatus.completed,
+      'FAILED' => TcBackendUploadJobStatus.failed,
+      _ => throw const _UploadException(
+        BackendUploadErrorType.malformedResponse,
+        'Unknown upload job status.',
+      ),
+    };
+    final fileId = _string(map['backend_file_id'] ?? map['file_id']);
+    if (status == TcBackendUploadJobStatus.completed && fileId == null) {
+      throw const _UploadException(
+        BackendUploadErrorType.malformedResponse,
+        'Completed upload has no backend_file_id.',
+      );
+    }
+    return UploadJobResult(
+      uploadJobId: jobId,
+      status: status,
+      backendFileId: fileId,
+      errorMessage: _string(map['error_message']),
+    );
+  }
+
+  Future<UploadJobResult> _pollUploadJob(String baseUrl, String jobId) async {
     final started = DateTime.now();
     var interval = const Duration(seconds: 1);
     while (DateTime.now().difference(started) < maxPollDuration) {
       await _delay(interval);
-      final response = await _get(
-        Uri.parse('$baseUrl/api/common/upload/jobs/$jobId'),
-      );
-      final map = _responseMap(response, BackendUploadErrorType.jobFailed);
-      final status = _string(map['status'])?.toUpperCase();
-      if (status == 'COMPLETED') {
-        final id = _string(map['backend_file_id'] ?? map['file_id']);
-        if (id == null) {
-          throw const _UploadException(
-            BackendUploadErrorType.malformedResponse,
-            'Completed upload has no backend_file_id.',
-          );
-        }
-        return id;
-      }
-      if (status == 'FAILED') {
+      final result = await _getUploadJobStatus(baseUrl, jobId);
+      if (result.status == TcBackendUploadJobStatus.completed) return result;
+      if (result.status == TcBackendUploadJobStatus.failed) {
         throw _UploadException(
           BackendUploadErrorType.jobFailed,
-          _string(map['error_message']) ?? 'Upload job failed.',
-        );
-      }
-      if (status != 'WAITING' && status != 'PROCESSING') {
-        throw const _UploadException(
-          BackendUploadErrorType.malformedResponse,
-          'Unknown upload job status.',
+          result.errorMessage ?? 'Upload job failed.',
         );
       }
       interval = const Duration(seconds: 2);
@@ -248,17 +359,17 @@ class TcBackendUploadService {
       return http.Response.fromStream(response);
     } on TimeoutException {
       throw const _UploadException(
-        BackendUploadErrorType.unreachable,
+        BackendUploadErrorType.timeout,
         'TC-Backend request timed out.',
       );
     } on SocketException {
       throw const _UploadException(
-        BackendUploadErrorType.unreachable,
+        BackendUploadErrorType.network,
         'TC-Backend is unreachable.',
       );
     } on http.ClientException {
       throw const _UploadException(
-        BackendUploadErrorType.unreachable,
+        BackendUploadErrorType.network,
         'TC-Backend is unreachable.',
       );
     }
@@ -271,17 +382,17 @@ class TcBackendUploadService {
           .timeout(requestTimeout);
     } on TimeoutException {
       throw const _UploadException(
-        BackendUploadErrorType.unreachable,
+        BackendUploadErrorType.timeout,
         'TC-Backend request timed out.',
       );
     } on SocketException {
       throw const _UploadException(
-        BackendUploadErrorType.unreachable,
+        BackendUploadErrorType.network,
         'TC-Backend is unreachable.',
       );
     } on http.ClientException {
       throw const _UploadException(
-        BackendUploadErrorType.unreachable,
+        BackendUploadErrorType.network,
         'TC-Backend is unreachable.',
       );
     }
@@ -292,9 +403,18 @@ class TcBackendUploadService {
     BackendUploadErrorType errorType,
   ) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      // Unlisted 4xx are treated as non-retryable bad requests.
+      final type = switch (response.statusCode) {
+        400 => BackendUploadErrorType.http400,
+        409 => BackendUploadErrorType.http409,
+        422 => BackendUploadErrorType.http422,
+        >= 500 && <= 599 => BackendUploadErrorType.http5xx,
+        _ => BackendUploadErrorType.http400,
+      };
       throw _UploadException(
-        errorType,
+        type,
         'TC-Backend HTTP ${response.statusCode}.',
+        statusCode: response.statusCode,
       );
     }
     if (response.body.isEmpty) {
@@ -349,8 +469,11 @@ class _RecordResponse {
   final int? revision;
 }
 
-class _UploadException implements Exception {
-  const _UploadException(this.type, this.message);
+class TcBackendUploadException implements Exception {
+  const TcBackendUploadException(this.type, this.message, {this.statusCode});
   final BackendUploadErrorType type;
   final String message;
+  final int? statusCode;
 }
+
+typedef _UploadException = TcBackendUploadException;

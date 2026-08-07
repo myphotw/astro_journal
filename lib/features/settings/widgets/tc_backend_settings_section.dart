@@ -100,6 +100,15 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          if (!viewModel.isBackendSyncAvailable)
+            const Text(
+              'Backend가 비활성화되어 있습니다.',
+              key: Key('sync_backend_disabled'),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            )
+          else
+            _SyncStatusPanel(viewModel: viewModel),
           if (viewModel.result != null) ...[
             const SizedBox(height: 12),
             _ResultPanel(result: viewModel.result!),
@@ -128,6 +137,53 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
     await viewModel.testConnection(
       baseUrl: _controller.text,
       enabled: _enabled,
+    );
+  }
+}
+
+class _SyncStatusPanel extends StatelessWidget {
+  const _SyncStatusPanel({required this.viewModel});
+
+  final TcBackendViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = viewModel.syncCounts;
+    return Container(
+      key: const Key('sync_status_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('동기화', style: TextStyle(color: AppColors.textPrimary)),
+          const SizedBox(height: 6),
+          Text('대기중 ${counts.queued}건'),
+          Text('처리중 ${counts.processing}건'),
+          Text('실패 ${counts.failed}건'),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                key: const Key('sync_refresh'),
+                onPressed: viewModel.refreshSyncStatus,
+                icon: const Icon(Icons.refresh),
+                label: const Text('새로고침'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: const Key('sync_retry'),
+                onPressed: counts.failed > 0 ? viewModel.retryFailedSync : null,
+                child: const Text('동기화 재시도'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

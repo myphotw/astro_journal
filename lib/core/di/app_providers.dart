@@ -16,6 +16,8 @@ import '../../data/repositories/photo_repository.dart';
 import '../../data/repositories/photo_repository_impl.dart';
 import '../../data/repositories/shooting_record_repository.dart';
 import '../../data/repositories/shooting_record_repository_impl.dart';
+import '../../data/repositories/sync_outbox_repository.dart';
+import '../../data/repositories/sync_outbox_repository_impl.dart';
 import '../../features/catalog/viewmodel/catalog_view_model.dart';
 import '../../features/gallery/viewmodel/gallery_view_model.dart';
 import '../../features/gallery/viewmodel/plate_solve_view_model.dart';
@@ -64,6 +66,8 @@ import '../../services/weather_cache_service.dart';
 import '../../services/weather_service.dart';
 import '../../services/tc_backend_settings_service.dart';
 import '../../services/tc_backend_upload_service.dart';
+import '../../services/tc_backend_sync_coordinator.dart';
+import '../../services/tc_backend_startup_resume_service.dart';
 import '../navigation/app_navigation_notifier.dart';
 
 class AppProviders {
@@ -85,6 +89,17 @@ class AppProviders {
     final tcBackendUploadService = TcBackendUploadService(
       settingsService: tcBackendSettingsService,
     );
+    final syncOutboxRepository = SyncOutboxRepositoryImpl();
+    final syncCoordinator = TcBackendSyncCoordinator(
+      syncOutboxRepository,
+      shootingRecordRepository,
+      tcBackendSettingsService,
+      tcBackendUploadService,
+    );
+    final startupResumeService = TcBackendStartupResumeService(
+      tcBackendSettingsService,
+      syncCoordinator,
+    );
     final metadataService = MetadataService();
     final catalogSearchService = CatalogSearchService();
     final metadataPipeline = PhotoMetadataPipeline(
@@ -100,6 +115,8 @@ class AppProviders {
       catalogRepository: catalogRepository,
       metadataPipeline: metadataPipeline,
       tcBackendUploadService: tcBackendUploadService,
+      syncOutboxRepository: syncOutboxRepository,
+      syncCoordinator: syncCoordinator,
     );
     final backupService = BackupService();
     final astronomyService = AstronomyService(apiKeyService);
@@ -226,7 +243,11 @@ class AppProviders {
       ]),
     );
 
-    final tcBackendViewModel = TcBackendViewModel(tcBackendSettingsService);
+    final tcBackendViewModel = TcBackendViewModel(
+      tcBackendSettingsService,
+      syncOutboxRepository: syncOutboxRepository,
+      retryFailed: syncCoordinator.retryFailed,
+    );
 
     final equipmentViewModel = EquipmentViewModel(equipmentRepository);
 
@@ -258,6 +279,11 @@ class AppProviders {
       Provider<ApiKeyService>.value(value: apiKeyService),
       Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
       Provider<TcBackendUploadService>.value(value: tcBackendUploadService),
+      Provider<SyncOutboxRepository>.value(value: syncOutboxRepository),
+      Provider<TcBackendSyncCoordinator>.value(value: syncCoordinator),
+      Provider<TcBackendStartupResumeService>.value(
+        value: startupResumeService,
+      ),
       Provider<MetadataService>.value(value: metadataService),
       Provider<CatalogSearchService>.value(value: catalogSearchService),
       Provider<PhotoMetadataPipeline>.value(value: metadataPipeline),

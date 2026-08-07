@@ -19,10 +19,12 @@ import '../data/models/seestar_metadata.dart';
 
 import '../data/models/shooting_record.dart';
 import '../data/models/backend_upload_result.dart';
+import '../data/models/sync_outbox_item.dart';
 
 import '../data/repositories/catalog_repository.dart';
 
 import '../data/repositories/shooting_record_repository.dart';
+import '../data/repositories/sync_outbox_repository.dart';
 
 import 'api_key_service.dart';
 
@@ -40,6 +42,7 @@ import 'photo_metadata_pipeline.dart';
 
 import 'photo_service.dart';
 import 'tc_backend_upload_service.dart';
+import 'tc_backend_sync_coordinator.dart';
 
 /// 사진 등록 파이프라인 전체를 담당하는 서비스.
 
@@ -59,9 +62,13 @@ class PhotoRegistrationService {
 
     PhotoMetadataPipeline? metadataPipeline,
     TcBackendUploadService? tcBackendUploadService,
+    SyncOutboxRepository? syncOutboxRepository,
+    TcBackendSyncCoordinator? syncCoordinator,
   }) : _metadataPipeline =
            metadataPipeline ?? PhotoMetadataPipeline(exifService: exifService),
-       _tcBackendUploadService = tcBackendUploadService;
+       _tcBackendUploadService = tcBackendUploadService,
+       _syncOutboxRepository = syncOutboxRepository,
+       _syncCoordinator = syncCoordinator;
 
   final PhotoService photoService;
 
@@ -77,6 +84,8 @@ class PhotoRegistrationService {
 
   final PhotoMetadataPipeline _metadataPipeline;
   final TcBackendUploadService? _tcBackendUploadService;
+  final SyncOutboxRepository? _syncOutboxRepository;
+  final TcBackendSyncCoordinator? _syncCoordinator;
   BackendUploadResult? _lastBackendUploadResult;
 
   /// A2 runtime-only result. A durable sync state is deferred to A3.
@@ -332,13 +341,15 @@ class PhotoRegistrationService {
       capturedDate: dateStr,
     );
     AppLogger.metadata('PhotoRegistration', 'Catalog captured 갱신 완료');
-    final uploadService = _tcBackendUploadService;
-    if (uploadService != null) {
-      unawaited(
-        uploadService.uploadRecord(record).then((result) {
-          _lastBackendUploadResult = result;
-        }),
-      );
+    final outbox = _syncOutboxRepository;
+    if (outbox != null && record.photoUri != null && record.photoUri!.isNotEmpty) {
+      final item = SyncOutboxItem(operationId: _uuid.v4(), localRecordId: record.id, clientFileId: _uuid.v4(), clientRecordId: _uuid.v4(), payload: {'local_path': record.photoUri, 'catalog_object_id': record.celestialObjectId, 'captured_at': record.capturedAt.toUtc().toIso8601String(), 'latitude': record.exif?.lat, 'longitude': record.exif?.lng, 'location_name': record.location ?? record.exif?.locationName, 'memo': record.memo, 'favorite': record.isFavorite, 'representative': record.isRepresentative});
+      await outbox.create(item);
+      final coordinator = _syncCoordinator;
+      if (coordinator != null) unawaited(coordinator.drain());
+    } else {
+      final uploadService = _tcBackendUploadService;
+      if (uploadService != null) unawaited(uploadService.uploadRecord(record).then((result) => _lastBackendUploadResult = result));
     }
     return record;
   }

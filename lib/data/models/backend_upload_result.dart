@@ -45,4 +45,26 @@ enum BackendUploadErrorType {
   jobTimeout,
   recordCreateFailed,
   malformedResponse,
+  http400,
+  http409,
+  http422,
+  http5xx,
+  timeout,
+  incompatible,
+  network,
 }
+
+extension BackendUploadErrorRetryPolicy on BackendUploadErrorType {
+  bool get isRetryable => switch (this) {
+    BackendUploadErrorType.network ||
+    BackendUploadErrorType.timeout ||
+    BackendUploadErrorType.http5xx ||
+    BackendUploadErrorType.jobFailed => true,
+    _ => false,
+  };
+}
+
+class UploadStartResult { const UploadStartResult({required this.uploadJobId,this.backendFileId,this.idempotentReplay=false}); final String uploadJobId; final String? backendFileId; final bool idempotentReplay; }
+enum TcBackendUploadJobStatus { waiting, processing, completed, failed }
+class UploadJobResult { const UploadJobResult({required this.uploadJobId,required this.status,this.backendFileId,this.errorMessage}); final String uploadJobId; final TcBackendUploadJobStatus status; final String? backendFileId; final String? errorMessage; }
+class ObservationRecordResult { const ObservationRecordResult({required this.backendRecordId,this.revision}); final String backendRecordId; final int? revision; }
