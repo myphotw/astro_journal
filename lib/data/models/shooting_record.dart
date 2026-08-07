@@ -24,6 +24,8 @@ class ShootingRecord {
     this.plateSolve,
     this.detectMethod,
     this.analysisStatus = AnalysisStatus.completed,
+    this.backendRecordId,
+    this.backendRevision,
     this.backendFileId,
     this.thumbnailUrl,
     this.previewUrl,
@@ -69,6 +71,8 @@ class ShootingRecord {
   /// Remote Gallery fields are transient projection data and are not written
   /// into the V1 shooting_records table.
   final String? backendFileId;
+  final String? backendRecordId;
+  final int? backendRevision;
   final String? thumbnailUrl;
   final String? previewUrl;
   final String? originalUrl;
@@ -166,6 +170,8 @@ class ShootingRecord {
     bool clearPlateSolve = false,
     DetectMethod? detectMethod,
     AnalysisStatus? analysisStatus,
+    String? backendRecordId,
+    int? backendRevision,
     String? backendFileId,
     String? thumbnailUrl,
     String? previewUrl,
@@ -190,6 +196,8 @@ class ShootingRecord {
           clearPlateSolve ? null : (plateSolve ?? this.plateSolve),
       detectMethod: detectMethod ?? this.detectMethod,
       analysisStatus: analysisStatus ?? this.analysisStatus,
+      backendRecordId: backendRecordId ?? this.backendRecordId,
+      backendRevision: backendRevision ?? this.backendRevision,
       backendFileId: backendFileId ?? this.backendFileId,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       previewUrl: previewUrl ?? this.previewUrl,

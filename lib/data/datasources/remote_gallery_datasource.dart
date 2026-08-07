@@ -18,10 +18,7 @@ class RemoteGalleryException implements Exception {
 
 abstract class GalleryRemoteDataSource {
   Future<List<GalleryItem>> getGallery({Map<String, String>? query});
-  Future<GalleryItem> getDetail(String fileId);
-  Future<List<GalleryItem>> search(String query);
-  Future<Map<String, dynamic>> getTimeline({Map<String, String>? query});
-  Future<Map<String, dynamic>> getStatistics({Map<String, String>? query});
+  Future<GalleryItem> getDetail(String recordId);
 }
 
 class RemoteGalleryDataSource implements GalleryRemoteDataSource {
@@ -37,34 +34,15 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
 
   @override
   Future<List<GalleryItem>> getGallery({Map<String, String>? query}) async =>
-      _items(await _get('/api/common/gallery', query: query));
+      _items(await _get('/api/astro/gallery', query: query));
 
   @override
-  Future<GalleryItem> getDetail(String fileId) async {
+  Future<GalleryItem> getDetail(String recordId) async {
     final json = _object(
-      await _get('/api/common/gallery/${Uri.encodeComponent(fileId)}'),
+      await _get('/api/astro/gallery/${Uri.encodeComponent(recordId)}'),
     );
     return _item(json);
   }
-
-  @override
-  Future<List<GalleryItem>> search(String query) async => _items(
-    await _get('/api/common/gallery/search', query: {'q': query}),
-  );
-
-  @override
-  Future<Map<String, dynamic>> getTimeline({
-    Map<String, String>? query,
-  }) async => _object(
-    await _get('/api/common/gallery/timeline', query: query),
-  );
-
-  @override
-  Future<Map<String, dynamic>> getStatistics({
-    Map<String, String>? query,
-  }) async => _object(
-    await _get('/api/common/gallery/statistics', query: query),
-  );
 
   Future<dynamic> _get(String path, {Map<String, String>? query}) async {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
@@ -128,7 +106,7 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
 
   GalleryItem _item(Map<String, dynamic> json) {
     try {
-      return GalleryItem.fromJson(json, baseUrl: baseUrl);
+      return GalleryItem.fromJson(json);
     } on FormatException {
       throw const RemoteGalleryException('Gallery item is malformed.');
     }

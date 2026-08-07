@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/catalog_sort_order.dart';
+import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/gallery_object_category.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/shooting_record.dart';
@@ -359,6 +360,12 @@ class GalleryViewModel extends ChangeNotifier {
       final catalogObjects = await _catalogRepository.getAll(listOnly: true);
 
       _catalogMap = {for (final object in catalogObjects) object.id: object};
+      for (final record in records) {
+        if (record.backendRecordId != null &&
+            !_catalogMap.containsKey(record.celestialObjectId)) {
+          _catalogMap[record.celestialObjectId] = _remoteCatalogObject(record);
+        }
+      }
       _allRecords = records;
       _invalidatePipelineCache();
       _hasLoaded = true;
@@ -371,6 +378,42 @@ class GalleryViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<ShootingRecord> loadDetailRecord(ShootingRecord record) async {
+    try {
+      final detailed = await _shootingRecordRepository.getById(record.id);
+      if (detailed == null) return record;
+      _replaceRecord(detailed);
+      return detailed;
+    } catch (_) {
+      return record;
+    }
+  }
+
+  CatalogObject _remoteCatalogObject(ShootingRecord record) {
+    final id = record.celestialObjectId;
+    final upper = id.toUpperCase();
+    final type = upper.startsWith('M') && !upper.startsWith('MW')
+        ? CatalogType.messier
+        : upper.startsWith('IC')
+        ? CatalogType.ic
+        : upper.startsWith('SH2')
+        ? CatalogType.sh2
+        : CatalogType.ngc;
+    final number = int.tryParse(RegExp(r'\d+').firstMatch(id)?.group(0) ?? '') ??
+        0;
+    return CatalogObject(
+      id: id,
+      number: number,
+      catalog: type,
+      name: record.remoteTargetName ?? record.originalFilename ?? id,
+      type: 'Remote',
+      constellation: '-',
+      ra: '-',
+      dec: '-',
+      magnitude: '-',
+    );
   }
 
   void setSortOrder(GallerySortOrder order) {

@@ -1,4 +1,5 @@
 import '../../services/catalog_search_service.dart';
+import '../datasources/gallery_record_link_datasource.dart';
 import '../models/catalog_object.dart';
 import '../models/gallery_item.dart';
 import '../models/gallery_observation_projection.dart';
@@ -14,35 +15,30 @@ class GalleryObservationProjectionMapper {
 
   GalleryObservationProjection toProjection(
     GalleryItem item, {
-    required DateTime fallbackTime,
-  }) => GalleryObservationProjection.fromGalleryItem(
-    item,
-    fallbackTime: fallbackTime,
-  );
-
-  String? resolveCatalogObjectId(
-    GalleryObservationProjection projection,
-    List<CatalogObject> catalog,
-  ) {
-    final directId = projection.catalogObjectId?.trim();
-    if (directId != null && directId.isNotEmpty) {
-      for (final object in catalog) {
-        if (object.id.toLowerCase() == directId.toLowerCase()) {
-          return object.id;
-        }
+    required List<CatalogObject> catalog,
+  }) {
+    CatalogObject? resolved;
+    for (final object in catalog) {
+      if (object.id.toLowerCase() == item.catalogObjectId.toLowerCase()) {
+        resolved = object;
+        break;
       }
     }
-    return _catalogSearchService
-        .resolveTarget(projection.targetName ?? directId, catalog)
-        ?.id;
+    resolved ??= _catalogSearchService.resolveTarget(
+      item.catalogObjectId,
+      catalog,
+    );
+    return GalleryObservationProjection.fromGalleryItem(
+      item,
+      resolvedTargetName: resolved?.displayCommonName,
+    );
   }
 }
 
-/// Read adapter for the existing GalleryViewModel contract.
-///
-/// Mutations remain local-only until Astro ObservationRecord mutation APIs are
-/// available. Remote-only rows are therefore safe no-ops for repository writes;
-/// GalleryViewModel still reflects the change for the current UI session.
+/// Adapts canonical Astro Gallery records to the V1 GalleryViewModel contract.
+/// Local and remote records are merged only through the durable
+/// backend_record_id -> local_record_id outbox link. Filename/date guessing is
+/// intentionally not used.
 class GalleryShootingRecordRepositoryAdapter
     implements ShootingRecordRepository {
   factory GalleryShootingRecordRepositoryAdapter({
@@ -50,13 +46,14 @@ class GalleryShootingRecordRepositoryAdapter
     required ShootingRecordRepository localRepository,
     required CatalogRepository catalogRepository,
     required GalleryObservationProjectionMapper projectionMapper,
-    DateTime Function()? now,
+    GalleryRecordLinkDataSource linkDataSource =
+        const EmptyGalleryRecordLinkDataSource(),
   }) => GalleryShootingRecordRepositoryAdapter._(
     galleryRepository,
     localRepository,
     catalogRepository,
     projectionMapper,
-    now ?? DateTime.now,
+    linkDataSource,
   );
 
   GalleryShootingRecordRepositoryAdapter._(
@@ -64,14 +61,14 @@ class GalleryShootingRecordRepositoryAdapter
     this._localRepository,
     this._catalogRepository,
     this._projectionMapper,
-    this._now,
+    this._linkDataSource,
   );
 
   final GalleryRepository _galleryRepository;
   final ShootingRecordRepository _localRepository;
   final CatalogRepository _catalogRepository;
   final GalleryObservationProjectionMapper _projectionMapper;
-  final DateTime Function() _now;
+  final GalleryRecordLinkDataSource _linkDataSource;
   Map<String, ShootingRecord> _lastRemoteRecords = const {};
 
   @override
@@ -86,31 +83,30 @@ class GalleryShootingRecordRepositoryAdapter
     }
 
     final catalog = await _catalogRepository.getAll(listOnly: true);
+    final links = await _linkDataSource.localIdsByBackendRecordId();
     final localById = {for (final record in local) record.id: record};
-    final localByFilename = {
-      for (final record in local)
-        if (record.originalFilename?.isNotEmpty == true)
-          record.originalFilename!: record,
-    };
+    final matchedLocalIds = <String>{};
     final projected = <ShootingRecord>[];
+
     for (final item in snapshot.items) {
-      final projection = _projectionMapper.toProjection(
-        item,
-        fallbackTime: _now(),
-      );
-      final localRecord = localById[projection.localRecordId] ??
-          localByFilename[projection.originalFilename];
+      final linkedLocalId = links[item.backendRecordId];
+      final localRecord = linkedLocalId == null ? null : localById[linkedLocalId];
+      if (localRecord != null) matchedLocalIds.add(localRecord.id);
       projected.add(
-        projection.toShootingRecord(
-          localRecord: localRecord,
-          resolvedCatalogObjectId: _projectionMapper.resolveCatalogObjectId(
-            projection,
-            catalog,
-          ),
-        ),
+        _projectionMapper
+            .toProjection(item, catalog: catalog)
+            .toShootingRecord(localRecord: localRecord),
       );
     }
-    _lastRemoteRecords = {for (final record in projected) record.id: record};
+
+    // Pending/V1 local-only records remain visible next to canonical remote rows.
+    projected.addAll(
+      local.where((record) => !matchedLocalIds.contains(record.id)),
+    );
+    _lastRemoteRecords = {
+      for (final record in projected)
+        if (record.backendRecordId != null) record.id: record,
+    };
     return projected;
   }
 
@@ -118,8 +114,24 @@ class GalleryShootingRecordRepositoryAdapter
       id.startsWith('remote:') && _lastRemoteRecords.containsKey(id);
 
   @override
-  Future<ShootingRecord?> getById(String id) async =>
-      _lastRemoteRecords[id] ?? _localRepository.getById(id);
+  Future<ShootingRecord?> getById(String id) async {
+    final current = _lastRemoteRecords[id];
+    final backendRecordId = current?.backendRecordId;
+    if (current != null && backendRecordId != null) {
+      final item = await _galleryRepository.getById(backendRecordId);
+      if (item == null) return current;
+      final catalog = await _catalogRepository.getAll(listOnly: true);
+      final localRecord = _isRemoteOnly(id)
+          ? null
+          : await _localRepository.getById(id);
+      final detailed = _projectionMapper
+          .toProjection(item, catalog: catalog)
+          .toShootingRecord(localRecord: localRecord);
+      _lastRemoteRecords = {..._lastRemoteRecords, detailed.id: detailed};
+      return detailed;
+    }
+    return _localRepository.getById(id);
+  }
 
   @override
   Future<List<ShootingRecord>> getByCelestialObjectId(String id) async =>

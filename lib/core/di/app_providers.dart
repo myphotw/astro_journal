@@ -7,6 +7,7 @@ import '../../data/repositories/bortle_repository_impl.dart';
 import '../../data/repositories/equipment_repository.dart';
 import '../../data/repositories/equipment_repository_impl.dart';
 import '../../data/datasources/gallery_cache_local_datasource.dart';
+import '../../data/datasources/gallery_record_link_datasource.dart';
 import '../../data/repositories/gallery_repository.dart';
 import '../../data/repositories/gallery_shooting_record_repository_adapter.dart';
 import '../../data/repositories/hybrid_gallery_repository.dart';
@@ -118,6 +119,7 @@ class AppProviders {
           projectionMapper: GalleryObservationProjectionMapper(
             catalogSearchService,
           ),
+          linkDataSource: SyncOutboxGalleryRecordLinkDataSource(),
         );
     final metadataPipeline = PhotoMetadataPipeline(
       metadataService: metadataService,

@@ -40,8 +40,19 @@ class GalleryDetailScreen extends StatefulWidget {
     required List<ShootingRecord> records,
     required ShootingRecord record,
   }) async {
-    final photoRecords = GalleryDetailViewModel.photoRecordsFrom(records);
-    final index = GalleryDetailViewModel.indexOfRecord(photoRecords, record);
+    final galleryViewModel = context.read<GalleryViewModel>();
+    final detailedRecord = await galleryViewModel.loadDetailRecord(record);
+    if (!context.mounted) return;
+    final hydratedRecords = records
+        .map((item) => item.id == record.id ? detailedRecord : item)
+        .toList(growable: false);
+    final photoRecords = GalleryDetailViewModel.photoRecordsFrom(
+      hydratedRecords,
+    );
+    final index = GalleryDetailViewModel.indexOfRecord(
+      photoRecords,
+      detailedRecord,
+    );
     if (index < 0) return;
     final overlayService = context.read<PhotoOverlayService>();
 

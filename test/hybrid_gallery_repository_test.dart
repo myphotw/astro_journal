@@ -39,11 +39,11 @@ void main() {
     expect(result.single.backendFileId, 'remote');
     expect(result.single.syncedAt, now);
     expect(remote.galleryCalls, 1);
-    expect(cache.entries['gallery:list'], isNotNull);
+    expect(cache.entries['astro:gallery:list'], isNotNull);
   });
 
   test('fresh cache is returned without backend call', () async {
-    cache.putItems('gallery:list', [_item('cached')], now);
+    cache.putItems('astro:gallery:list', [_item('cached')], now);
 
     final result = await repository().getAll();
 
@@ -53,7 +53,7 @@ void main() {
 
   test('backend failure falls back to expired SQLite cache', () async {
     cache.putItems(
-      'gallery:list',
+      'astro:gallery:list',
       [_item('fallback')],
       now.subtract(const Duration(hours: 2)),
     );
@@ -73,7 +73,7 @@ void main() {
       ),
     );
     cache.putItems(
-      'gallery:list',
+      'astro:gallery:list',
       [_item('offline')],
       now.subtract(const Duration(days: 5)),
     );
@@ -86,7 +86,7 @@ void main() {
 
   test('expired cache refreshes from backend', () async {
     cache.putItems(
-      'gallery:list',
+      'astro:gallery:list',
       [_item('expired')],
       now.subtract(const Duration(minutes: 31)),
     );
@@ -97,11 +97,34 @@ void main() {
     expect(remote.galleryCalls, 1);
     expect(result.single.backendFileId, 'fresh');
   });
+
+  test('legacy Common Gallery cache key is not reused', () async {
+    await settings.save(
+      const TcBackendSettings(
+        baseUrl: 'https://backend.test',
+        enabled: false,
+      ),
+    );
+    cache.putItems('gallery:list', [_item('legacy')], now);
+
+    final result = await repository().getAll();
+
+    expect(result, isEmpty);
+    expect(remote.galleryCalls, 0);
+  });
 }
 
 GalleryItem _item(String id) => GalleryItem(
+  backendRecordId: 'record-$id',
+  revision: 1,
+  catalogObjectId: 'M42',
+  capturedAt: DateTime.utc(2026, 8, 7),
+  favorite: false,
+  representative: false,
   backendFileId: id,
   thumbnailUrl: 'https://backend.test/thumbnail/$id',
+  previewUrl: 'https://backend.test/preview/$id',
+  originalUrl: 'https://backend.test/original/$id',
 );
 
 class _FakeCache implements GalleryCacheDataSource {
@@ -139,16 +162,4 @@ class _FakeRemote implements GalleryRemoteDataSource {
   @override
   Future<GalleryItem> getDetail(String fileId) async => _item(fileId);
 
-  @override
-  Future<Map<String, dynamic>> getStatistics({
-    Map<String, String>? query,
-  }) async => const {};
-
-  @override
-  Future<Map<String, dynamic>> getTimeline({
-    Map<String, String>? query,
-  }) async => const {};
-
-  @override
-  Future<List<GalleryItem>> search(String query) async => items;
 }

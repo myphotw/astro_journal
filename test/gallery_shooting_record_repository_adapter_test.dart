@@ -1,19 +1,20 @@
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/data/datasources/gallery_record_link_datasource.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
+import 'package:astro_journal/data/models/exif_info.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
-import 'package:astro_journal/data/models/gallery_observation_projection.dart';
-import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_shooting_record_repository_adapter.dart';
+import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/shooting_record_repository.dart';
 import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final now = DateTime.utc(2026, 8, 7, 12);
+  final capturedAt = DateTime.utc(2026, 8, 7, 1, 2, 3);
   const catalog = [
     CatalogObject(
       id: 'M42',
@@ -39,109 +40,163 @@ void main() {
     ),
   ];
 
-  GalleryShootingRecordRepositoryAdapter adapter({
+  _Harness harness({
     required GallerySnapshot snapshot,
     List<ShootingRecord> local = const [],
-  }) => GalleryShootingRecordRepositoryAdapter(
-    galleryRepository: _FakeGalleryRepository(snapshot),
-    localRepository: _FakeLocalRepository(local),
-    catalogRepository: _FakeCatalogRepository(catalog),
-    projectionMapper: GalleryObservationProjectionMapper(
-      CatalogSearchService(),
-    ),
-    now: () => now,
-  );
-
-  test('GalleryItem converts to ObservationProjection fields', () {
-    final projection = GalleryObservationProjection.fromGalleryItem(
-      GalleryItem(
-        backendFileId: 'sha-1',
-        thumbnailUrl: 'https://backend/thumb',
-        previewUrl: 'https://backend/preview',
-        originalUrl: 'https://backend/original',
-        capturedAt: now,
-        favorite: true,
-        location: 'Jeju',
-        targetName: 'M42',
-        catalogObjectId: 'M42',
-        syncState: 'SYNCED',
+    Map<String, String> links = const {},
+    List<CatalogObject> catalogObjects = catalog,
+    GalleryItem? detail,
+  }) {
+    final gallery = _FakeGalleryRepository(snapshot, detail: detail);
+    final localRepository = _FakeLocalRepository(local);
+    final catalogRepository = _FakeCatalogRepository(catalogObjects);
+    return _Harness(
+      gallery,
+      GalleryShootingRecordRepositoryAdapter(
+        galleryRepository: gallery,
+        localRepository: localRepository,
+        catalogRepository: catalogRepository,
+        projectionMapper: GalleryObservationProjectionMapper(
+          CatalogSearchService(),
+        ),
+        linkDataSource: _FakeLinks(links),
       ),
-      fallbackTime: now.subtract(const Duration(days: 1)),
+      catalogRepository,
+    );
+  }
+
+  test('record_id revision and catalog_object_id form projection identity', () {
+    final projection = GalleryObservationProjectionMapper(
+      CatalogSearchService(),
+    ).toProjection(
+      _item('record-1', 'sha-1', 'M42', capturedAt),
+      catalog: catalog,
     );
 
-    expect(projection.backendFileId, 'sha-1');
-    expect(projection.thumbnailUrl, 'https://backend/thumb');
-    expect(projection.previewUrl, 'https://backend/preview');
-    expect(projection.originalUrl, 'https://backend/original');
-    expect(projection.captureDatetime, now);
-    expect(projection.favorite, isTrue);
-    expect(projection.location, 'Jeju');
-    expect(projection.targetName, 'M42');
-    expect(projection.syncState, 'SYNCED');
+    expect(projection.backendRecordId, 'record-1');
+    expect(projection.revision, 7);
+    expect(projection.catalogObjectId, 'M42');
+    expect(projection.targetName, contains('Orion'));
+    expect(projection.thumbnailUrl, '/thumbnail/sha-1');
+    expect(projection.previewUrl, '/preview/sha-1');
+    expect(projection.originalUrl, '/original/sha-1');
   });
 
-  test('backend ON remote snapshot is projected for Gallery UI', () async {
-    final records = await adapter(
-      snapshot: GallerySnapshot(
-        items: [_remoteItem('remote-1', target: 'M42', capturedAt: now)],
-        source: GallerySnapshotSource.remote,
-        backendEnabled: true,
-      ),
-    ).getAll();
+  test('unmatched catalog item is retained with canonical fallback name', () async {
+    final item = _item('record-x', 'sha-x', 'CUSTOM-1', capturedAt);
+    final result = harness(
+      snapshot: _remoteSnapshot([item]),
+      catalogObjects: const [],
+    );
+    final records = await result.adapter.getAll();
 
-    final record = records.single;
-    expect(record.id, 'remote:remote-1');
-    expect(record.backendFileId, 'remote-1');
-    expect(record.celestialObjectId, 'M42');
-    expect(record.galleryThumbnailUri, contains('/thumbnail/remote-1'));
-    expect(record.galleryPreviewUri, contains('/preview/remote-1'));
-    expect(record.isRemoteAsset, isTrue);
+    expect(records.single.backendRecordId, 'record-x');
+    expect(records.single.celestialObjectId, 'CUSTOM-1');
+    expect(records.single.remoteTargetName, 'CUSTOM-1');
+
+    final viewModel = GalleryViewModel(
+      result.adapter,
+      result.catalog,
+      CatalogSearchService(),
+    );
+    await viewModel.load();
+    expect(viewModel.filteredRecords, hasLength(1));
+    expect(viewModel.targetGroups, hasLength(1));
   });
 
-  test('backend OFF without cache falls back to SQLite records', () async {
-    final local = _localRecord('local-1', 'M42', now);
-    final records = await adapter(
-      snapshot: const GallerySnapshot(
-        items: [],
-        source: GallerySnapshotSource.none,
-        backendEnabled: false,
+  test('exact outbox record link merges canonical and local fields', () async {
+    final local = _local(
+      'local-1',
+      'M42',
+      capturedAt,
+      filename: 'same.fit',
+    ).copyWith(
+      exif: ExifInfo.placeholder(filename: 'same.fit').copyWith(
+        locationName: 'Old local site',
+        lat: 1,
+        lng: 2,
       ),
+    );
+    final remote = _item(
+      'record-1',
+      'sha-1',
+      'M42',
+      capturedAt.add(const Duration(hours: 1)),
+      filename: 'same.fit',
+      favorite: true,
+      representative: true,
+      memo: 'server memo',
+    );
+    final result = await harness(
+      snapshot: _remoteSnapshot([remote]),
       local: [local],
-    ).getAll();
+      links: const {'record-1': 'local-1'},
+    ).adapter.getAll();
 
-    expect(records.single, same(local));
+    final record = result.single;
+    expect(record.id, 'local-1');
+    expect(record.backendRecordId, 'record-1');
+    expect(record.backendRevision, 7);
+    expect(record.photoUri, '/local/local-1.jpg');
+    expect(record.memo, 'server memo');
+    expect(record.isFavorite, isTrue);
+    expect(record.isRepresentative, isTrue);
+    expect(record.capturedAt, remote.capturedAt);
+    expect(record.location, 'Jeju');
+    expect(record.exif?.locationName, 'Jeju');
   });
 
-  test('backend OFF uses gallery cache before SQLite records', () async {
-    final records = await adapter(
+  test('same filename is not used as canonical remote merge evidence', () async {
+    final local = _local('local-1', 'M42', capturedAt, filename: 'same.fit');
+    final remote = _item(
+      'record-1',
+      'sha-1',
+      'M42',
+      capturedAt,
+      filename: 'same.fit',
+    );
+    final result = await harness(
+      snapshot: _remoteSnapshot([remote]),
+      local: [local],
+    ).adapter.getAll();
+
+    expect(result, hasLength(2));
+    expect(result.any((record) => record.id == 'remote:record-1'), isTrue);
+    expect(result.any((record) => record.id == 'local-1'), isTrue);
+  });
+
+  test('Backend OFF cache precedes local SQLite fallback', () async {
+    final result = await harness(
       snapshot: GallerySnapshot(
-        items: [_remoteItem('cached', target: 'M42', capturedAt: now)],
+        items: [_item('cached', 'sha-c', 'M42', capturedAt)],
         source: GallerySnapshotSource.cache,
         backendEnabled: false,
       ),
-      local: [_localRecord('local', 'M13', now)],
-    ).getAll();
+      local: [_local('local', 'M13', capturedAt)],
+    ).adapter.getAll();
 
-    expect(records.single.backendFileId, 'cached');
+    expect(result.first.backendRecordId, 'cached');
+    expect(result.last.id, 'local');
   });
 
-  test('remote error uses cached projection when cache exists', () async {
-    final records = await adapter(
+  test('remote failure uses cache before local-only records', () async {
+    final result = await harness(
       snapshot: GallerySnapshot(
-        items: [_remoteItem('stale', target: 'M42', capturedAt: now)],
+        items: [_item('stale', 'sha-s', 'M42', capturedAt)],
         source: GallerySnapshotSource.cache,
         backendEnabled: true,
         remoteFailed: true,
       ),
-      local: [_localRecord('local', 'M13', now)],
-    ).getAll();
+      local: [_local('local', 'M13', capturedAt)],
+    ).adapter.getAll();
 
-    expect(records.single.backendFileId, 'stale');
+    expect(result.first.backendRecordId, 'stale');
+    expect(result.last.id, 'local');
   });
 
-  test('remote error without cache falls back to SQLite records', () async {
-    final local = _localRecord('local', 'M13', now);
-    final records = await adapter(
+  test('no cache falls back to existing SQLite Gallery records', () async {
+    final local = _local('local', 'M13', capturedAt);
+    final result = await harness(
       snapshot: const GallerySnapshot(
         items: [],
         source: GallerySnapshotSource.none,
@@ -149,83 +204,125 @@ void main() {
         remoteFailed: true,
       ),
       local: [local],
-    ).getAll();
+    ).adapter.getAll();
 
-    expect(records.single, same(local));
+    expect(result.single, same(local));
   });
 
-  test('GalleryViewModel search favorite and date sorting regressions', () async {
-    final repository = adapter(
-      snapshot: GallerySnapshot(
-        items: [
-          _remoteItem(
-            'newest',
-            target: 'M42',
-            capturedAt: now,
-            favorite: true,
-          ),
-          _remoteItem(
-            'oldest',
-            target: 'M13',
-            capturedAt: now.subtract(const Duration(days: 1)),
-          ),
-        ],
-        source: GallerySnapshotSource.remote,
-        backendEnabled: true,
-      ),
+  test('remote detail is requested using record_id', () async {
+    final listItem = _item('record-1', 'sha-1', 'M42', capturedAt);
+    final detail = _item(
+      'record-1',
+      'sha-1',
+      'M42',
+      capturedAt,
+      memo: 'detail memo',
+    );
+    final result = harness(
+      snapshot: _remoteSnapshot([listItem]),
+      detail: detail,
+    );
+    final listRecord = (await result.adapter.getAll()).first;
+
+    final detailed = await result.adapter.getById(listRecord.id);
+
+    expect(result.gallery.detailIds, ['record-1']);
+    expect(detailed?.memo, 'detail memo');
+  });
+
+  test('Gallery search favorite and date sorting remain unchanged', () async {
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item(
+          'newest',
+          'sha-new',
+          'M42',
+          capturedAt,
+          favorite: true,
+        ),
+        _item(
+          'oldest',
+          'sha-old',
+          'M13',
+          capturedAt.subtract(const Duration(days: 1)),
+        ),
+      ]),
     );
     final viewModel = GalleryViewModel(
-      repository,
-      _FakeCatalogRepository(catalog),
+      result.adapter,
+      result.catalog,
       CatalogSearchService(),
     );
 
     await viewModel.load();
-    expect(viewModel.filteredRecords.first.backendFileId, 'newest');
-
     viewModel.setSearchQuery('M13');
-    expect(viewModel.filteredRecords.single.backendFileId, 'oldest');
-
+    expect(viewModel.filteredRecords.single.backendRecordId, 'oldest');
     viewModel.clearFilters();
     viewModel.toggleFavoritesOnly();
-    expect(viewModel.filteredRecords.single.backendFileId, 'newest');
-
+    expect(viewModel.filteredRecords.single.backendRecordId, 'newest');
     viewModel.clearFilters();
     viewModel.setSortOrder(GallerySortOrder.oldestFirst);
-    expect(viewModel.filteredRecords.first.backendFileId, 'oldest');
+    expect(viewModel.filteredRecords.first.backendRecordId, 'oldest');
   });
 }
 
-GalleryItem _remoteItem(
-  String id, {
-  required String target,
-  required DateTime capturedAt,
-  bool favorite = false,
-}) => GalleryItem(
-  backendFileId: id,
-  thumbnailUrl: 'https://backend/thumbnail/$id',
-  previewUrl: 'https://backend/preview/$id',
-  originalUrl: 'https://backend/original/$id',
-  capturedAt: capturedAt,
-  favorite: favorite,
-  location: 'Jeju',
-  targetName: target,
-  catalogObjectId: target,
-  syncState: 'SYNCED',
+GallerySnapshot _remoteSnapshot(List<GalleryItem> items) => GallerySnapshot(
+  items: items,
+  source: GallerySnapshotSource.remote,
+  backendEnabled: true,
 );
 
-ShootingRecord _localRecord(String id, String target, DateTime capturedAt) =>
-    ShootingRecord(
-      id: id,
-      celestialObjectId: target,
-      capturedAt: capturedAt,
-      photoUri: '/local/$id.jpg',
-      createdAt: capturedAt,
-    );
+GalleryItem _item(
+  String recordId,
+  String fileId,
+  String catalogId,
+  DateTime capturedAt, {
+  String? filename,
+  bool favorite = false,
+  bool representative = false,
+  String memo = '',
+}) => GalleryItem(
+  backendRecordId: recordId,
+  revision: 7,
+  catalogObjectId: catalogId,
+  capturedAt: capturedAt,
+  favorite: favorite,
+  representative: representative,
+  backendFileId: fileId,
+  thumbnailUrl: '/thumbnail/$fileId',
+  previewUrl: '/preview/$fileId',
+  originalUrl: '/original/$fileId',
+  originalFilename: filename,
+  location: 'Jeju',
+  memo: memo,
+);
+
+ShootingRecord _local(
+  String id,
+  String catalogId,
+  DateTime capturedAt, {
+  String? filename,
+}) => ShootingRecord(
+  id: id,
+  celestialObjectId: catalogId,
+  capturedAt: capturedAt,
+  photoUri: '/local/$id.jpg',
+  originalFilename: filename,
+  createdAt: capturedAt,
+);
+
+class _Harness {
+  const _Harness(this.gallery, this.adapter, this.catalog);
+  final _FakeGalleryRepository gallery;
+  final GalleryShootingRecordRepositoryAdapter adapter;
+  final _FakeCatalogRepository catalog;
+}
 
 class _FakeGalleryRepository implements GalleryRepository {
-  _FakeGalleryRepository(this.snapshot);
+  _FakeGalleryRepository(this.snapshot, {this.detail});
   final GallerySnapshot snapshot;
+  final GalleryItem? detail;
+  final List<String> detailIds = [];
 
   @override
   Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async =>
@@ -236,7 +333,24 @@ class _FakeGalleryRepository implements GalleryRepository {
       snapshot.items;
 
   @override
+  Future<GalleryItem?> getById(
+    String backendRecordId, {
+    bool forceRefresh = false,
+  }) async {
+    detailIds.add(backendRecordId);
+    return detail;
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeLinks implements GalleryRecordLinkDataSource {
+  const _FakeLinks(this.links);
+  final Map<String, String> links;
+
+  @override
+  Future<Map<String, String>> localIdsByBackendRecordId() async => links;
 }
 
 class _FakeLocalRepository implements ShootingRecordRepository {
@@ -245,6 +359,14 @@ class _FakeLocalRepository implements ShootingRecordRepository {
 
   @override
   Future<List<ShootingRecord>> getAll() async => records;
+
+  @override
+  Future<ShootingRecord?> getById(String id) async {
+    for (final record in records) {
+      if (record.id == id) return record;
+    }
+    return null;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -258,8 +380,12 @@ class _FakeCatalogRepository implements CatalogRepository {
   Future<List<CatalogObject>> getAll({bool listOnly = true}) async => objects;
 
   @override
-  Future<CatalogObject?> getById(String id) async =>
-      objects.where((object) => object.id == id).firstOrNull;
+  Future<CatalogObject?> getById(String id) async {
+    for (final object in objects) {
+      if (object.id == id) return object;
+    }
+    return null;
+  }
 
   @override
   Future<List<CatalogObject>> getByCatalog(CatalogType type) async =>
@@ -287,10 +413,8 @@ class _FakeCatalogRepository implements CatalogRepository {
 
   @override
   Future<void> delete(String id) async {}
-
   @override
   Future<void> insert(CatalogObject object) async {}
-
   @override
   Future<void> updateCaptured(
     String id, {

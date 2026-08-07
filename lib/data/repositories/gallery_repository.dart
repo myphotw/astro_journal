@@ -20,7 +20,7 @@ abstract class GalleryRepository {
   Future<List<GalleryItem>> getAll({bool forceRefresh = false});
   Future<GallerySnapshot> getSnapshot({bool forceRefresh = false});
   Future<GalleryItem?> getById(
-    String backendFileId, {
+    String backendRecordId, {
     bool forceRefresh = false,
   });
   Future<List<GalleryItem>> search(

@@ -48,7 +48,7 @@ class HybridGalleryRepository implements GalleryRepository {
 
   @override
   Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async {
-    const key = 'gallery:list';
+    const key = 'astro:gallery:list';
     final settings = await _settingsService.load();
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     final cached = await _cache.read(key);
@@ -95,10 +95,10 @@ class HybridGalleryRepository implements GalleryRepository {
 
   @override
   Future<GalleryItem?> getById(
-    String backendFileId, {
+    String backendRecordId, {
     bool forceRefresh = false,
   }) async {
-    final key = 'gallery:detail:$backendFileId';
+    final key = 'astro:gallery:detail:$backendRecordId';
     final settings = await _settingsService.load();
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     final cached = await _cache.read(key);
@@ -107,7 +107,7 @@ class HybridGalleryRepository implements GalleryRepository {
       return _cachedItem(cached);
     }
     try {
-      final fetched = await _remoteFactory(baseUrl).getDetail(backendFileId);
+      final fetched = await _remoteFactory(baseUrl).getDetail(backendRecordId);
       final synced = fetched.copyWith(syncedAt: _now());
       await _write(key, synced.toJson());
       return synced;
@@ -120,71 +120,38 @@ class HybridGalleryRepository implements GalleryRepository {
   Future<List<GalleryItem>> search(
     String query, {
     bool forceRefresh = false,
-  }) => _items(
-    key: 'gallery:search:${Uri.encodeQueryComponent(query.trim())}',
-    ttl: listTtl,
-    forceRefresh: forceRefresh,
-    remote: (source) => source.search(query),
-  );
-
-  @override
-  Future<Map<String, dynamic>> getTimeline({bool forceRefresh = false}) =>
-      _map(
-        key: 'gallery:timeline',
-        forceRefresh: forceRefresh,
-        remote: (source) => source.getTimeline(),
-      );
-
-  @override
-  Future<Map<String, dynamic>> getStatistics({bool forceRefresh = false}) =>
-      _map(
-        key: 'gallery:statistics',
-        forceRefresh: forceRefresh,
-        remote: (source) => source.getStatistics(),
-      );
-
-  Future<List<GalleryItem>> _items({
-    required String key,
-    required Duration ttl,
-    required bool forceRefresh,
-    required Future<List<GalleryItem>> Function(GalleryRemoteDataSource) remote,
   }) async {
-    final settings = await _settingsService.load();
-    final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
-    final cached = await _cache.read(key);
-    if (!settings.enabled || baseUrl == null) return _cachedItems(cached);
-    if (!forceRefresh && _isFresh(cached, ttl)) return _cachedItems(cached);
-    try {
-      final syncedAt = _now();
-      final fetched = await remote(_remoteFactory(baseUrl));
-      final synced = fetched
-          .map((item) => item.copyWith(syncedAt: syncedAt))
-          .toList(growable: false);
-      await _write(key, synced.map((item) => item.toJson()).toList());
-      return synced;
-    } on RemoteGalleryException {
-      return _cachedItems(cached);
-    }
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return getAll(forceRefresh: forceRefresh);
+    return (await getAll(forceRefresh: forceRefresh)).where((item) {
+      return item.catalogObjectId.toLowerCase().contains(normalized) ||
+          (item.originalFilename?.toLowerCase().contains(normalized) ?? false) ||
+          (item.location?.toLowerCase().contains(normalized) ?? false) ||
+          item.memo.toLowerCase().contains(normalized);
+    }).toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> _map({
-    required String key,
-    required bool forceRefresh,
-    required Future<Map<String, dynamic>> Function(GalleryRemoteDataSource)
-    remote,
-  }) async {
-    final settings = await _settingsService.load();
-    final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
-    final cached = await _cache.read(key);
-    if (!settings.enabled || baseUrl == null) return _cachedMap(cached);
-    if (!forceRefresh && _isFresh(cached, listTtl)) return _cachedMap(cached);
-    try {
-      final fetched = await remote(_remoteFactory(baseUrl));
-      await _write(key, fetched);
-      return fetched;
-    } on RemoteGalleryException {
-      return _cachedMap(cached);
+  @override
+  Future<Map<String, dynamic>> getTimeline({bool forceRefresh = false}) async {
+    final buckets = <String, int>{};
+    for (final item in await getAll(forceRefresh: forceRefresh)) {
+      final date = item.capturedAt;
+      final key = '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}';
+      buckets[key] = (buckets[key] ?? 0) + 1;
     }
+    return {'buckets': buckets};
+  }
+
+  @override
+  Future<Map<String, dynamic>> getStatistics({
+    bool forceRefresh = false,
+  }) async {
+    final items = await getAll(forceRefresh: forceRefresh);
+    return {
+      'total': items.length,
+      'favorites': items.where((item) => item.favorite).length,
+    };
   }
 
   bool _isFresh(GalleryCacheEntry? entry, Duration ttl) =>
@@ -215,15 +182,6 @@ class HybridGalleryRepository implements GalleryRepository {
       ).copyWith(syncedAt: entry.cachedAt);
     } on Object {
       return null;
-    }
-  }
-
-  Map<String, dynamic> _cachedMap(GalleryCacheEntry? entry) {
-    if (entry == null) return const {};
-    try {
-      return Map<String, dynamic>.from(jsonDecode(entry.payloadJson) as Map);
-    } on Object {
-      return const {};
     }
   }
 

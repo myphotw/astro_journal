@@ -6,46 +6,68 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  test('calls all TC-Backend common gallery endpoints', () async {
-    final requested = <String>[];
-    final client = MockClient((request) async {
-      requested.add(request.url.path);
-      switch (request.url.path) {
-        case '/api/common/gallery':
-        case '/api/common/gallery/search':
-          return http.Response(
-            jsonEncode({
-              'items': [
-                {'file_id': 'file-1'},
-              ],
-            }),
-            200,
-          );
-        case '/api/common/gallery/file-1':
-          return http.Response(jsonEncode({'file_id': 'file-1'}), 200);
-        case '/api/common/gallery/timeline':
-          return http.Response(jsonEncode({'buckets': []}), 200);
-        case '/api/common/gallery/statistics':
-          return http.Response(jsonEncode({'total': 1}), 200);
-      }
-      return http.Response('not found', 404);
-    });
+  test('parses canonical Astro Gallery list fields', () async {
+    late Uri requested;
     final source = RemoteGalleryDataSource(
       baseUrl: 'https://backend.test',
-      client: client,
+      client: MockClient((request) async {
+        requested = request.url;
+        return http.Response(jsonEncode({'items': [_astroItemJson()]}), 200);
+      }),
     );
 
-    expect((await source.getGallery()).single.backendFileId, 'file-1');
-    expect((await source.getDetail('file-1')).backendFileId, 'file-1');
-    expect((await source.search('M42')).single.backendFileId, 'file-1');
-    expect(await source.getTimeline(), {'buckets': []});
-    expect(await source.getStatistics(), {'total': 1});
-    expect(requested, [
-      '/api/common/gallery',
-      '/api/common/gallery/file-1',
-      '/api/common/gallery/search',
-      '/api/common/gallery/timeline',
-      '/api/common/gallery/statistics',
-    ]);
+    final item = (await source.getGallery()).single;
+
+    expect(requested.path, '/api/astro/gallery');
+    expect(requested.path, isNot(contains('/api/common/gallery')));
+    expect(item.backendRecordId, 'record-1');
+    expect(item.revision, 7);
+    expect(item.catalogObjectId, 'M42');
+    expect(item.backendFileId, 'sha-1');
+    expect(item.favorite, isTrue);
+    expect(item.representative, isTrue);
+    expect(item.latitude, 33.3);
+    expect(item.longitude, 126.5);
+    expect(item.location, 'Jeju');
+    expect(item.memo, 'canonical memo');
+    expect(item.thumbnailUrl, '/media/thumb/sha-1');
+    expect(item.previewUrl, '/media/preview/sha-1');
+    expect(item.originalUrl, '/media/original/sha-1');
+  });
+
+  test('loads Astro Gallery detail by record_id', () async {
+    late Uri requested;
+    final source = RemoteGalleryDataSource(
+      baseUrl: 'https://backend.test',
+      client: MockClient((request) async {
+        requested = request.url;
+        return http.Response(jsonEncode({'data': _astroItemJson()}), 200);
+      }),
+    );
+
+    final item = await source.getDetail('record-1');
+
+    expect(requested.path, '/api/astro/gallery/record-1');
+    expect(item.backendRecordId, 'record-1');
   });
 }
+
+Map<String, dynamic> _astroItemJson() => {
+  'record_id': 'record-1',
+  'revision': 7,
+  'catalog_object_id': 'M42',
+  'captured_at': '2026-08-07T01:02:03Z',
+  'latitude': 33.3,
+  'longitude': 126.5,
+  'location_name': 'Jeju',
+  'memo': 'canonical memo',
+  'favorite': true,
+  'representative': true,
+  'file_id': 'sha-1',
+  'filename': 'm42.fit',
+  'mime_type': 'image/fits',
+  'thumbnail_url': '/media/thumb/sha-1',
+  'preview_url': '/media/preview/sha-1',
+  'original_url': '/media/original/sha-1',
+  'capture_datetime': '2026-08-07T01:01:00Z',
+};
