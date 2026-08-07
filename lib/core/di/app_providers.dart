@@ -63,6 +63,7 @@ import '../../services/splash_image_service.dart';
 import '../../services/weather_cache_service.dart';
 import '../../services/weather_service.dart';
 import '../../services/tc_backend_settings_service.dart';
+import '../../services/tc_backend_upload_service.dart';
 import '../navigation/app_navigation_notifier.dart';
 
 class AppProviders {
@@ -81,6 +82,9 @@ class AppProviders {
     final geocodingService = GeocodingService();
     final apiKeyService = ApiKeyService();
     final tcBackendSettingsService = TcBackendSettingsService();
+    final tcBackendUploadService = TcBackendUploadService(
+      settingsService: tcBackendSettingsService,
+    );
     final metadataService = MetadataService();
     final catalogSearchService = CatalogSearchService();
     final metadataPipeline = PhotoMetadataPipeline(
@@ -95,16 +99,16 @@ class AppProviders {
       shootingRecordRepository: shootingRecordRepository,
       catalogRepository: catalogRepository,
       metadataPipeline: metadataPipeline,
+      tcBackendUploadService: tcBackendUploadService,
     );
     final backupService = BackupService();
     final astronomyService = AstronomyService(apiKeyService);
     final weatherService = WeatherService(apiKeyService);
     final plateSolveSettingsService = PlateSolveSettingsService();
     final astrometryNetProvider = AstrometryNetProvider(apiKeyService);
-    final plateSolveService = PlateSolveService(
-      <PlateSolveProvider>[astrometryNetProvider],
-      plateSolveSettingsService,
-    );
+    final plateSolveService = PlateSolveService(<PlateSolveProvider>[
+      astrometryNetProvider,
+    ], plateSolveSettingsService);
     final celestialObjectSearchService = CelestialObjectSearchService(
       catalogRepository,
       photoObjectRepository,
@@ -222,8 +226,7 @@ class AppProviders {
       ]),
     );
 
-    final tcBackendViewModel =
-        TcBackendViewModel(tcBackendSettingsService);
+    final tcBackendViewModel = TcBackendViewModel(tcBackendSettingsService);
 
     final equipmentViewModel = EquipmentViewModel(equipmentRepository);
 
@@ -233,8 +236,9 @@ class AppProviders {
     );
 
     final appNavigationNotifier = AppNavigationNotifier();
-    final mainBackNavigationViewModel =
-        MainBackNavigationViewModel(appNavigationNotifier);
+    final mainBackNavigationViewModel = MainBackNavigationViewModel(
+      appNavigationNotifier,
+    );
 
     return [
       ChangeNotifierProvider.value(value: appNavigationNotifier),
@@ -244,13 +248,16 @@ class AppProviders {
       Provider<EquipmentRepository>.value(value: equipmentRepository),
       Provider<ShootingRecordRepository>.value(value: shootingRecordRepository),
       Provider<PhotoRepository>.value(value: photoRepository),
-      Provider<ObservationSiteFavoriteRepository>.value(value: favoriteRepository),
+      Provider<ObservationSiteFavoriteRepository>.value(
+        value: favoriteRepository,
+      ),
       Provider<PhotoObjectRepository>.value(value: photoObjectRepository),
       Provider<PhotoService>.value(value: photoService),
       Provider<ExifService>.value(value: exifService),
       Provider<GeocodingService>.value(value: geocodingService),
       Provider<ApiKeyService>.value(value: apiKeyService),
       Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
+      Provider<TcBackendUploadService>.value(value: tcBackendUploadService),
       Provider<MetadataService>.value(value: metadataService),
       Provider<CatalogSearchService>.value(value: catalogSearchService),
       Provider<PhotoMetadataPipeline>.value(value: metadataPipeline),
@@ -259,7 +266,9 @@ class AppProviders {
       Provider<BackupService>.value(value: backupService),
       Provider<AstronomyService>.value(value: astronomyService),
       Provider<WeatherService>.value(value: weatherService),
-      Provider<PlateSolveSettingsService>.value(value: plateSolveSettingsService),
+      Provider<PlateSolveSettingsService>.value(
+        value: plateSolveSettingsService,
+      ),
       Provider<AstrometryNetProvider>.value(value: astrometryNetProvider),
       Provider<PlateSolveService>.value(value: plateSolveService),
       Provider<WeatherCacheService>.value(value: weatherCacheService),
@@ -276,9 +285,7 @@ class AppProviders {
       Provider<SeasonPlannerFilterService>.value(
         value: seasonPlannerFilterService,
       ),
-      Provider<CelestialPositionService>.value(
-        value: celestialPositionService,
-      ),
+      Provider<CelestialPositionService>.value(value: celestialPositionService),
       Provider<ObservationConditionService>.value(
         value: observationConditionService,
       ),
