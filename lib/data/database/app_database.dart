@@ -121,6 +121,7 @@ class AppDatabase {
     await _createEquipmentTables(db);
     await _createObservationSiteFavoritesTable(db);
     await _createSyncOutboxTable(db);
+    await _createGalleryCacheTable(db);
     await _createIndexes(db);
     await CatalogFtsService.ensureSchema(db);
   }
@@ -418,6 +419,19 @@ class AppDatabase {
     if (oldVersion < 30) {
       await _createSyncOutboxTable(db);
     }
+    if (oldVersion < 31) {
+      await _createGalleryCacheTable(db);
+    }
+  }
+
+  static Future<void> _createGalleryCacheTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableGalleryCache} (
+        cache_key TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        cached_at TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createSyncOutboxTable(Database db) async {

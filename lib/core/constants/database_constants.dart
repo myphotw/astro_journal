@@ -2,7 +2,7 @@ class DatabaseConstants {
   DatabaseConstants._();
 
   static const String databaseName = 'astro_journal.db';
-  static const int databaseVersion = 30;
+  static const int databaseVersion = 31;
 
   /// 대표 천체 표시 우선순위 기본값 (미분류).
   static const int defaultDisplayPriority = 9999;
@@ -17,6 +17,7 @@ class DatabaseConstants {
       'observation_site_favorites';
   static const String tablePhotoObjects = 'photo_objects';
   static const String tableSyncOutbox = 'sync_outbox';
+  static const String tableGalleryCache = 'gallery_cache';
 
   static const String colId = 'id';
   static const String colNum = 'num';

@@ -24,6 +24,12 @@ class ShootingRecord {
     this.plateSolve,
     this.detectMethod,
     this.analysisStatus = AnalysisStatus.completed,
+    this.backendFileId,
+    this.thumbnailUrl,
+    this.previewUrl,
+    this.originalUrl,
+    this.syncState,
+    this.remoteTargetName,
   });
 
   final String id;
@@ -59,6 +65,19 @@ class ShootingRecord {
   /// 확인·확정하므로, 이 값은 "대상이 맞는지"가 아니라 백그라운드 Plate
   /// Solve 분석 진행도를 나타낸다.
   final AnalysisStatus analysisStatus;
+
+  /// Remote Gallery fields are transient projection data and are not written
+  /// into the V1 shooting_records table.
+  final String? backendFileId;
+  final String? thumbnailUrl;
+  final String? previewUrl;
+  final String? originalUrl;
+  final String? syncState;
+  final String? remoteTargetName;
+
+  bool get isRemoteAsset => backendFileId != null;
+  String? get galleryThumbnailUri => thumbnailUrl ?? photoUri;
+  String? get galleryPreviewUri => previewUrl ?? originalUrl ?? photoUri;
 
   /// Plate Solve 성공 여부 (Gallery 표시용 편의 getter).
   bool get isPlateSolved => plateSolve?.success ?? false;
@@ -147,6 +166,12 @@ class ShootingRecord {
     bool clearPlateSolve = false,
     DetectMethod? detectMethod,
     AnalysisStatus? analysisStatus,
+    String? backendFileId,
+    String? thumbnailUrl,
+    String? previewUrl,
+    String? originalUrl,
+    String? syncState,
+    String? remoteTargetName,
   }) {
     return ShootingRecord(
       id: id ?? this.id,
@@ -165,6 +190,12 @@ class ShootingRecord {
           clearPlateSolve ? null : (plateSolve ?? this.plateSolve),
       detectMethod: detectMethod ?? this.detectMethod,
       analysisStatus: analysisStatus ?? this.analysisStatus,
+      backendFileId: backendFileId ?? this.backendFileId,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      previewUrl: previewUrl ?? this.previewUrl,
+      originalUrl: originalUrl ?? this.originalUrl,
+      syncState: syncState ?? this.syncState,
+      remoteTargetName: remoteTargetName ?? this.remoteTargetName,
     );
   }
 }

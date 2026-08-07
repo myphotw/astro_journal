@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -20,6 +19,7 @@ import '../../../services/metadata_field_trace.dart';
 import '../../../services/metadata_format.dart';
 import '../../../services/photo_overlay_service.dart';
 import '../../../shared/widgets/integration_minutes_field.dart';
+import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/material_date_time_picker_field.dart';
 import '../viewmodel/gallery_detail_view_model.dart';
 import '../viewmodel/gallery_view_model.dart';
@@ -774,7 +774,8 @@ class _ViewBody extends StatelessWidget {
         title: '메모',
         content: record.memo.isEmpty ? '(없음)' : record.memo,
       ),
-      if (record.photoUri != null &&
+      if (!record.isRemoteAsset &&
+          record.photoUri != null &&
           record.photoUri!.isNotEmpty &&
           onRunPlateSolve != null) ...[
         const SizedBox(height: 12),
@@ -808,7 +809,7 @@ class _ViewBody extends StatelessWidget {
       children: [
         Expanded(
           child: _PhotoSection(
-            photoUri: record.photoUri,
+            photoUri: record.galleryPreviewUri,
             overlay: detailVm.overlayFor(record.id),
             isOverlayLoading: detailVm.isOverlayLoadingFor(record.id),
             overlayEnabled: detailVm.overlayEnabled,
@@ -1134,7 +1135,7 @@ class _EditBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _PhotoSection(photoUri: record.photoUri),
+        _PhotoSection(photoUri: record.galleryPreviewUri),
         const SizedBox(height: 16),
 
         // 편집 안내 배너
@@ -2093,10 +2094,10 @@ class _PhotoSection extends StatelessWidget {
             showTarget: showTarget,
             showNearby: showNearby,
           )
-        : Image.file(
-            File(photoUri!),
+        : AppFileImage(
+            path: photoUri!,
             fit: BoxFit.contain,
-            cacheWidth: fillViewport ? 2048 : 1600,
+            memCacheWidth: fillViewport ? 2048 : 1600,
             filterQuality: FilterQuality.medium,
             gaplessPlayback: true,
             errorBuilder: (_, _, _) => Container(

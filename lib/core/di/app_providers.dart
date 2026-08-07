@@ -6,6 +6,10 @@ import '../../data/repositories/bortle_repository.dart';
 import '../../data/repositories/bortle_repository_impl.dart';
 import '../../data/repositories/equipment_repository.dart';
 import '../../data/repositories/equipment_repository_impl.dart';
+import '../../data/datasources/gallery_cache_local_datasource.dart';
+import '../../data/repositories/gallery_repository.dart';
+import '../../data/repositories/gallery_shooting_record_repository_adapter.dart';
+import '../../data/repositories/hybrid_gallery_repository.dart';
 import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/catalog_repository_impl.dart';
 import '../../data/repositories/observation_site_favorite_repository.dart';
@@ -86,6 +90,10 @@ class AppProviders {
     final geocodingService = GeocodingService();
     final apiKeyService = ApiKeyService();
     final tcBackendSettingsService = TcBackendSettingsService();
+    final galleryRepository = HybridGalleryRepository(
+      settingsService: tcBackendSettingsService,
+      cache: GalleryCacheLocalDataSource(),
+    );
     final tcBackendUploadService = TcBackendUploadService(
       settingsService: tcBackendSettingsService,
     );
@@ -102,6 +110,15 @@ class AppProviders {
     );
     final metadataService = MetadataService();
     final catalogSearchService = CatalogSearchService();
+    final galleryShootingRecordRepository =
+        GalleryShootingRecordRepositoryAdapter(
+          galleryRepository: galleryRepository,
+          localRepository: shootingRecordRepository,
+          catalogRepository: catalogRepository,
+          projectionMapper: GalleryObservationProjectionMapper(
+            catalogSearchService,
+          ),
+        );
     final metadataPipeline = PhotoMetadataPipeline(
       metadataService: metadataService,
       exifService: exifService,
@@ -193,7 +210,7 @@ class AppProviders {
     );
 
     final galleryViewModel = GalleryViewModel(
-      shootingRecordRepository,
+      galleryShootingRecordRepository,
       catalogRepository,
       catalogSearchService,
     );
@@ -278,6 +295,7 @@ class AppProviders {
       Provider<GeocodingService>.value(value: geocodingService),
       Provider<ApiKeyService>.value(value: apiKeyService),
       Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
+      Provider<GalleryRepository>.value(value: galleryRepository),
       Provider<TcBackendUploadService>.value(value: tcBackendUploadService),
       Provider<SyncOutboxRepository>.value(value: syncOutboxRepository),
       Provider<TcBackendSyncCoordinator>.value(value: syncCoordinator),

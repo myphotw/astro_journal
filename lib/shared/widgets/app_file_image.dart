@@ -77,10 +77,18 @@ class AppFileImage extends StatelessWidget {
     return (side * dpr).round().clamp(1, 2048);
   }
 
+  static bool _isNetworkPath(String path) {
+    final uri = Uri.tryParse(path);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
   /// 전체보기용 ImageProvider (화면 장축 × DPR, 최대 2048).
   static ImageProvider viewerProvider(BuildContext context, String path) {
     final maxPx = _safeScreenPx(context, longest: true);
-    return ResizeImage(FileImage(File(path)), width: maxPx);
+    final provider = _isNetworkPath(path)
+        ? NetworkImage(path) as ImageProvider
+        : FileImage(File(path));
+    return ResizeImage(provider, width: maxPx);
   }
 
   static Future<void> precacheForViewer(
@@ -98,7 +106,10 @@ class AppFileImage extends StatelessWidget {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final h = _cachePx(height, dpr.isFinite && dpr > 0 ? dpr : 2.0) ?? 440;
     return precacheImage(
-      ResizeImage(FileImage(File(path)), height: h),
+      ResizeImage(
+        _isNetworkPath(path) ? NetworkImage(path) : FileImage(File(path)),
+        height: h,
+      ),
       context,
     );
   }
@@ -140,17 +151,29 @@ class AppFileImage extends StatelessWidget {
     }
 
     return RepaintBoundary(
-      child: Image.file(
-        File(path),
-        width: width,
-        height: height,
-        fit: fit,
-        cacheWidth: cw,
-        cacheHeight: ch,
-        filterQuality: filterQuality,
-        gaplessPlayback: gaplessPlayback,
-        errorBuilder: errorBuilder,
-      ),
+      child: _isNetworkPath(path)
+          ? Image.network(
+              path,
+              width: width,
+              height: height,
+              fit: fit,
+              cacheWidth: cw,
+              cacheHeight: ch,
+              filterQuality: filterQuality,
+              gaplessPlayback: gaplessPlayback,
+              errorBuilder: errorBuilder,
+            )
+          : Image.file(
+              File(path),
+              width: width,
+              height: height,
+              fit: fit,
+              cacheWidth: cw,
+              cacheHeight: ch,
+              filterQuality: filterQuality,
+              gaplessPlayback: gaplessPlayback,
+              errorBuilder: errorBuilder,
+            ),
     );
   }
 }

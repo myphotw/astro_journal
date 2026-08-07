@@ -787,7 +787,7 @@ class _DateGroupRecordRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _catalogColor(catalogObject?.catalog);
-    final photoUri = record.photoUri;
+    final photoUri = record.galleryThumbnailUri;
 
     return Material(
       color: Colors.transparent,
@@ -988,7 +988,7 @@ class _GalleryGroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _catalogColor(group.object.catalog);
-    final photoUri = group.representativeRecord.photoUri;
+    final photoUri = group.representativeRecord.galleryThumbnailUri;
 
     return Card(
       clipBehavior: Clip.antiAlias,
