@@ -36,6 +36,7 @@ migrate_working_dir/
 # Local IDE / Android build state
 .vscode/
 /android/.gradle/
+/android/build/
 /android/local.properties
 
 # Android release artifacts
