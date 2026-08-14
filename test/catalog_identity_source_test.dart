@@ -60,6 +60,10 @@ void main() {
     final seed = <String, dynamic>{
       DatabaseConstants.colName: '바너드 은하',
       DatabaseConstants.colObjectType: '은하',
+      DatabaseConstants.colMag: '10.05',
+      DatabaseConstants.colAngularSize: "17.38' × 16.75'",
+      DatabaseConstants.colMajorAxis: 17.38,
+      DatabaseConstants.colMinorAxis: 16.75,
       DatabaseConstants.colAliasesJson: jsonEncode(['C57', 'IC4895']),
       DatabaseConstants.colCrossCatalogRefsJson: jsonEncode(['C57', 'IC4895']),
     };
@@ -77,6 +81,10 @@ void main() {
       jsonDecode(updates[DatabaseConstants.colCrossCatalogRefsJson] as String),
       ['C57', 'IC4895'],
     );
+    expect(updates[DatabaseConstants.colMag], '10.05');
+    expect(updates[DatabaseConstants.colAngularSize], "17.38' × 16.75'");
+    expect(updates[DatabaseConstants.colMajorAxis], 17.38);
+    expect(updates[DatabaseConstants.colMinorAxis], 16.75);
     expect(updates, isNot(contains(DatabaseConstants.colCaptured)));
     expect(updates, isNot(contains(DatabaseConstants.colCapturedDate)));
     expect(updates, isNot(contains(DatabaseConstants.colPhotoUri)));

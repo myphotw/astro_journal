@@ -18,7 +18,13 @@ def run(*command: str) -> None:
 
 def main() -> int:
     # Identity and unit validation run before any generated artifact is changed.
-    run(sys.executable, "-m", "unittest", "tools/test_catalog_identity.py")
+    run(
+        sys.executable,
+        "-m",
+        "unittest",
+        "tools/test_catalog_identity.py",
+        "tools/test_catalog_imaging_metadata.py",
+    )
     flutter = shutil.which("flutter.bat") or shutil.which("flutter")
     if not flutter:
         raise RuntimeError("Flutter SDK was not found on PATH")
@@ -37,6 +43,11 @@ def main() -> int:
     run(sys.executable, "tools/enrich_catalog_metadata.py")
     run(sys.executable, "tools/dedup_catalog_duplicates.py")
     run(sys.executable, "tools/repair_catalog_seed.py")
+    run(
+        sys.executable,
+        "tools/catalog_imaging_metadata.py",
+        "--repair",
+    )
     run(sys.executable, "tools/audit_catalog_integrity.py")
     return 0
 
