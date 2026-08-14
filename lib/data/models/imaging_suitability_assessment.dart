@@ -1,3 +1,5 @@
+import 'fov_box.dart';
+
 enum TrackingMode { altAz, eq }
 
 extension TrackingModeLabel on TrackingMode {
@@ -13,6 +15,15 @@ extension FilterModeLabel on FilterMode {
   String get label => switch (this) {
     FilterMode.on => 'ON',
     FilterMode.off => 'OFF',
+  };
+}
+
+enum MosaicMode { on, off }
+
+extension MosaicModeLabel on MosaicMode {
+  String get label => switch (this) {
+    MosaicMode.on => 'ON',
+    MosaicMode.off => 'OFF',
   };
 }
 
@@ -38,18 +49,23 @@ class ImagingEquipmentFit {
     required this.screenFillPercent,
     this.equipmentId,
     this.equipmentName,
+    this.framingRecommendation,
+    this.supportsMosaic = false,
   });
 
   final double score;
   final int screenFillPercent;
   final String? equipmentId;
   final String? equipmentName;
+  final FramingRecommendation? framingRecommendation;
+  final bool supportsMosaic;
 }
 
 class ImagingSuitabilityAssessment {
   const ImagingSuitabilityAssessment({
     required this.quality,
     required this.filterMode,
+    this.mosaicMode = MosaicMode.off,
     required this.trackingMode,
     required this.suitabilityScore,
     required this.scoreMultiplier,
@@ -60,6 +76,7 @@ class ImagingSuitabilityAssessment {
 
   final ExpectedResultQuality quality;
   final FilterMode filterMode;
+  final MosaicMode mosaicMode;
   final TrackingMode trackingMode;
   final double suitabilityScore;
   final double scoreMultiplier;

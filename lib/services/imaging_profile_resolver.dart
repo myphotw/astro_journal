@@ -26,6 +26,12 @@ class ImagingProfileResolver {
         : math.max(angularSize.widthArcmin, angularSize.heightArcmin);
     final angularSizeClass = _resolveAngularSizeClass(maxArcmin);
     final magnitude = _parseMagnitude(object.magnitude);
+    final metadataReliability = switch ((magnitude, angularSize)) {
+      (final double _, final RepresentativeFramingSize _) =>
+        ImagingMetadataReliability.reliable,
+      (null, null) => ImagingMetadataReliability.missing,
+      _ => ImagingMetadataReliability.partial,
+    };
     final estimatedSurfaceBrightness = _estimateSurfaceBrightness(
       magnitude: magnitude,
       widthArcmin: angularSize?.widthArcmin,
@@ -49,6 +55,7 @@ class ImagingProfileResolver {
       angularSizeClass: angularSizeClass,
       baseExposureMinutes: brightness.baseExposureMinutes,
       estimatedSurfaceBrightness: estimatedSurfaceBrightness,
+      metadataReliability: metadataReliability,
     );
   }
 

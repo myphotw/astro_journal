@@ -3,6 +3,8 @@ import '../../core/constants/imaging_difficulty.dart';
 import '../../core/constants/object_type.dart';
 import '../../core/constants/surface_brightness_class.dart';
 
+enum ImagingMetadataReliability { reliable, partial, missing }
+
 /// Per-target imaging characteristics used by exposure and score engines.
 class ObjectImagingProfile {
   const ObjectImagingProfile({
@@ -16,6 +18,7 @@ class ObjectImagingProfile {
     required this.supportsNarrowband,
     required this.recommendedFilters,
     this.estimatedSurfaceBrightness,
+    this.metadataReliability = ImagingMetadataReliability.missing,
   });
 
   final ObjectType objectType;
@@ -39,6 +42,10 @@ class ObjectImagingProfile {
   /// callers must keep the existing type-based fallback.
   final double? estimatedSurfaceBrightness;
 
+  /// Runtime-only confidence derived from magnitude and angular-size fields.
+  /// It is deliberately not persisted in SQLite.
+  final ImagingMetadataReliability metadataReliability;
+
   ObjectImagingProfile copyWith({
     ObjectType? objectType,
     ImagingDifficulty? imagingDifficulty,
@@ -50,6 +57,7 @@ class ObjectImagingProfile {
     bool? supportsNarrowband,
     List<String>? recommendedFilters,
     double? estimatedSurfaceBrightness,
+    ImagingMetadataReliability? metadataReliability,
   }) {
     return ObjectImagingProfile(
       objectType: objectType ?? this.objectType,
@@ -65,6 +73,7 @@ class ObjectImagingProfile {
       recommendedFilters: recommendedFilters ?? this.recommendedFilters,
       estimatedSurfaceBrightness:
           estimatedSurfaceBrightness ?? this.estimatedSurfaceBrightness,
+      metadataReliability: metadataReliability ?? this.metadataReliability,
     );
   }
 }

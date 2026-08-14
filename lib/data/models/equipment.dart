@@ -41,6 +41,11 @@ class Equipment {
   bool get isImaging => purpose == EquipmentPurpose.imaging;
   bool get isVisual => purpose == EquipmentPurpose.visual;
 
+  /// Current personal-app capability rule: registered smart telescopes use
+  /// their built-in mosaic mode. This stays runtime-only, so no DB migration
+  /// is required and future Seestar models reuse the same contract.
+  bool get supportsMosaic => kind == EquipmentKind.smartTelescope;
+
   bool get hasFov =>
       fovWidthDegrees != null &&
       fovHeightDegrees != null &&
@@ -54,9 +59,7 @@ class Equipment {
 
   /// F값 = 초점거리 ÷ 구경 (안시 장비).
   double? get fRatio {
-    if (apertureMm == null ||
-        focalLengthMm == null ||
-        apertureMm! <= 0) {
+    if (apertureMm == null || focalLengthMm == null || apertureMm! <= 0) {
       return null;
     }
     return focalLengthMm! / apertureMm!;
@@ -74,8 +77,8 @@ class Equipment {
       DatabaseConstants.colFovHeightDegrees: fovHeightDegrees,
       DatabaseConstants.colFovDegrees: hasFov
           ? (fovWidthDegrees! > fovHeightDegrees!
-              ? fovWidthDegrees
-              : fovHeightDegrees)
+                ? fovWidthDegrees
+                : fovHeightDegrees)
           : null,
       DatabaseConstants.colApertureMm: apertureMm,
       DatabaseConstants.colSortOrder: sortOrder,
@@ -86,12 +89,11 @@ class Equipment {
     Map<String, dynamic> map, {
     List<Eyepiece> eyepieces = const [],
   }) {
-    final width =
-        (map[DatabaseConstants.colFovWidthDegrees] as num?)?.toDouble();
-    final height =
-        (map[DatabaseConstants.colFovHeightDegrees] as num?)?.toDouble();
-    final legacy =
-        (map[DatabaseConstants.colFovDegrees] as num?)?.toDouble();
+    final width = (map[DatabaseConstants.colFovWidthDegrees] as num?)
+        ?.toDouble();
+    final height = (map[DatabaseConstants.colFovHeightDegrees] as num?)
+        ?.toDouble();
+    final legacy = (map[DatabaseConstants.colFovDegrees] as num?)?.toDouble();
 
     final fovWidth = width ?? legacy;
     final fovHeight = height ?? legacy;

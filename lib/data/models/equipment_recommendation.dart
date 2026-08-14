@@ -1,24 +1,19 @@
 import 'equipment.dart';
 
+import 'fov_box.dart';
+
 import 'eyepiece.dart';
-
-
 
 /// 천체·조건에 대한 장비 추천 결과 묶음.
 
 class ObjectEquipmentRecommendation {
-
   const ObjectEquipmentRecommendation({
-
     required this.imaging,
 
     required this.visual,
 
     this.hasRegisteredEquipment = true,
-
   });
-
-
 
   final List<ImagingEquipmentRecommendation> imaging;
 
@@ -26,26 +21,17 @@ class ObjectEquipmentRecommendation {
 
   final bool hasRegisteredEquipment;
 
-
-
   static const empty = ObjectEquipmentRecommendation(
-
     imaging: [],
 
     visual: [],
 
     hasRegisteredEquipment: false,
-
   );
-
 }
 
-
-
 class ImagingEquipmentRecommendation {
-
   const ImagingEquipmentRecommendation({
-
     required this.equipment,
 
     required this.score,
@@ -58,11 +44,10 @@ class ImagingEquipmentRecommendation {
 
     this.screenFillNote,
 
+    this.framingRecommendation = FramingRecommendation.good,
+
     this.rank = 0,
-
   });
-
-
 
   final Equipment equipment;
 
@@ -76,16 +61,13 @@ class ImagingEquipmentRecommendation {
 
   final String? screenFillNote;
 
-  final int rank;
+  final FramingRecommendation framingRecommendation;
 
+  final int rank;
 }
 
-
-
 class VisualEquipmentRecommendation {
-
   const VisualEquipmentRecommendation({
-
     required this.equipment,
 
     this.eyepiece,
@@ -103,10 +85,7 @@ class VisualEquipmentRecommendation {
     this.screenFillNote,
 
     this.isFeasibleToday = true,
-
   });
-
-
 
   final Equipment equipment;
 
@@ -124,36 +103,25 @@ class VisualEquipmentRecommendation {
 
   final String? screenFillNote;
 
-
-
   /// 오늘 조건 기준 안시 가능 여부.
 
   final bool isFeasibleToday;
 
-
-
   /// 아이피스 초점거리 (mm) 표시. 이름과 무관하게 항상 mm를 노출한다.
 
   String get eyepieceFocalLabel {
-
     if (eyepiece == null) return '';
 
     final mm = eyepiece!.focalLengthMm;
 
     final text = mm == mm.roundToDouble()
-
         ? mm.toStringAsFixed(0)
-
         : mm.toStringAsFixed(1);
 
     return '${text}mm';
-
   }
 
-
-
   String get eyepieceDisplayName {
-
     if (eyepiece == null) return '';
 
     final name = eyepiece!.name.trim();
@@ -161,19 +129,12 @@ class VisualEquipmentRecommendation {
     if (name.isNotEmpty) return name;
 
     return eyepieceFocalLabel;
-
   }
 
-
-
   String get eyepieceLabel =>
-
       eyepieceFocalLabel.isNotEmpty ? '$eyepieceFocalLabel 아이피스' : '';
 
-
-
   VisualEquipmentRecommendation copyWith({
-
     Equipment? equipment,
 
     Eyepiece? eyepiece,
@@ -191,11 +152,8 @@ class VisualEquipmentRecommendation {
     String? screenFillNote,
 
     bool? isFeasibleToday,
-
   }) {
-
     return VisualEquipmentRecommendation(
-
       equipment: equipment ?? this.equipment,
 
       eyepiece: eyepiece ?? this.eyepiece,
@@ -213,30 +171,20 @@ class VisualEquipmentRecommendation {
       screenFillNote: screenFillNote ?? this.screenFillNote,
 
       isFeasibleToday: isFeasibleToday ?? this.isFeasibleToday,
-
     );
-
   }
-
 }
-
-
 
 /// 추천대상 상세용 — 오늘 최적 장비 1건씩.
 
 class TodayEquipmentRecommendation {
-
   const TodayEquipmentRecommendation({
-
     this.imaging,
 
     this.visual = const [],
 
     this.hasRegisteredEquipment = true,
-
   });
-
-
 
   final ImagingEquipmentRecommendation? imaging;
 
@@ -244,13 +192,7 @@ class TodayEquipmentRecommendation {
 
   final bool hasRegisteredEquipment;
 
-
-
   static const empty = TodayEquipmentRecommendation(
-
     hasRegisteredEquipment: false,
-
   );
-
 }
-

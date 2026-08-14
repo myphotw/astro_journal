@@ -66,6 +66,16 @@ class ExposurePolicy {
           resolved <= ImagingRecommendationRules.narrowbandReliefMaxBortle) {
         return true;
       }
+      if (resolved == profile.minimumRecommendedBortle + 1 &&
+          profile.estimatedSurfaceBrightness != null &&
+          profile.surfaceBrightnessClass.index <=
+              SurfaceBrightnessClass.bright.index) {
+        // A metadata-backed high-surface-brightness target may remain useful
+        // one Bortle step beyond the type template. This keeps eligibility
+        // aligned with a strong expected-quality assessment without hiding
+        // the sky penalty or special-casing a catalog ID.
+        return true;
+      }
       return false;
     }
 
@@ -84,7 +94,8 @@ class ExposurePolicy {
 
     if (profile.objectType == ObjectType.galaxy &&
         bortle >= ImagingRecommendationRules.seoulBortle - 1) {
-      minutes += ImagingRecommendationRules.galaxyHighBortleExposureBonusMinutes;
+      minutes +=
+          ImagingRecommendationRules.galaxyHighBortleExposureBonusMinutes;
     }
 
     return minutes.round().clamp(

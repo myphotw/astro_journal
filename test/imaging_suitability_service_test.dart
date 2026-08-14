@@ -58,6 +58,8 @@ void main() {
       screenFillPercent: best.screenFillPercent,
       equipmentId: best.equipment.id,
       equipmentName: best.equipment.name,
+      framingRecommendation: best.framingRecommendation,
+      supportsMosaic: best.equipment.supportsMosaic,
     );
   }
 
@@ -84,6 +86,7 @@ void main() {
       expect(profile.surfaceBrightnessClass, SurfaceBrightnessClass.extremeDim);
       expect(profile.estimatedSurfaceBrightness, greaterThan(24.5));
       expect(result.filterMode, FilterMode.off);
+      expect(result.mosaicMode, MosaicMode.off);
       expect(result.quality, ExpectedResultQuality.trace);
       expect(result.suitabilityScore, lessThan(30));
       expect(result.scoreMultiplier, lessThan(0.4));
@@ -215,7 +218,7 @@ void main() {
 
       expect(profile.estimatedSurfaceBrightness, isNull);
       expect(result.hasReliableSurfaceBrightness, isFalse);
-      expect(result.quality.level, lessThanOrEqualTo(3));
+      expect(result.quality.level, lessThanOrEqualTo(2));
     });
   });
 }

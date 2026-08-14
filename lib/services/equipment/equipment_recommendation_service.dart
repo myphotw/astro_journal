@@ -13,6 +13,7 @@ import '../../features/home/viewmodel/home_view_model.dart';
 import '../object_imaging_profile_provider.dart';
 import '../observation_score_service.dart';
 import 'field_orientation_calculator.dart';
+import 'fov_framing_engine.dart';
 import 'representative_framing_resolver.dart';
 import 'screen_fill_scoring.dart';
 import 'visual_observation_scorer.dart';
@@ -131,6 +132,7 @@ class EquipmentRecommendationService {
         ),
         screenFillPercent: top.item.screenFillPercent,
         screenFillNote: top.item.screenFillNote,
+        framingRecommendation: top.item.framingRecommendation,
         rank: 1,
       );
     }
@@ -217,8 +219,15 @@ class EquipmentRecommendationService {
         orientation: orientation,
       );
       final fillRatio = framingResult.bestCoverage;
-      final score = _imagingScore(fillRatio, profile);
-      final reason = _imagingReason(framingResult);
+      final score = _imagingScore(
+        fillRatio,
+        profile,
+        supportsMosaic: equipment.supportsMosaic,
+      );
+      final reason = _imagingReason(
+        framingResult,
+        supportsMosaic: equipment.supportsMosaic,
+      );
 
       results.add(
         ImagingEquipmentRecommendation(
@@ -229,9 +238,11 @@ class EquipmentRecommendationService {
           ),
           reason: reason,
           screenFillPercent: framingResult.coveragePercent,
-          screenFillNote: ScreenFillScoring.imagingFillNote(
-            framingResult.recommendation,
+          screenFillNote: _imagingFillNote(
+            framingResult,
+            supportsMosaic: equipment.supportsMosaic,
           ),
+          framingRecommendation: framingResult.recommendation,
         ),
       );
     }
@@ -246,6 +257,7 @@ class EquipmentRecommendationService {
           reason: results[i].reason,
           screenFillPercent: results[i].screenFillPercent,
           screenFillNote: results[i].screenFillNote,
+          framingRecommendation: results[i].framingRecommendation,
           rank: i + 1,
         ),
     ];
@@ -308,10 +320,25 @@ class EquipmentRecommendationService {
     );
   }
 
-  double _imagingScore(double fillRatio, ObjectImagingProfile profile) {
+  double _imagingScore(
+    double fillRatio,
+    ObjectImagingProfile profile, {
+    required bool supportsMosaic,
+  }) {
     var score = ScreenFillScoring.score(fillRatio);
 
-    if (profile.angularSizeClass == AngularSizeClass.veryLarge &&
+    if (supportsMosaic &&
+        FovFramingEngine.recommendationFor(fillRatio) ==
+            FramingRecommendation.mosaicRequired) {
+      // Mosaic solves framing, not target contrast. Keep this as a moderate
+      // geometry score rather than an oversize bonus.
+      score = score.clamp(60, 75);
+    }
+
+    if (!(supportsMosaic &&
+            FovFramingEngine.recommendationFor(fillRatio) ==
+                FramingRecommendation.mosaicRequired) &&
+        profile.angularSizeClass == AngularSizeClass.veryLarge &&
         fillRatio > ScreenFillScoring.idealMaxRatio) {
       score = (score + 8).clamp(0, 100);
     }
@@ -324,11 +351,27 @@ class EquipmentRecommendationService {
     return score;
   }
 
-  String _imagingReason(FramingCoverageResult framing) {
+  String _imagingReason(
+    FramingCoverageResult framing, {
+    required bool supportsMosaic,
+  }) {
     if (framing.bestCoverage < 0.05) {
       return '천체가 너무 작음';
     }
+    if (framing.recommendation == FramingRecommendation.mosaicRequired) {
+      return supportsMosaic ? '단일 화각보다 큰 대상 — 모자이크 촬영 권장' : '단일 화각보다 큰 대상';
+    }
     return ScreenFillScoring.reasonFromRecommendation(framing.recommendation);
+  }
+
+  String? _imagingFillNote(
+    FramingCoverageResult framing, {
+    required bool supportsMosaic,
+  }) {
+    if (framing.recommendation == FramingRecommendation.mosaicRequired) {
+      return supportsMosaic ? '모자이크 권장' : '전체 모습 확인 어려움';
+    }
+    return ScreenFillScoring.imagingFillNote(framing.recommendation);
   }
 
   List<VisualEquipmentRecommendation> _rankVisualEquipment(

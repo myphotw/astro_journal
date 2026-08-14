@@ -2180,6 +2180,7 @@ class _RecommendCompactCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       '필터 ${assessment.filterMode.label} · '
+                      '모자이크 ${assessment.mosaicMode.label} · '
                       '${assessment.quality.starLabel} ${assessment.quality.label}',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
@@ -2472,6 +2473,7 @@ class _RecommendDetailSheet extends StatelessWidget {
                     ),
                     _InfoRow(label: '모드', value: assessment.trackingMode.label),
                     _InfoRow(label: '필터', value: assessment.filterMode.label),
+                    _InfoRow(label: '모자이크', value: assessment.mosaicMode.label),
                     if (recommended.recommendedExposure != null)
                       _InfoRow(
                         label: '추천 촬영',

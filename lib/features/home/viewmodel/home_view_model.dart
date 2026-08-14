@@ -805,6 +805,8 @@ class HomeViewModel extends ChangeNotifier {
       screenFillPercent: best.screenFillPercent,
       equipmentId: best.equipment.id,
       equipmentName: best.equipment.name,
+      framingRecommendation: best.framingRecommendation,
+      supportsMosaic: best.equipment.supportsMosaic,
     );
   }
 

@@ -1,7 +1,9 @@
 import '../core/constants/object_type.dart';
 import '../core/constants/surface_brightness_class.dart';
+import '../data/models/fov_box.dart';
 import '../data/models/imaging_suitability_assessment.dart';
 import '../data/models/object_imaging_profile.dart';
+import 'equipment/fov_framing_engine.dart';
 
 /// Converts the existing exposure/profile/equipment outputs into a conservative
 /// expected-result assessment. It deliberately avoids sensor/QE assumptions.
@@ -21,6 +23,12 @@ class ImagingSuitabilityService {
     double fieldRotationSpanDegrees = 0,
   }) {
     final filterMode = recommendedFilterMode(profile);
+    final framingRecommendation = _framingRecommendation(equipmentFit);
+    final mosaicMode =
+        framingRecommendation == FramingRecommendation.mosaicRequired &&
+            (equipmentFit?.supportsMosaic ?? false)
+        ? MosaicMode.on
+        : MosaicMode.off;
     var qualityLevel = _baseQuality(profile.surfaceBrightnessClass);
 
     final urbanSky = bortle >= 7;
@@ -28,14 +36,16 @@ class ImagingSuitabilityService {
         profile.surfaceBrightnessClass.index >=
         SurfaceBrightnessClass.dim.index;
     final narrowbandRelief =
-        urbanSky && filterMode == FilterMode.on && profile.supportsNarrowband;
+        filterMode == FilterMode.on && profile.supportsNarrowband;
 
     if (urbanSky && lowSurfaceBrightness) {
+      var lightPollutionPenalty = bortle >= 8 ? 2 : 1;
       if (narrowbandRelief) {
-        qualityLevel += 1;
-      } else {
-        qualityLevel -= bortle >= 8 ? 2 : 1;
+        // A filter can recover part of the lost contrast, but it must never
+        // turn light pollution into a benefit over a dark site.
+        lightPollutionPenalty -= 1;
       }
+      qualityLevel -= lightPollutionPenalty.clamp(0, 2);
     } else if (urbanSky && profile.objectType == ObjectType.galaxy) {
       // Even a galaxy with a bright core loses faint outer structure under an
       // urban sky. This is a contrast penalty, not extra exposure credit.
@@ -43,8 +53,17 @@ class ImagingSuitabilityService {
     }
 
     final fitScore = equipmentFit?.score;
+    final screenFillPercent = equipmentFit?.screenFillPercent;
+    final extremelyTiny = screenFillPercent != null && screenFillPercent <= 1;
+    final smallInFrame =
+        screenFillPercent != null &&
+        screenFillPercent > 1 &&
+        screenFillPercent <= 5;
     if (fitScore != null) {
-      if (fitScore < 30) {
+      if (mosaicMode == MosaicMode.on) {
+        // The framing deficit is recoverable, so do not apply the same
+        // oversize penalty as a single-frame-only setup.
+      } else if (fitScore < 30) {
         qualityLevel -= 2;
       } else if (fitScore < 55) {
         qualityLevel -= 1;
@@ -75,11 +94,19 @@ class ImagingSuitabilityService {
 
     final hasReliableSurfaceBrightness =
         profile.estimatedSurfaceBrightness != null;
-    if (!hasReliableSurfaceBrightness) {
-      final hasTypeSpecificRelief =
-          filterMode == FilterMode.on && profile.supportsNarrowband;
-      final confidenceCap = hasTypeSpecificRelief ? 4 : 3;
-      if (qualityLevel > confidenceCap) qualityLevel = confidenceCap;
+    final metadataQualityCap = switch (profile.metadataReliability) {
+      ImagingMetadataReliability.reliable => 5,
+      ImagingMetadataReliability.partial => 3,
+      ImagingMetadataReliability.missing => 2,
+    };
+    if (qualityLevel > metadataQualityCap) {
+      qualityLevel = metadataQualityCap;
+    }
+
+    if (extremelyTiny && qualityLevel > 1) {
+      qualityLevel = 1;
+    } else if (smallInFrame && qualityLevel > 2) {
+      qualityLevel = 2;
     }
 
     qualityLevel = qualityLevel.clamp(1, 5);
@@ -92,21 +119,46 @@ class ImagingSuitabilityService {
       ExpectedResultQuality.detail => 0.95,
       ExpectedResultQuality.excellent => 1.0,
     };
-    if (fitScore != null) {
-      multiplier *= 0.7 + 0.3 * (fitScore.clamp(0, 100) / 100);
-    }
+    final effectiveFitScore = fitScore == null
+        ? null
+        : mosaicMode == MosaicMode.on
+        ? fitScore.clamp(60, 100)
+        : fitScore.clamp(0, 100);
+    final equipmentFactor = effectiveFitScore == null
+        ? 1.0
+        : 0.7 + 0.3 * (effectiveFitScore / 100);
+    final skyFactor = _skyQualityFactor(
+      profile: profile,
+      bortle: bortle,
+      filterMode: filterMode,
+    );
+    final framingFactor = extremelyTiny
+        ? 0.65
+        : smallInFrame
+        ? 0.82
+        : 1.0;
+    final metadataFactor = switch (profile.metadataReliability) {
+      ImagingMetadataReliability.reliable => 1.0,
+      ImagingMetadataReliability.partial => 0.9,
+      ImagingMetadataReliability.missing => 0.75,
+    };
+    multiplier *= equipmentFactor * skyFactor * framingFactor * metadataFactor;
     if (altAzRotationRisk) multiplier *= 0.85;
 
     final suitabilityScore =
         (quality.level *
                 20 *
-                (fitScore == null ? 1 : 0.7 + 0.3 * fitScore / 100))
+                equipmentFactor *
+                skyFactor *
+                framingFactor *
+                metadataFactor)
             .clamp(0, 100)
             .toDouble();
 
     return ImagingSuitabilityAssessment(
       quality: quality,
       filterMode: filterMode,
+      mosaicMode: mosaicMode,
       trackingMode: trackingMode,
       suitabilityScore: suitabilityScore,
       scoreMultiplier: multiplier.clamp(0.2, 1.0).toDouble(),
@@ -114,13 +166,49 @@ class ImagingSuitabilityService {
         profile: profile,
         bortle: bortle,
         filterMode: filterMode,
+        mosaicMode: mosaicMode,
+        framingRecommendation: framingRecommendation,
+        screenFillPercent: screenFillPercent,
         fitScore: fitScore,
         altAzRotationRisk: altAzRotationRisk,
-        hasReliableSurfaceBrightness: hasReliableSurfaceBrightness,
       ),
       hasReliableSurfaceBrightness: hasReliableSurfaceBrightness,
       fieldRotationSpanDegrees: fieldRotationSpanDegrees,
     );
+  }
+
+  FramingRecommendation? _framingRecommendation(
+    ImagingEquipmentFit? equipmentFit,
+  ) {
+    if (equipmentFit == null) return null;
+    return equipmentFit.framingRecommendation ??
+        FovFramingEngine.recommendationFor(
+          equipmentFit.screenFillPercent / 100,
+        );
+  }
+
+  double _skyQualityFactor({
+    required ObjectImagingProfile profile,
+    required int bortle,
+    required FilterMode filterMode,
+  }) {
+    var maximumPenalty = switch (profile.surfaceBrightnessClass) {
+      SurfaceBrightnessClass.extremeDim => 0.24,
+      SurfaceBrightnessClass.veryDim => 0.20,
+      SurfaceBrightnessClass.dim => 0.16,
+      SurfaceBrightnessClass.normal
+          when profile.objectType == ObjectType.galaxy =>
+        0.10,
+      SurfaceBrightnessClass.bright
+          when profile.objectType == ObjectType.galaxy =>
+        0.06,
+      _ => 0.0,
+    };
+    if (filterMode == FilterMode.on && profile.supportsNarrowband) {
+      maximumPenalty *= 0.55;
+    }
+    final pollutionRatio = ((bortle.clamp(1, 9) - 1) / 8).toDouble();
+    return 1 - maximumPenalty * pollutionRatio;
   }
 
   FilterMode recommendedFilterMode(ObjectImagingProfile profile) {
@@ -147,12 +235,29 @@ class ImagingSuitabilityService {
     required ObjectImagingProfile profile,
     required int bortle,
     required FilterMode filterMode,
+    required MosaicMode mosaicMode,
+    required FramingRecommendation? framingRecommendation,
+    required int? screenFillPercent,
     required double? fitScore,
     required bool altAzRotationRisk,
-    required bool hasReliableSurfaceBrightness,
   }) {
-    if (!hasReliableSurfaceBrightness) {
-      return '광도 또는 각크기 정보가 부족해 보수적으로 평가했습니다.';
+    if (profile.metadataReliability == ImagingMetadataReliability.missing) {
+      return '밝기와 크기 정보가 부족해 예상 품질을 보수적으로 제한했습니다.';
+    }
+    if (profile.metadataReliability == ImagingMetadataReliability.partial) {
+      return '밝기 또는 크기 정보가 부족해 예상 품질을 제한했습니다.';
+    }
+    if (screenFillPercent != null && screenFillPercent <= 1) {
+      return '대상이 매우 작아 S30급 화각에서는 세부 표현이 어렵습니다.';
+    }
+    if (screenFillPercent != null && screenFillPercent <= 5) {
+      return '대상이 작아 현재 장비에서는 세부 표현이 제한됩니다.';
+    }
+    if (mosaicMode == MosaicMode.on) {
+      return '단일 화각보다 큰 대상 — 모자이크 촬영을 권장합니다.';
+    }
+    if (framingRecommendation == FramingRecommendation.mosaicRequired) {
+      return '단일 화각보다 크고 현재 장비는 모자이크를 지원하지 않습니다.';
     }
     if (profile.surfaceBrightnessClass.index >=
             SurfaceBrightnessClass.veryDim.index &&

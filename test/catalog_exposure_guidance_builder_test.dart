@@ -48,18 +48,19 @@ void main() {
       expect(guidance.idealEnvironmentLabel, isNull);
     });
 
-    test('not recommended shows a single reason without duplicate summary', () {
+    test('bright metadata-backed galaxy aligns eligibility and quality', () {
       final profile = provider.profileFor(
         object(id: 'm31', type: '은하', magnitude: '3.4'),
       );
       final guidance = builder.build(profile: profile, referenceBortle: 8);
 
-      expect(guidance.feasibility, CatalogExposureFeasibility.notRecommended);
-      expect(guidance.currentExposureLine, isNull);
-      expect(guidance.reason, isNotNull);
-      expect(guidance.reason, isNot(contains('•')));
-      expect(guidance.idealEnvironmentLabel, isNotNull);
-      expect(guidance.idealExposureLine, isNotNull);
+      expect(guidance.feasibility, CatalogExposureFeasibility.recommended);
+      expect(guidance.currentExposureLine, isNotNull);
+      expect(guidance.reason, isNull);
+      expect(
+        guidance.imagingAssessment!.quality.level,
+        greaterThanOrEqualTo(4),
+      );
     });
 
     test('strongly not recommended shows one short reason', () {
