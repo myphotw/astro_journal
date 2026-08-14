@@ -4,23 +4,20 @@
     "number": 1,
     "name": "은하수",
     "commonName": "은하수",
-    "type": "은하",
-    "objectType": "은하",
-    "constellation": "세페우스",
+    "type": "초신성잔해",
+    "objectType": "초신성잔해",
+    "constellation": "황소자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "8.1",
+    "magnitude": "8.40",
     "aliases": [
-      "Milky Way",
-      "은하수 중심",
-      "Galactic Center",
       "Crab Nebula",
       "IRAS 05315+2158",
       "LBN 833"
     ],
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "peakMonth": 7,
-    "description": "세페우스에 위치한 은하. 은하수.",
+    "description": "황소자리에 위치한 초신성잔해. 은하수.",
     "angularSize": "8.00' × 4.00'"
   }
 ]

@@ -2,543 +2,48 @@
   "version": 1,
   "groups": [
     {
-      "canonicalId": "C1",
-      "members": [
-        "C1"
-      ],
-      "commonName": "산개성단"
-    },
-    {
-      "canonicalId": "C10",
-      "members": [
-        "C10"
-      ],
-      "commonName": "산개성단"
-    },
-    {
-      "canonicalId": "C100",
-      "members": [
-        "C100"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C101",
-      "members": [
-        "C101"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C102",
-      "members": [
-        "C102"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C103",
-      "members": [
-        "C103"
-      ],
-      "commonName": "타란툴라 성단"
-    },
-    {
-      "canonicalId": "C104",
-      "members": [
-        "C104"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C105",
-      "members": [
-        "C105"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C106",
-      "members": [
-        "C106"
-      ],
-      "commonName": "47 투카나 성단"
-    },
-    {
-      "canonicalId": "C107",
-      "members": [
-        "C107"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C108",
-      "members": [
-        "C108"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C109",
-      "members": [
-        "C109"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C13",
-      "members": [
-        "C13"
-      ],
-      "commonName": "올빼미 성단"
-    },
-    {
       "canonicalId": "C14",
       "members": [
         "C14"
-      ],
-      "commonName": "이중 성단"
-    },
-    {
-      "canonicalId": "C15",
-      "members": [
-        "C15"
-      ],
-      "commonName": "깜박이는 행성상성운"
-    },
-    {
-      "canonicalId": "C16",
-      "members": [
-        "C16"
-      ],
-      "commonName": "산개성단"
-    },
-    {
-      "canonicalId": "C18",
-      "members": [
-        "C18"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C19",
-      "members": [
-        "C19"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C21",
-      "members": [
-        "C21"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C22",
-      "members": [
-        "C22"
-      ],
-      "commonName": "푸른 눈덩이 성운"
-    },
-    {
-      "canonicalId": "C24",
-      "members": [
-        "C24"
-      ],
-      "commonName": "페르세우스 A"
-    },
-    {
-      "canonicalId": "C28",
-      "members": [
-        "C28"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C29",
-      "members": [
-        "C29"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C35",
-      "members": [
-        "C35"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C36",
-      "members": [
-        "C36"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C39",
-      "members": [
-        "C39"
-      ],
-      "commonName": "에스키모 성운"
-    },
-    {
-      "canonicalId": "C40",
-      "members": [
-        "C40"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "C41",
       "members": [
         "C41"
-      ],
-      "commonName": "유령 행성 성운"
-    },
-    {
-      "canonicalId": "C42",
-      "members": [
-        "C42"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C43",
-      "members": [
-        "C43"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C44",
-      "members": [
-        "C44"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C45",
-      "members": [
-        "C45"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C46",
-      "members": [
-        "C46"
-      ],
-      "commonName": "허블 성운"
-    },
-    {
-      "canonicalId": "C47",
-      "members": [
-        "C47"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C48",
-      "members": [
-        "C48"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C50",
-      "members": [
-        "C50"
-      ],
-      "commonName": "장미 성단"
-    },
-    {
-      "canonicalId": "C52",
-      "members": [
-        "C52"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C54",
-      "members": [
-        "C54"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C55",
-      "members": [
-        "C55"
-      ],
-      "commonName": "토성 성운"
-    },
-    {
-      "canonicalId": "C56",
-      "members": [
-        "C56"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C58",
-      "members": [
-        "C58"
-      ],
-      "commonName": "고리 성운"
-    },
-    {
-      "canonicalId": "C59",
-      "members": [
-        "C59"
-      ],
-      "commonName": "목성 유령 성운"
-    },
-    {
-      "canonicalId": "C6",
-      "members": [
-        "C6"
-      ],
-      "commonName": "고양이 눈 성운"
-    },
-    {
-      "canonicalId": "C60",
-      "members": [
-        "C60"
-      ],
-      "commonName": "안테나 은하"
-    },
-    {
-      "canonicalId": "C61",
-      "members": [
-        "C61"
-      ],
-      "commonName": "안테나 은하"
-    },
-    {
-      "canonicalId": "C62",
-      "members": [
-        "C62"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C64",
-      "members": [
-        "C64"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C66",
-      "members": [
-        "C66"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C67",
-      "members": [
-        "C67"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C69",
-      "members": [
-        "C69"
-      ],
-      "commonName": "벌 성운"
-    },
-    {
-      "canonicalId": "C70",
-      "members": [
-        "C70"
-      ],
-      "commonName": "행성상성운"
-    },
-    {
-      "canonicalId": "C73",
-      "members": [
-        "C73"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C74",
-      "members": [
-        "C74"
-      ],
-      "commonName": "여덟 폭발 성운"
-    },
-    {
-      "canonicalId": "C75",
-      "members": [
-        "C75"
-      ],
-      "commonName": "행성상성운"
-    },
-    {
-      "canonicalId": "C76",
-      "members": [
-        "C76"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C78",
-      "members": [
-        "C78"
-      ],
-      "commonName": "고양이 눈 성운"
-    },
-    {
-      "canonicalId": "C79",
-      "members": [
-        "C79"
-      ],
-      "commonName": "행성상성운"
-    },
-    {
-      "canonicalId": "C8",
-      "members": [
-        "C8"
-      ],
-      "commonName": "산개성단"
-    },
-    {
-      "canonicalId": "C80",
-      "members": [
-        "C80"
-      ],
-      "commonName": "오메가 센타우리"
-    },
-    {
-      "canonicalId": "C83",
-      "members": [
-        "C83"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C84",
-      "members": [
-        "C84"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C86",
-      "members": [
-        "C86"
-      ],
-      "commonName": "구상성단"
-    },
-    {
-      "canonicalId": "C87",
-      "members": [
-        "C87"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C89",
-      "members": [
-        "C89"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "C9",
       "members": [
-        "C9"
+        "C9",
+        "Sh2-155"
       ],
       "commonName": "동굴 성운"
-    },
-    {
-      "canonicalId": "C90",
-      "members": [
-        "C90"
-      ],
-      "commonName": "행성상성운"
-    },
-    {
-      "canonicalId": "C91",
-      "members": [
-        "C91"
-      ],
-      "commonName": "소원 우물 성단"
-    },
-    {
-      "canonicalId": "C93",
-      "members": [
-        "C93"
-      ],
-      "commonName": "구상성단"
-    },
-    {
-      "canonicalId": "C94",
-      "members": [
-        "C94"
-      ],
-      "commonName": "보석 상자 성단"
-    },
-    {
-      "canonicalId": "C95",
-      "members": [
-        "C95"
-      ],
-      "commonName": "은하"
-    },
-    {
-      "canonicalId": "C96",
-      "members": [
-        "C96"
-      ],
-      "commonName": "산개성단"
-    },
-    {
-      "canonicalId": "C97",
-      "members": [
-        "C97"
-      ],
-      "commonName": "산개성단"
-    },
-    {
-      "canonicalId": "C98",
-      "members": [
-        "C98"
-      ],
-      "commonName": "은하"
     },
     {
       "canonicalId": "C99",
       "members": [
         "C99"
-      ],
-      "commonName": "캘리포니아 성운"
+      ]
     },
     {
       "canonicalId": "IC1284",
       "members": [
         "IC1284"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC1287",
       "members": [
         "IC1287"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC1318",
       "members": [
         "IC1318"
-      ],
-      "commonName": "나비 성운"
+      ]
     },
     {
       "canonicalId": "IC1318A",
@@ -578,16 +83,15 @@
     {
       "canonicalId": "IC1613",
       "members": [
-        "IC1613"
-      ],
-      "commonName": "은하"
+        "IC1613",
+        "C51"
+      ]
     },
     {
       "canonicalId": "IC1795",
       "members": [
         "IC1795"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC1805",
@@ -607,48 +111,58 @@
       "canonicalId": "IC1995",
       "members": [
         "IC1995"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC2118",
       "members": [
         "IC2118"
-      ],
-      "commonName": "마녀머리 성운"
+      ]
     },
     {
       "canonicalId": "IC2177",
       "members": [
         "IC2177"
-      ],
-      "commonName": "갈매기 성운"
+      ]
+    },
+    {
+      "canonicalId": "IC2391",
+      "members": [
+        "C85",
+        "IC2391"
+      ]
     },
     {
       "canonicalId": "IC2574",
       "members": [
         "IC2574"
-      ],
-      "commonName": "코딩턴 은하"
+      ]
+    },
+    {
+      "canonicalId": "IC2602",
+      "members": [
+        "C102",
+        "IC2602"
+      ]
     },
     {
       "canonicalId": "IC2872",
       "members": [
         "IC2872"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC2944",
       "members": [
-        "IC2944"
-      ],
-      "commonName": "람다 센타우리 성운"
+        "IC2944",
+        "C100"
+      ]
     },
     {
       "canonicalId": "IC342",
       "members": [
-        "IC342"
+        "IC342",
+        "C5"
       ],
       "commonName": "숨겨진 은하"
     },
@@ -656,20 +170,19 @@
       "canonicalId": "IC353",
       "members": [
         "IC353"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC360",
       "members": [
         "IC360"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC405",
       "members": [
-        "IC405"
+        "IC405",
+        "C31"
       ],
       "commonName": "불꽃별 성운"
     },
@@ -684,15 +197,13 @@
       "canonicalId": "IC417",
       "members": [
         "IC417"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC430",
       "members": [
         "IC430"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC434",
@@ -712,111 +223,91 @@
       "canonicalId": "IC444",
       "members": [
         "IC444"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC447",
       "members": [
         "IC447"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC448",
       "members": [
         "IC448"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC4591",
       "members": [
         "IC4591"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC4592",
       "members": [
         "IC4592"
-      ],
-      "commonName": "파란 말머리 성운"
+      ]
     },
     {
       "canonicalId": "IC4601",
       "members": [
         "IC4601"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC4603",
       "members": [
         "IC4603"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC4604",
       "members": [
         "IC4604"
-      ],
-      "commonName": "로 오피우히 성운"
+      ]
     },
     {
       "canonicalId": "IC4605",
       "members": [
         "IC4605"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC4628",
       "members": [
         "IC4628"
-      ],
-      "commonName": "새우 성운"
+      ]
     },
     {
       "canonicalId": "IC4685",
       "members": [
         "IC4685"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC4701",
       "members": [
         "IC4701"
-      ],
-      "commonName": "발광성운"
-    },
-    {
-      "canonicalId": "IC4895",
-      "members": [
-        "IC4895"
-      ],
-      "commonName": "바너드 은하"
+      ]
     },
     {
       "canonicalId": "IC5068",
       "members": [
         "IC5068"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "IC5070",
       "members": [
         "IC5070"
-      ],
-      "commonName": "펠리컨 성운"
+      ]
     },
     {
       "canonicalId": "IC5146",
       "members": [
-        "IC5146"
+        "IC5146",
+        "C19"
       ],
       "commonName": "고치 성운"
     },
@@ -824,57 +315,84 @@
       "canonicalId": "IC63",
       "members": [
         "IC63"
-      ],
-      "commonName": "발광성운"
+      ]
+    },
+    {
+      "canonicalId": "M42",
+      "members": [
+        "NGC2024"
+      ]
+    },
+    {
+      "canonicalId": "NGC104",
+      "members": [
+        "C106",
+        "NGC104"
+      ]
+    },
+    {
+      "canonicalId": "NGC1097",
+      "members": [
+        "C67",
+        "NGC1097"
+      ]
+    },
+    {
+      "canonicalId": "NGC1261",
+      "members": [
+        "C87",
+        "NGC1261"
+      ]
     },
     {
       "canonicalId": "NGC1269",
       "members": [
         "NGC1269"
-      ],
-      "commonName": "발광성운"
+      ]
+    },
+    {
+      "canonicalId": "NGC1275",
+      "members": [
+        "C24",
+        "NGC1275"
+      ]
     },
     {
       "canonicalId": "NGC1316",
       "members": [
         "NGC1316"
-      ],
-      "commonName": "화로자리 A"
+      ]
     },
     {
       "canonicalId": "NGC1365",
       "members": [
         "NGC1365"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "NGC1432",
       "members": [
         "NGC1432"
-      ],
-      "commonName": "마이아 성운"
+      ]
     },
     {
       "canonicalId": "NGC1435",
       "members": [
         "NGC1435"
-      ],
-      "commonName": "메로페 성운"
+      ]
     },
     {
       "canonicalId": "NGC147",
       "members": [
-        "NGC147"
-      ],
-      "commonName": "은하"
+        "NGC147",
+        "C17"
+      ]
     },
     {
       "canonicalId": "NGC1491",
       "members": [
         "NGC1491"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC1499",
@@ -887,8 +405,7 @@
       "canonicalId": "NGC1532",
       "members": [
         "NGC1532"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "NGC1579",
@@ -901,153 +418,283 @@
       "canonicalId": "NGC1750",
       "members": [
         "NGC1750"
-      ],
-      "commonName": "발광성운"
+      ]
+    },
+    {
+      "canonicalId": "NGC185",
+      "members": [
+        "C18",
+        "NGC185"
+      ]
+    },
+    {
+      "canonicalId": "NGC1851",
+      "members": [
+        "C73",
+        "NGC1851"
+      ]
+    },
+    {
+      "canonicalId": "NGC188",
+      "members": [
+        "C1",
+        "NGC188"
+      ]
     },
     {
       "canonicalId": "NGC1966",
       "members": [
         "NGC1966"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC1975",
       "members": [
         "NGC1975"
-      ],
-      "commonName": "러닝맨 성운"
+      ]
     },
     {
       "canonicalId": "NGC1990",
       "members": [
         "NGC1990"
-      ],
-      "commonName": "알닐람 성운"
+      ]
     },
     {
       "canonicalId": "NGC2052",
       "members": [
         "NGC2052"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC2070",
       "members": [
-        "NGC2070"
-      ],
-      "commonName": "타란툴라 성운"
+        "NGC2070",
+        "C103"
+      ]
     },
     {
       "canonicalId": "NGC2077",
       "members": [
         "NGC2077"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC2175",
       "members": [
         "NGC2175"
       ],
-      "commonName": "발광성운"
+      "commonName": "원숭이 머리 성운"
     },
     {
       "canonicalId": "NGC2237",
       "members": [
-        "NGC2237"
+        "NGC2237",
+        "C49"
       ],
       "commonName": "장미 성운"
     },
     {
+      "canonicalId": "NGC2244",
+      "members": [
+        "C50",
+        "NGC2244"
+      ],
+      "commonName": "장미 성단"
+    },
+    {
+      "canonicalId": "NGC2261",
+      "members": [
+        "C46",
+        "NGC2261"
+      ]
+    },
+    {
+      "canonicalId": "NGC2360",
+      "members": [
+        "C58",
+        "NGC2360"
+      ]
+    },
+    {
+      "canonicalId": "NGC2362",
+      "members": [
+        "C64",
+        "NGC2362"
+      ]
+    },
+    {
+      "canonicalId": "NGC2392",
+      "members": [
+        "C39",
+        "NGC2392"
+      ],
+      "commonName": "에스키모 성운"
+    },
+    {
       "canonicalId": "NGC2403",
       "members": [
-        "NGC2403"
-      ],
-      "commonName": "은하"
+        "NGC2403",
+        "C7"
+      ]
+    },
+    {
+      "canonicalId": "NGC2419",
+      "members": [
+        "C25",
+        "NGC2419"
+      ]
+    },
+    {
+      "canonicalId": "NGC246",
+      "members": [
+        "C56",
+        "NGC246"
+      ]
     },
     {
       "canonicalId": "NGC247",
       "members": [
-        "NGC247"
-      ],
-      "commonName": "은하"
+        "NGC247",
+        "C62"
+      ]
+    },
+    {
+      "canonicalId": "NGC2477",
+      "members": [
+        "C71",
+        "NGC2477"
+      ]
+    },
+    {
+      "canonicalId": "NGC2506",
+      "members": [
+        "C54",
+        "NGC2506"
+      ]
+    },
+    {
+      "canonicalId": "NGC2516",
+      "members": [
+        "C96",
+        "NGC2516"
+      ]
     },
     {
       "canonicalId": "NGC253",
       "members": [
-        "NGC253"
-      ],
-      "commonName": "조각가 은하"
+        "NGC253",
+        "C65"
+      ]
     },
     {
       "canonicalId": "NGC2678",
       "members": [
         "NGC2678"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC2736",
       "members": [
         "NGC2736"
-      ],
-      "commonName": "연필 성운"
+      ]
+    },
+    {
+      "canonicalId": "NGC2775",
+      "members": [
+        "C48",
+        "NGC2775"
+      ]
     },
     {
       "canonicalId": "NGC281",
       "members": [
         "NGC281"
-      ],
-      "commonName": "북미 성운"
+      ]
+    },
+    {
+      "canonicalId": "NGC2867",
+      "members": [
+        "C90",
+        "NGC2867"
+      ]
     },
     {
       "canonicalId": "NGC2903",
       "members": [
         "NGC2903"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "NGC292",
       "members": [
         "NGC292"
-      ],
-      "commonName": "작은 마젤란 은하"
+      ]
     },
     {
       "canonicalId": "NGC300",
       "members": [
-        "NGC300"
-      ],
-      "commonName": "조각가 은하"
+        "NGC300",
+        "C70"
+      ]
     },
     {
       "canonicalId": "NGC3109",
       "members": [
         "NGC3109"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC3115",
+      "members": [
+        "C53",
+        "NGC3115"
+      ]
+    },
+    {
+      "canonicalId": "NGC3132",
+      "members": [
+        "C74",
+        "NGC3132"
+      ]
+    },
+    {
+      "canonicalId": "NGC3195",
+      "members": [
+        "C109",
+        "NGC3195"
+      ]
     },
     {
       "canonicalId": "NGC3199",
       "members": [
         "NGC3199"
-      ],
-      "commonName": "와플 성운"
+      ]
+    },
+    {
+      "canonicalId": "NGC3201",
+      "members": [
+        "C79",
+        "NGC3201"
+      ]
+    },
+    {
+      "canonicalId": "NGC3242",
+      "members": [
+        "C59",
+        "NGC3242"
+      ]
     },
     {
       "canonicalId": "NGC3324",
       "members": [
         "NGC3324"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC3372",
       "members": [
-        "NGC3372"
+        "NGC3372",
+        "C92"
       ],
       "commonName": "에타 카리나 성운"
     },
@@ -1055,155 +702,346 @@
       "canonicalId": "NGC346",
       "members": [
         "NGC346"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC3521",
       "members": [
         "NGC3521"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC3532",
+      "members": [
+        "C91",
+        "NGC3532"
+      ]
     },
     {
       "canonicalId": "NGC3576",
       "members": [
         "NGC3576"
-      ],
-      "commonName": "자유의 여신상 성운"
+      ]
+    },
+    {
+      "canonicalId": "NGC362",
+      "members": [
+        "C104",
+        "NGC362"
+      ]
     },
     {
       "canonicalId": "NGC3621",
       "members": [
         "NGC3621"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC3626",
+      "members": [
+        "C40",
+        "NGC3626"
+      ]
     },
     {
       "canonicalId": "NGC3628",
       "members": [
         "NGC3628"
-      ],
-      "commonName": "팬케이크 은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC3766",
+      "members": [
+        "C97",
+        "NGC3766"
+      ]
+    },
+    {
+      "canonicalId": "NGC40",
+      "members": [
+        "C2",
+        "NGC40"
+      ]
+    },
+    {
+      "canonicalId": "NGC4038",
+      "members": [
+        "C60",
+        "NGC4038"
+      ]
+    },
+    {
+      "canonicalId": "NGC4039",
+      "members": [
+        "C61",
+        "NGC4039"
+      ]
     },
     {
       "canonicalId": "NGC4236",
       "members": [
-        "NGC4236"
-      ],
-      "commonName": "은하"
+        "NGC4236",
+        "C3"
+      ]
     },
     {
       "canonicalId": "NGC4244",
       "members": [
-        "NGC4244"
-      ],
-      "commonName": "은하"
+        "NGC4244",
+        "C26"
+      ]
+    },
+    {
+      "canonicalId": "NGC4372",
+      "members": [
+        "C108",
+        "NGC4372"
+      ]
     },
     {
       "canonicalId": "NGC4395",
       "members": [
         "NGC4395"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "NGC4437",
       "members": [
         "NGC4437"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC4449",
+      "members": [
+        "C21",
+        "NGC4449"
+      ]
     },
     {
       "canonicalId": "NGC4559",
       "members": [
-        "NGC4559"
-      ],
-      "commonName": "은하"
+        "NGC4559",
+        "C36"
+      ]
     },
     {
       "canonicalId": "NGC456",
       "members": [
         "NGC456"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "NGC4565",
       "members": [
-        "NGC4565"
+        "NGC4565",
+        "C38"
       ],
       "commonName": "바늘 은하"
     },
     {
+      "canonicalId": "NGC457",
+      "members": [
+        "C13",
+        "NGC457"
+      ]
+    },
+    {
+      "canonicalId": "NGC4609",
+      "members": [
+        "C98",
+        "NGC4609"
+      ]
+    },
+    {
       "canonicalId": "NGC4631",
       "members": [
-        "NGC4631"
-      ],
-      "commonName": "고래 은하"
+        "NGC4631",
+        "C32"
+      ]
     },
     {
       "canonicalId": "NGC4656",
       "members": [
         "NGC4656"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC4697",
+      "members": [
+        "C52",
+        "NGC4697"
+      ]
     },
     {
       "canonicalId": "NGC4725",
       "members": [
         "NGC4725"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC4755",
+      "members": [
+        "C94",
+        "NGC4755"
+      ]
+    },
+    {
+      "canonicalId": "NGC4833",
+      "members": [
+        "C105",
+        "NGC4833"
+      ]
+    },
+    {
+      "canonicalId": "NGC4889",
+      "members": [
+        "C35",
+        "NGC4889"
+      ]
     },
     {
       "canonicalId": "NGC4945",
       "members": [
-        "NGC4945"
-      ],
-      "commonName": "은하"
+        "NGC4945",
+        "C83"
+      ]
+    },
+    {
+      "canonicalId": "NGC5005",
+      "members": [
+        "C29",
+        "NGC5005"
+      ]
     },
     {
       "canonicalId": "NGC5033",
       "members": [
         "NGC5033"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "NGC5128",
       "members": [
-        "NGC5128"
+        "NGC5128",
+        "C77"
+      ]
+    },
+    {
+      "canonicalId": "NGC5139",
+      "members": [
+        "C80",
+        "NGC5139"
       ],
-      "commonName": "센타우루스 A"
+      "commonName": "오메가 센타우리"
+    },
+    {
+      "canonicalId": "NGC5248",
+      "members": [
+        "C45",
+        "NGC5248"
+      ]
     },
     {
       "canonicalId": "NGC5284",
       "members": [
         "NGC5284"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC5286",
+      "members": [
+        "C84",
+        "NGC5286"
+      ]
     },
     {
       "canonicalId": "NGC55",
       "members": [
-        "NGC55"
-      ],
-      "commonName": "조각가 은하"
+        "NGC55",
+        "C72"
+      ]
+    },
+    {
+      "canonicalId": "NGC559",
+      "members": [
+        "C8",
+        "NGC559"
+      ]
+    },
+    {
+      "canonicalId": "NGC5694",
+      "members": [
+        "C66",
+        "NGC5694"
+      ]
+    },
+    {
+      "canonicalId": "NGC5823",
+      "members": [
+        "C88",
+        "NGC5823"
+      ]
     },
     {
       "canonicalId": "NGC5907",
       "members": [
         "NGC5907"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC6025",
+      "members": [
+        "C95",
+        "NGC6025"
+      ]
+    },
+    {
+      "canonicalId": "NGC6087",
+      "members": [
+        "C89",
+        "NGC6087"
+      ]
+    },
+    {
+      "canonicalId": "NGC6101",
+      "members": [
+        "C107",
+        "NGC6101"
+      ]
+    },
+    {
+      "canonicalId": "NGC6124",
+      "members": [
+        "C75",
+        "NGC6124"
+      ]
     },
     {
       "canonicalId": "NGC6188",
       "members": [
         "NGC6188"
-      ],
-      "commonName": "가장자리 성운"
+      ]
+    },
+    {
+      "canonicalId": "NGC6193",
+      "members": [
+        "C82",
+        "NGC6193"
+      ]
+    },
+    {
+      "canonicalId": "NGC6231",
+      "members": [
+        "C76",
+        "NGC6231"
+      ]
+    },
+    {
+      "canonicalId": "NGC6302",
+      "members": [
+        "C69",
+        "NGC6302"
+      ]
     },
     {
       "canonicalId": "NGC6334",
@@ -1213,6 +1051,13 @@
       "commonName": "고양이 발 성운"
     },
     {
+      "canonicalId": "NGC6352",
+      "members": [
+        "C81",
+        "NGC6352"
+      ]
+    },
+    {
       "canonicalId": "NGC6357",
       "members": [
         "NGC6357"
@@ -1220,309 +1065,424 @@
       "commonName": "전쟁과 평화 성운"
     },
     {
+      "canonicalId": "NGC6397",
+      "members": [
+        "C86",
+        "NGC6397"
+      ]
+    },
+    {
+      "canonicalId": "NGC6541",
+      "members": [
+        "C78",
+        "NGC6541"
+      ]
+    },
+    {
+      "canonicalId": "NGC6543",
+      "members": [
+        "C6",
+        "NGC6543"
+      ],
+      "commonName": "고양이눈 성운"
+    },
+    {
+      "canonicalId": "NGC663",
+      "members": [
+        "C10",
+        "NGC663"
+      ]
+    },
+    {
       "canonicalId": "NGC6729",
       "members": [
-        "NGC6729"
-      ],
-      "commonName": "발광성운"
+        "NGC6729",
+        "C68"
+      ]
     },
     {
       "canonicalId": "NGC6744",
       "members": [
-        "NGC6744"
+        "NGC6744",
+        "C101"
+      ]
+    },
+    {
+      "canonicalId": "NGC6752",
+      "members": [
+        "C93",
+        "NGC6752"
+      ]
+    },
+    {
+      "canonicalId": "NGC6822",
+      "members": [
+        "IC4895",
+        "C57",
+        "NGC6822"
       ],
-      "commonName": "은하"
+      "commonName": "바너드 은하"
+    },
+    {
+      "canonicalId": "NGC6826",
+      "members": [
+        "C15",
+        "NGC6826"
+      ]
+    },
+    {
+      "canonicalId": "NGC6885",
+      "members": [
+        "C37",
+        "NGC6885"
+      ]
     },
     {
       "canonicalId": "NGC6888",
       "members": [
-        "NGC6888"
-      ],
-      "commonName": "초승달 성운"
+        "NGC6888",
+        "C27"
+      ]
+    },
+    {
+      "canonicalId": "NGC6934",
+      "members": [
+        "C47",
+        "NGC6934"
+      ]
     },
     {
       "canonicalId": "NGC6946",
       "members": [
-        "NGC6946"
-      ],
-      "commonName": "불꽃놀이 은하"
+        "NGC6946",
+        "C12"
+      ]
     },
     {
       "canonicalId": "NGC6960",
       "members": [
         "NGC6960",
-        "NGC6992",
-        "NGC6995",
-        "C33",
-        "Sh2-103"
+        "C34"
       ],
-      "commonName": "베일성운"
+      "commonName": "서쪽 베일 성운"
+    },
+    {
+      "canonicalId": "NGC6992",
+      "members": [
+        "NGC6992",
+        "C33"
+      ],
+      "commonName": "동쪽 베일 성운"
+    },
+    {
+      "canonicalId": "NGC6995",
+      "members": [
+        "NGC6995"
+      ],
+      "commonName": "베일 성운"
     },
     {
       "canonicalId": "NGC7000",
       "members": [
-        "NGC7000"
+        "NGC7000",
+        "C20"
       ],
       "commonName": "북아메리카 성운"
     },
     {
+      "canonicalId": "NGC7006",
+      "members": [
+        "C42",
+        "NGC7006"
+      ]
+    },
+    {
+      "canonicalId": "NGC7009",
+      "members": [
+        "C55",
+        "NGC7009"
+      ]
+    },
+    {
       "canonicalId": "NGC7023",
       "members": [
-        "NGC7023"
+        "NGC7023",
+        "C4"
       ],
       "commonName": "붓꽃 성운"
     },
     {
+      "canonicalId": "NGC7243",
+      "members": [
+        "C16",
+        "NGC7243"
+      ]
+    },
+    {
       "canonicalId": "NGC7293",
       "members": [
-        "NGC7293"
+        "NGC7293",
+        "C63"
       ],
       "commonName": "쌍가락지 성운"
     },
     {
       "canonicalId": "NGC7331",
       "members": [
-        "NGC7331"
-      ],
-      "commonName": "은하"
+        "NGC7331",
+        "C30"
+      ]
+    },
+    {
+      "canonicalId": "NGC7479",
+      "members": [
+        "C44",
+        "NGC7479"
+      ]
+    },
+    {
+      "canonicalId": "NGC752",
+      "members": [
+        "C28",
+        "NGC752"
+      ]
     },
     {
       "canonicalId": "NGC7635",
       "members": [
-        "NGC7635"
-      ],
-      "commonName": "거품 성운"
+        "NGC7635",
+        "C11"
+      ]
     },
     {
       "canonicalId": "NGC7640",
       "members": [
         "NGC7640"
-      ],
-      "commonName": "은하"
+      ]
+    },
+    {
+      "canonicalId": "NGC7662",
+      "members": [
+        "C22",
+        "NGC7662"
+      ]
+    },
+    {
+      "canonicalId": "NGC7814",
+      "members": [
+        "C43",
+        "NGC7814"
+      ]
     },
     {
       "canonicalId": "NGC891",
       "members": [
-        "NGC891"
-      ],
-      "commonName": "바늘 은하"
+        "NGC891",
+        "C23"
+      ]
     },
     {
       "canonicalId": "NGC925",
       "members": [
         "NGC925"
-      ],
-      "commonName": "은하"
+      ]
     },
     {
       "canonicalId": "RCW100",
       "members": [
         "RCW100"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "RCW101",
       "members": [
         "RCW101"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "RCW114",
       "members": [
         "RCW114"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "RCW57",
       "members": [
         "RCW57"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "RCW77",
       "members": [
         "RCW77"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "RCW98",
       "members": [
         "RCW98"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "Sh2-1",
       "members": [
         "Sh2-1"
-      ],
-      "commonName": "발광성운"
+      ]
+    },
+    {
+      "canonicalId": "Sh2-103",
+      "members": [
+        "Sh2-103"
+      ]
     },
     {
       "canonicalId": "Sh2-108",
       "members": [
         "Sh2-108"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "Sh2-140",
       "members": [
         "Sh2-140"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "Sh2-142",
       "members": [
         "Sh2-142"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "Sh2-157",
       "members": [
         "Sh2-157"
-      ],
-      "commonName": "랍스터 집게 성운"
+      ]
     },
     {
       "canonicalId": "Sh2-158",
       "members": [
         "Sh2-158"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "Sh2-171",
       "members": [
         "Sh2-171"
-      ],
-      "commonName": "북쪽 삼각형 성운"
+      ]
     },
     {
       "canonicalId": "Sh2-235",
       "members": [
         "Sh2-235"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "Sh2-273",
       "members": [
         "Sh2-273"
       ],
-      "commonName": "발광성운"
+      "commonName": "크리스마스 트리 성운"
     },
     {
       "canonicalId": "Sh2-296",
       "members": [
         "Sh2-296"
       ],
-      "commonName": "발광성운"
+      "commonName": "Seagull's Wings"
     },
     {
       "canonicalId": "Sh2-298",
       "members": [
         "Sh2-298"
-      ],
-      "commonName": "발광성운"
+      ]
     },
     {
       "canonicalId": "Sh2-3",
       "members": [
         "Sh2-3"
       ],
-      "commonName": "발광성운"
+      "commonName": "Green Ring 성운"
     },
     {
       "canonicalId": "Sh2-311",
       "members": [
         "Sh2-311"
       ],
-      "commonName": "발광성운"
+      "commonName": "Skull and Crossbone 성운"
     },
     {
       "canonicalId": "Sh2-54",
       "members": [
         "Sh2-54"
       ],
-      "commonName": "발광성운"
+      "commonName": "Nest 성운"
     },
     {
       "canonicalId": "vdB106",
       "members": [
         "vdB106"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB107",
       "members": [
         "vdB107"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB123",
       "members": [
         "vdB123"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB126",
       "members": [
         "vdB126"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB136",
       "members": [
         "vdB136"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB140",
       "members": [
         "vdB140"
-      ],
-      "commonName": "반사성운"
+      ]
+    },
+    {
+      "canonicalId": "vdB141",
+      "members": [
+        "vdB141"
+      ]
     },
     {
       "canonicalId": "vdB150",
       "members": [
         "vdB150"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB152",
       "members": [
         "vdB152"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB31",
       "members": [
         "vdB31"
-      ],
-      "commonName": "반사성운"
+      ]
     },
     {
       "canonicalId": "vdB38",
       "members": [
         "vdB38"
-      ],
-      "commonName": "반사성운"
+      ]
     }
   ],
   "messierNgc": {
@@ -1554,42 +1514,113 @@
     "884": 34
   },
   "idRemap": {
+    "C1": "NGC188",
+    "C10": "NGC663",
+    "C100": "IC2944",
+    "C101": "NGC6744",
+    "C102": "IC2602",
+    "C103": "NGC2070",
+    "C104": "NGC362",
+    "C105": "NGC4833",
+    "C106": "NGC104",
+    "C107": "NGC6101",
+    "C108": "NGC4372",
+    "C109": "NGC3195",
     "C11": "NGC7635",
     "C12": "NGC6946",
+    "C13": "NGC457",
+    "C15": "NGC6826",
+    "C16": "NGC7243",
     "C17": "NGC147",
-    "C2": "NGC7635",
+    "C18": "NGC185",
+    "C19": "IC5146",
+    "C2": "NGC40",
     "C20": "NGC7000",
+    "C21": "NGC4449",
+    "C22": "NGC7662",
     "C23": "NGC891",
-    "C25": "NGC281",
+    "C24": "NGC1275",
+    "C25": "NGC2419",
     "C26": "NGC4244",
     "C27": "NGC6888",
+    "C28": "NGC752",
+    "C29": "NGC5005",
     "C3": "NGC4236",
     "C30": "NGC7331",
-    "C31": "IC1805",
+    "C31": "IC405",
     "C32": "NGC4631",
     "C33": "NGC6992",
-    "C37": "NGC253",
+    "C34": "NGC6960",
+    "C35": "NGC4889",
+    "C36": "NGC4559",
+    "C37": "NGC6885",
     "C38": "NGC4565",
+    "C39": "NGC2392",
     "C4": "NGC7023",
+    "C40": "NGC3626",
+    "C42": "NGC7006",
+    "C43": "NGC7814",
+    "C44": "NGC7479",
+    "C45": "NGC5248",
+    "C46": "NGC2261",
+    "C47": "NGC6934",
+    "C48": "NGC2775",
     "C49": "NGC2237",
     "C5": "IC342",
+    "C50": "NGC2244",
     "C51": "IC1613",
-    "C53": "NGC253",
-    "C57": "IC4895",
+    "C52": "NGC4697",
+    "C53": "NGC3115",
+    "C54": "NGC2506",
+    "C55": "NGC7009",
+    "C56": "NGC246",
+    "C57": "NGC6822",
+    "C58": "NGC2360",
+    "C59": "NGC3242",
+    "C6": "NGC6543",
+    "C60": "NGC4038",
+    "C61": "NGC4039",
+    "C62": "NGC247",
     "C63": "NGC7293",
+    "C64": "NGC2362",
     "C65": "NGC253",
+    "C66": "NGC5694",
+    "C67": "NGC1097",
     "C68": "NGC6729",
+    "C69": "NGC6302",
     "C7": "NGC2403",
-    "C71": "NGC247",
-    "C72": "NGC1435",
+    "C70": "NGC300",
+    "C71": "NGC2477",
+    "C72": "NGC55",
+    "C73": "NGC1851",
+    "C74": "NGC3132",
+    "C75": "NGC6124",
+    "C76": "NGC6231",
     "C77": "NGC5128",
-    "C81": "NGC3621",
-    "C82": "NGC4631",
-    "C85": "NGC3521",
-    "C88": "NGC55",
+    "C78": "NGC6541",
+    "C79": "NGC3201",
+    "C8": "NGC559",
+    "C80": "NGC5139",
+    "C81": "NGC6352",
+    "C82": "NGC6193",
+    "C83": "NGC4945",
+    "C84": "NGC5286",
+    "C85": "IC2391",
+    "C86": "NGC6397",
+    "C87": "NGC1261",
+    "C88": "NGC5823",
+    "C89": "NGC6087",
+    "C90": "NGC2867",
+    "C91": "NGC3532",
     "C92": "NGC3372",
+    "C93": "NGC6752",
+    "C94": "NGC4755",
+    "C95": "NGC6025",
+    "C96": "NGC2516",
+    "C97": "NGC3766",
+    "C98": "NGC4609",
+    "IC4895": "NGC6822",
     "NGC2024": "M42",
-    "vdB141": "IC434",
-    "Sh2-103": "NGC6995"
+    "Sh2-155": "C9"
   }
 }

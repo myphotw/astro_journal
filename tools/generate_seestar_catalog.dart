@@ -17,13 +17,12 @@ void main() {
   final catalogDir = Directory('${projectRoot.path}/assets/catalog');
   final metadata = _loadExistingMetadata(catalogDir);
   final messierNgc = _buildMessierNgcMap();
-  final caldwellPrimary = _caldwellPrimaryMap();
+  final caldwellPrimary = _loadCaldwellPrimaryMap(projectRoot);
 
   final raw = _seestarRawDesignations();
+  _addAuthoritativePrimaryDesignations(raw, caldwellPrimary);
   final rawFile = File('${catalogDir.path}/seestar_raw.json');
-  rawFile.writeAsStringSync(
-    const JsonEncoder.withIndent('  ').convert(raw),
-  );
+  rawFile.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(raw));
 
   final groups = _buildEquivalenceGroups(
     raw,
@@ -73,7 +72,9 @@ void main() {
       aliases.addAll(_aliasForms(member));
     }
     aliases.remove(canonicalId);
-    aliases.remove(_displayLabel(canonicalCatalog, canonicalNumber, canonicalSuffix));
+    aliases.remove(
+      _displayLabel(canonicalCatalog, canonicalNumber, canonicalSuffix),
+    );
     aliasCount += aliases.length;
 
     if (group.commonName != null && group.commonName!.isNotEmpty) {
@@ -89,7 +90,11 @@ void main() {
       'number': canonicalNumber,
       'catalog': canonicalCatalog,
       ...?(canonicalSuffix == null ? null : {'suffix': canonicalSuffix}),
-      'displayName': _displayLabel(canonicalCatalog, canonicalNumber, canonicalSuffix),
+      'displayName': _displayLabel(
+        canonicalCatalog,
+        canonicalNumber,
+        canonicalSuffix,
+      ),
       'commonName': group.commonName ?? meta.commonName ?? meta.name,
       'name': group.commonName ?? meta.commonName ?? meta.name,
       'objectType': meta.objectType,
@@ -146,21 +151,142 @@ void main() {
 
 List<Map<String, dynamic>> _seestarRawDesignations() {
   const ic = [
-    '63', '342', '353', '360', '405', '410', '417', '430', '434', '443', '444',
-    '447', '448', '1284', '1287', '1318', '1318A', '1318B', '1396', '1396A',
-    '1396B', '1613', '1795', '1805', '1848', '1995', '2118', '2177', '2574',
-    '2872', '2944', '4591', '4592', '4601', '4603', '4604', '4605', '4628',
-    '4685', '4701', '4895', '5068', '5070', '5146',
+    '63',
+    '342',
+    '353',
+    '360',
+    '405',
+    '410',
+    '417',
+    '430',
+    '434',
+    '443',
+    '444',
+    '447',
+    '448',
+    '1284',
+    '1287',
+    '1318',
+    '1318A',
+    '1318B',
+    '1396',
+    '1396A',
+    '1396B',
+    '1613',
+    '1795',
+    '1805',
+    '1848',
+    '1995',
+    '2118',
+    '2177',
+    '2574',
+    '2872',
+    '2944',
+    '4591',
+    '4592',
+    '4601',
+    '4603',
+    '4604',
+    '4605',
+    '4628',
+    '4685',
+    '4701',
+    '4895',
+    '5068',
+    '5070',
+    '5146',
   ];
   const ngc = [
-    55, 147, 247, 253, 281, 292, 300, 346, 456, 891, 925, 1269, 1316, 1365,
-    1432, 1435, 1491, 1499, 1532, 1579, 1750, 1966, 1975, 1990, 2024, 2052,
-    2070, 2077, 2175, 2237, 2403, 2678, 2736, 2903, 3109, 3199, 3324, 3372,
-    3521, 3576, 3621, 3628, 4236, 4244, 4395, 4437, 4559, 4565, 4631, 4656,
-    4725, 4945, 5033, 5128, 5284, 5907, 6188, 6334, 6357, 6729, 6744, 6888,
-    6946, 6960, 6992, 6995, 7000, 7023, 7293, 7331, 7635, 7640,
+    55,
+    147,
+    247,
+    253,
+    281,
+    292,
+    300,
+    346,
+    456,
+    891,
+    925,
+    1269,
+    1316,
+    1365,
+    1432,
+    1435,
+    1491,
+    1499,
+    1532,
+    1579,
+    1750,
+    1966,
+    1975,
+    1990,
+    2024,
+    2052,
+    2070,
+    2077,
+    2175,
+    2237,
+    2403,
+    2678,
+    2736,
+    2903,
+    3109,
+    3199,
+    3324,
+    3372,
+    3521,
+    3576,
+    3621,
+    3628,
+    4236,
+    4244,
+    4395,
+    4437,
+    4559,
+    4565,
+    4631,
+    4656,
+    4725,
+    4945,
+    5033,
+    5128,
+    5284,
+    5907,
+    6188,
+    6334,
+    6357,
+    6729,
+    6744,
+    6888,
+    6946,
+    6960,
+    6992,
+    6995,
+    7000,
+    7023,
+    7293,
+    7331,
+    7635,
+    7640,
   ];
-  const sh2 = [1, 3, 54, 103, 108, 140, 142, 157, 158, 171, 235, 273, 296, 298, 311];
+  const sh2 = [
+    1,
+    3,
+    54,
+    103,
+    108,
+    140,
+    142,
+    157,
+    158,
+    171,
+    235,
+    273,
+    296,
+    298,
+    311,
+  ];
   final caldwell = List.generate(109, (i) => i + 1);
   const rcw = [57, 77, 98, 100, 101, 114];
   const vdb = [31, 38, 106, 107, 123, 126, 136, 140, 141, 150, 152];
@@ -218,10 +344,10 @@ class _Group {
   final String? commonName;
 
   Map<String, dynamic> toJson() => {
-        'canonicalId': canonicalId,
-        'members': members.map(_designationId).toList(),
-        if (commonName != null) 'commonName': commonName,
-      };
+    'canonicalId': canonicalId,
+    'members': members.map(_designationId).toList(),
+    if (commonName != null) 'commonName': commonName,
+  };
 }
 
 List<_Group> _buildEquivalenceGroups(
@@ -292,19 +418,8 @@ List<_Group> _buildEquivalenceGroups(
   }
 
   // Known Sh2 ↔ Caldwell / Veil
-  const extraPairs = [
-    ['Sh2-155', 'C9'],
-    ['IC434', 'vdB141'],
-    ['Sh2-103', 'NGC6995'], // Veil Nebula fragment
-    ['NGC6960', 'NGC6992'], // veil - share search alias only, DO NOT unite
-  ];
-  for (final pair in extraPairs) {
-    if (pair[0] == 'NGC6960') continue;
-    if (designationById.containsKey(pair[0]) &&
-        designationById.containsKey(pair[1])) {
-      unite(pair[0], pair[1]);
-    }
-  }
+  // Alias/common-name similarity is deliberately not an identity edge. All
+  // cross-catalog unions above come from authoritative typed mappings only.
 
   // Force separate IC variants
   for (final token in separateIc) {
@@ -576,118 +691,55 @@ Map<int, int> _buildMessierNgcMap() {
   return pairs;
 }
 
-Map<int, String> _caldwellPrimaryMap() {
-  return {
-    1: 'NGC188',
-    2: 'IC405',
-    3: 'NGC4236',
-    4: 'NGC7023',
-    5: 'IC342',
-    6: 'NGC6543',
-    7: 'NGC2403',
-    8: 'NGC559',
-    9: 'Sh2-155',
-    10: 'NGC663',
-    11: 'NGC7635',
-    12: 'NGC6946',
-    13: 'NGC457',
-    14: 'NGC869',
-    15: 'NGC6826',
-    16: 'NGC7243',
-    17: 'NGC147',
-    18: 'NGC185',
-    19: 'NGC278',
-    20: 'NGC7000',
-    21: 'NGC4449',
-    22: 'NGC6709',
-    23: 'NGC891',
-    24: 'NGC1275',
-    25: 'NGC281',
-    26: 'NGC4244',
-    27: 'NGC6888',
-    28: 'NGC752',
-    29: 'NGC5005',
-    30: 'NGC7331',
-    31: 'IC5146',
-    32: 'NGC4631',
-    33: 'NGC6992',
-    34: 'NGC6960',
-    35: 'NGC4889',
-    36: 'NGC7773',
-    37: 'NGC253',
-    38: 'NGC4565',
-    39: 'NGC2392',
-    40: 'NGC3626',
-    41: 'NGC3242',
-    42: 'NGC7006',
-    43: 'NGC7814',
-    44: 'NGC7479',
-    45: 'NGC5248',
-    46: 'NGC2261',
-    47: 'NGC6818',
-    48: 'NGC2775',
-    49: 'NGC2237',
-    50: 'NGC2244',
-    51: 'IC1613',
-    52: 'NGC4697',
-    53: 'NGC253',
-    54: 'NGC2506',
-    55: 'NGC288',
-    56: 'NGC246',
-    57: 'NGC6822',
-    58: 'NGC2360',
-    59: 'NGC3242',
-    60: 'NGC4038',
-    61: 'NGC1097',
-    62: 'NGC4361',
-    63: 'NGC7293',
-    64: 'NGC6377',
-    65: 'NGC253',
-    66: 'NGC5694',
-    67: 'NGC1097',
-    68: 'NGC6729',
-    69: 'NGC6302',
-    70: 'NGC6210',
-    71: 'NGC247',
-    72: 'NGC1435',
-    73: 'NGC2419',
-    74: 'NGC6139',
-    75: 'NGC3132',
-    76: 'NGC6235',
-    77: 'NGC5128',
-    78: 'NGC6541',
-    79: 'NGC1501',
-    80: 'NGC5139',
-    81: 'NGC3621',
-    82: 'NGC4631',
-    83: 'NGC104',
-    84: 'NGC5286',
-    85: 'NGC3521',
-    86: 'NGC6397',
-    87: 'NGC1261',
-    88: 'NGC55',
-    89: 'NGC1261',
-    90: 'NGC2867',
-    91: 'NGC3532',
-    92: 'NGC3372',
-    93: 'NGC6752',
-    94: 'NGC4755',
-    95: 'NGC6025',
-    96: 'NGC2516',
-    97: 'NGC3766',
-    98: 'NGC4609',
-    99: 'NGC2997',
-    100: 'NGC5897',
-    101: 'NGC4147',
-    102: 'IC2602',
-    103: 'NGC104',
-    104: 'NGC362',
-    105: 'NGC4833',
-    106: 'NGC104',
-    107: 'NGC6101',
-    108: 'NGC4372',
-    109: 'NGC3195',
-  };
+Map<int, String> _loadCaldwellPrimaryMap(Directory projectRoot) {
+  final file = File(
+    '${projectRoot.path}/tools/catalog_data/caldwell_identity.json',
+  );
+  final root = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+  final raw = root['mapping'] as Map<String, dynamic>?;
+  if (raw == null || raw.length != 109) {
+    throw StateError('Caldwell identity mapping must contain C1-C109.');
+  }
+
+  final result = <int, String>{};
+  for (var number = 1; number <= 109; number++) {
+    final value = raw['$number'] as String?;
+    if (value == null || value.trim().isEmpty) {
+      throw StateError('Missing Caldwell identity mapping: C$number');
+    }
+    result[number] = value.trim();
+  }
+  return result;
+}
+
+void _addAuthoritativePrimaryDesignations(
+  List<Map<String, dynamic>> raw,
+  Map<int, String> caldwellPrimary,
+) {
+  final known = raw.map(_designationId).toSet();
+  for (final primaryId in caldwellPrimary.values) {
+    if (known.contains(primaryId)) continue;
+    final designation = _designationFromTypedId(primaryId);
+    if (designation == null) continue;
+    raw.add(designation);
+    known.add(primaryId);
+  }
+}
+
+Map<String, dynamic>? _designationFromTypedId(String id) {
+  final match = RegExp(r'^(NGC|IC)(\d+)([AB])?$').firstMatch(id);
+  if (match != null) {
+    return {
+      'catalog': match.group(1) == 'NGC' ? 'ngc' : 'ic',
+      'number': int.parse(match.group(2)!),
+      if (match.group(3) != null) 'suffix': match.group(3),
+    };
+  }
+  final sh2 = RegExp(r'^Sh2-(\d+)$').firstMatch(id);
+  if (sh2 != null) {
+    return {'catalog': 'sh2', 'number': int.parse(sh2.group(1)!)};
+  }
+  return null;
 }
 
 class _Meta {
@@ -746,7 +798,8 @@ _Meta _resolveMetadata({
 }
 
 String _defaultObjectType(String catalog, int number) {
-  if (catalog == 'caldwell' && {2, 6, 15, 39, 41, 59, 69, 70, 75, 79, 90}.contains(number)) {
+  if (catalog == 'caldwell' &&
+      {2, 6, 15, 39, 41, 59, 69, 70, 75, 79, 90}.contains(number)) {
     return '행성상성운';
   }
   if (catalog == 'caldwell' && {13, 16, 33, 48, 94, 96, 97}.contains(number)) {
@@ -820,7 +873,9 @@ Map<String, String> _loadOpenNgcIcDuplicates() {
     final parts = line.split(';');
     if (parts.length < 2 || parts[1] != 'Dup') continue;
     final icToken = parts[0];
-    final icNum = icToken.replaceFirst('IC', '').replaceFirst(RegExp(r'^0+'), '');
+    final icNum = icToken
+        .replaceFirst('IC', '')
+        .replaceFirst(RegExp(r'^0+'), '');
     final icId = 'IC${icNum.isEmpty ? '0' : icNum}';
     String? ngcNumber;
     for (var i = parts.length - 1; i >= 0; i--) {

@@ -20,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SEED_DB = ROOT / "assets" / "database" / "catalog_seed.db"
 EXTENDED = ROOT / "assets" / "catalog" / "extended_catalogs.json"
+SEESTAR = ROOT / "assets" / "catalog" / "seestar_catalog.json"
 OPENNGC = ROOT / "tools" / "openngc" / "NGC.csv"
 
 sys.path.insert(0, str(ROOT / "tools"))
@@ -262,59 +263,6 @@ def apply_group(
     return hidden
 
 
-def discover_cross_catalog_groups(rows: dict[str, dict]) -> list[dict]:
-    lookup = {norm_ref(object_id): object_id for object_id in rows}
-    edges: dict[str, set[str]] = {}
-    for object_id, row in rows.items():
-        refs = set(parse_json_list(row.get("aliases_json")))
-        refs.update(parse_json_list(row.get("cross_catalog_refs_json")))
-        for ref in refs:
-            target = resolve_ref(ref, lookup)
-            if target and target != object_id:
-                edges.setdefault(object_id, set()).add(target)
-
-    pairs: set[tuple[str, str]] = set()
-    for object_id, targets in edges.items():
-        catalog = rows[object_id]["catalog"]
-        for target in targets:
-            if rows[target]["catalog"] == catalog:
-                continue
-            if object_id not in edges.get(target, set()):
-                continue
-            pairs.add(tuple(sorted((object_id, target))))
-
-    parent = {object_id: object_id for object_id in rows}
-    def find(node: str) -> str:
-        while parent[node] != node:
-            parent[node] = parent[parent[node]]
-            node = parent[node]
-        return node
-
-    def union(a: str, b: str) -> None:
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[rb] = ra
-
-    for a, b in pairs:
-        union(a, b)
-
-    components: dict[str, set[str]] = {}
-    for object_id in rows:
-        components.setdefault(find(object_id), set()).add(object_id)
-
-    groups = []
-    for members in components.values():
-        if len(members) <= 1:
-            continue
-        member_list = sorted(members)
-        groups.append(
-            {
-                "canonicalId": pick_primary_id(member_list, "", rows),
-                "members": member_list,
-                "commonName": best_common_name(member_list, rows),
-            }
-        )
-    return groups
 
 
 def apply_primary_catalog(rows: dict[str, dict]) -> int:
@@ -330,15 +278,6 @@ def apply_primary_catalog(rows: dict[str, dict]) -> int:
 
     for group in json_groups:
         members = [member for member in group.get("members", []) if member in rows]
-        hidden += apply_group(
-            members,
-            rows,
-            canonical_id=group.get("canonicalId"),
-            common_name=group.get("commonName"),
-        )
-
-    for group in discover_cross_catalog_groups(rows):
-        members = [member for member in group["members"] if member in rows]
         hidden += apply_group(
             members,
             rows,
@@ -655,6 +594,57 @@ def extended_to_row(entry: dict) -> dict:
     }
 
 
+def refresh_catalog_owned_metadata(rows: dict[str, dict]) -> dict[str, int]:
+    """Replace generated metadata while preserving all user-owned columns."""
+    objects = json.loads(SEESTAR.read_text(encoding="utf-8-sig"))
+    by_id = {obj["id"]: obj for obj in objects}
+    equivalence = json.loads(EQUIV_PATH.read_text(encoding="utf-8-sig"))
+    groups = equivalence.get("groups", [])
+    group_by_member: dict[str, dict] = {}
+    for group in groups:
+        for member in group.get("members", []):
+            group_by_member[member] = group
+
+    added = 0
+    refreshed = 0
+    for canonical_id, obj in by_id.items():
+        if canonical_id not in rows:
+            rows[canonical_id] = extended_to_row(obj)
+            added += 1
+
+        group = group_by_member.get(canonical_id, {"members": [canonical_id]})
+        members = list(dict.fromkeys(group.get("members", [canonical_id])))
+        aliases = list(obj.get("aliases") or [])
+        aliases.extend(member for member in members if member != canonical_id)
+
+        for member_id in members:
+            row = rows.get(member_id)
+            if row is None:
+                continue
+            row.update(
+                {
+                    "name": obj.get("name") or obj.get("commonName") or canonical_id,
+                    "common_name": obj.get("commonName") or obj.get("name"),
+                    "type": obj.get("objectType") or obj.get("type") or "기타",
+                    "object_type": obj.get("objectType") or obj.get("type") or "기타",
+                    "constellation": obj.get("constellation") or "-",
+                    "ra": obj.get("ra") or "-",
+                    "dec": obj.get("dec") or "-",
+                    "mag": obj.get("magnitude") or "-",
+                    "angular_size": obj.get("angularSize"),
+                    "description": obj.get("description"),
+                    "seestar_supported": 1,
+                    "data_source": "Seestar",
+                    "aliases_json": encode_json_list(sorted(set(aliases))),
+                    "cross_catalog_refs_json": encode_json_list(
+                        sorted(value for value in members if value != member_id)
+                    ),
+                }
+            )
+            refreshed += 1
+    return {"added": added, "refreshed": refreshed}
+
+
 def remap_malformed_rows(rows: dict[str, dict]) -> tuple[int, int]:
     """Normalize catalog typos and drop junk nn rows."""
     remapped = 0
@@ -795,6 +785,9 @@ def main() -> int:
 
     added = add_extended_entries(rows)
     print(f"added extended entries: {added}")
+
+    identity_refresh = refresh_catalog_owned_metadata(rows)
+    print("catalog identity refresh:", identity_refresh)
 
     stats = enrich_all(rows)
     stats["dark_mag_cleanup"] = cleanup_dark_catalog_metadata(rows)

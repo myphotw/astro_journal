@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 
+from catalog_identity import CALDWELL_PRIMARY
+
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG_DIR = ROOT / "assets/catalog"
 SEESTAR_PATH = CATALOG_DIR / "seestar_catalog.json"
@@ -14,7 +16,6 @@ REMAP_PATH = CATALOG_DIR / "id_remap.json"
 EQUIV_PATH = CATALOG_DIR / "catalog_equivalence.json"
 COMMON_NAMES_PATH = CATALOG_DIR / "common_names.json"
 OPENNGC_PATH = ROOT / "tools/openngc/NGC.csv"
-GENERATOR_PATH = ROOT / "tools/generate_seestar_catalog.dart"
 
 # lib/core/constants/catalog_type.dart mergePriority
 PRIORITY = {
@@ -28,32 +29,8 @@ PRIORITY = {
 }
 
 SEPARATE_IDS = {"IC1318A", "IC1318B", "IC1396A", "IC1396B"}
-MANUAL_UNIONS = [
-    ("Sh2-155", "C9"),
-    ("IC434", "vdB141"),
-    ("Sh2-103", "NGC6995"),
-]
-INVALID_REMAPS = {
-    # C14 = 이중 성단 (NGC869), C38 = 바늘 은하 (NGC4565) — 잘못된 병합
-    "C14": "NGC4565",
-    # C34 = 서쪽 베일 (NGC6960), IC1848 = 영혼 성운 — 잘못된 병합
-    "C34": "IC1848",
-}
-
-
 def load_caldwell_primary() -> dict[int, str]:
-    text = GENERATOR_PATH.read_text(encoding="utf-8")
-    match = re.search(
-        r"Map<int, String> _caldwellPrimaryMap\(\) \{\s*return \{([^}]+)\};",
-        text,
-        re.S,
-    )
-    if not match:
-        raise RuntimeError("Could not parse _caldwellPrimaryMap from generator")
-    return {
-        int(num): primary
-        for num, primary in re.findall(r"(\d+):\s*'([^']+)'", match.group(1))
-    }
+    return dict(CALDWELL_PRIMARY)
 
 
 def load_ic_dup_to_ngc() -> dict[str, str]:
@@ -129,10 +106,6 @@ def build_unions(ids: set[str], caldwell: dict[int, str], ic_dup: dict[str, str]
     for obj_id in ids:
         uf.add(obj_id)
 
-    for a, b in MANUAL_UNIONS:
-        if a in ids and b in ids:
-            uf.unite(a, b)
-
     for ic_id, ngc_id in ic_dup.items():
         if ic_id in ids and ngc_id in ids:
             uf.unite(ic_id, ngc_id)
@@ -202,18 +175,11 @@ def main() -> None:
     kept.sort(key=lambda o: o["id"])
     groups.sort(key=lambda g: g["canonicalId"])
 
-    existing_remap = json.loads(REMAP_PATH.read_text(encoding="utf-8-sig"))
-    for member, canonical in INVALID_REMAPS.items():
-        if existing_remap.get(member) == canonical:
-            existing_remap.pop(member, None)
-
-    # Messier 흡수 등 카탈로그에 없는 대상 remapping 유지
-    preserved = {
-        member: canonical
-        for member, canonical in existing_remap.items()
-        if canonical.startswith("M") or member not in ids
-    }
-    id_remap = {**preserved, **id_remap}
+    existing_equiv = json.loads(EQUIV_PATH.read_text(encoding="utf-8-sig"))
+    existing_remap = existing_equiv.get("idRemap", {})
+    # The generator owns cross-catalog identity. This pass may add OpenNGC
+    # duplicate collapses, but it never resurrects stale append-only remaps.
+    id_remap = {**existing_remap, **id_remap}
     id_remap = dict(sorted(id_remap.items()))
 
     SEESTAR_PATH.write_text(
@@ -225,12 +191,15 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    existing_groups = existing_equiv.get("groups", [])
+    group_by_canonical = {g["canonicalId"]: g for g in existing_groups}
+    for group in groups:
+        if len(group.get("members", [])) > 1:
+            group_by_canonical[group["canonicalId"]] = group
     equiv = {
         "version": 1,
-        "groups": groups,
-        "messierNgc": json.loads(EQUIV_PATH.read_text(encoding="utf-8-sig")).get(
-            "messierNgc", {}
-        ),
+        "groups": sorted(group_by_canonical.values(), key=lambda g: g["canonicalId"]),
+        "messierNgc": existing_equiv.get("messierNgc", {}),
         "idRemap": id_remap,
     }
     EQUIV_PATH.write_text(

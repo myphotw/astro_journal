@@ -42,7 +42,9 @@ class CatalogPrimaryCatalogService {
 
       final byId = {
         for (final row in rows)
-          row[DatabaseConstants.colId] as String: Map<String, dynamic>.from(row),
+          row[DatabaseConstants.colId] as String: Map<String, dynamic>.from(
+            row,
+          ),
       };
 
       for (final row in byId.values) {
@@ -52,12 +54,10 @@ class CatalogPrimaryCatalogService {
 
       var hiddenCount = 0;
 
-      final groups = <_EquivalenceGroup>[
-        ...jsonGroups,
-        ..._discoverCrossCatalogGroups(byId),
-      ];
-
-      for (final group in groups) {
+      // Identity comes only from the generated authoritative equivalence
+      // asset. Alias and mutual cross-reference text remain searchable
+      // metadata and are never promoted into identity edges at runtime.
+      for (final group in jsonGroups) {
         hiddenCount += _applyGroup(group, byId);
       }
 
@@ -111,12 +111,12 @@ class CatalogPrimaryCatalogService {
       ),
       ...members.where((id) => id != primaryId),
     });
-    primary[DatabaseConstants.colCrossCatalogRefsJson] =
-        mergedCross.isEmpty ? null : jsonEncode(mergedCross.toList());
+    primary[DatabaseConstants.colCrossCatalogRefsJson] = mergedCross.isEmpty
+        ? null
+        : jsonEncode(mergedCross.toList());
 
     final commonName = TextSanitizer.sanitizeOptional(group.commonName);
-    final primaryCommon =
-        primary[DatabaseConstants.colCommonName] as String?;
+    final primaryCommon = primary[DatabaseConstants.colCommonName] as String?;
     if (commonName != null &&
         _needsBetterCommonName(primaryCommon, primaryId)) {
       primary[DatabaseConstants.colCommonName] = commonName;
@@ -144,111 +144,6 @@ class CatalogPrimaryCatalogService {
     return hidden;
   }
 
-  static List<_EquivalenceGroup> _discoverCrossCatalogGroups(
-    Map<String, Map<String, dynamic>> byId,
-  ) {
-    final lookup = CatalogReferenceResolver.buildLookup(byId.keys);
-    final edges = <String, Set<String>>{};
-
-    for (final entry in byId.entries) {
-      final objectId = entry.key;
-      final row = entry.value;
-      final refs = <String>{
-        ..._parseJsonList(row[DatabaseConstants.colAliasesJson] as String?),
-        ..._parseJsonList(
-          row[DatabaseConstants.colCrossCatalogRefsJson] as String?,
-        ),
-      };
-
-      for (final ref in refs) {
-        final targetId = CatalogReferenceResolver.resolve(ref, lookup);
-        if (targetId == null || targetId == objectId) {
-          continue;
-        }
-        edges.putIfAbsent(objectId, () => <String>{}).add(targetId);
-      }
-    }
-
-    final pairs = <(String, String)>[];
-    for (final entry in edges.entries) {
-      final objectId = entry.key;
-      final source = byId[objectId];
-      if (source == null) {
-        continue;
-      }
-      final catalog = source[DatabaseConstants.colCatalog] as String?;
-      if (catalog == null) {
-        continue;
-      }
-      for (final targetId in entry.value) {
-        final target = byId[targetId];
-        if (target == null) {
-          continue;
-        }
-        final targetCatalog = target[DatabaseConstants.colCatalog] as String?;
-        if (targetCatalog == null || catalog == targetCatalog) {
-          continue;
-        }
-        // 한쪽만 참조하는 경우 edges[targetId]가 없을 수 있다.
-        if (!(edges[targetId]?.contains(objectId) ?? false)) {
-          continue;
-        }
-        final pair = objectId.compareTo(targetId) < 0
-            ? (objectId, targetId)
-            : (targetId, objectId);
-        if (!pairs.contains(pair)) {
-          pairs.add(pair);
-        }
-      }
-    }
-
-    final parent = <String, String>{for (final id in byId.keys) id: id};
-
-    String find(String id) {
-      var current = id;
-      while (parent[current] != current) {
-        parent[current] = parent[parent[current]!]!;
-        current = parent[current]!;
-      }
-      return current;
-    }
-
-    void union(String a, String b) {
-      final rootA = find(a);
-      final rootB = find(b);
-      if (rootA != rootB) {
-        parent[rootB] = rootA;
-      }
-    }
-
-    for (final pair in pairs) {
-      union(pair.$1, pair.$2);
-    }
-
-    final components = <String, Set<String>>{};
-    for (final id in byId.keys) {
-      components.putIfAbsent(find(id), () => <String>{}).add(id);
-    }
-
-    return components.values
-        .where((members) => members.length > 1)
-        .map(
-          (members) {
-            final memberList = members.toList()..sort();
-            return _EquivalenceGroup(
-              canonicalId: _pickPrimaryId(
-                members: memberList,
-                canonicalId: '',
-                byId: byId,
-              ),
-              members: memberList,
-              commonName: _bestCommonName(members, byId),
-            );
-          },
-        )
-        .toList(growable: false);
-  }
-
   static String? _bestCommonName(
     Iterable<String> members,
     Map<String, Map<String, dynamic>> byId,
@@ -259,8 +154,9 @@ class CatalogPrimaryCatalogService {
     for (final memberId in members) {
       final row = byId[memberId];
       if (row == null) continue;
-      final commonName =
-          TextSanitizer.sanitizeOptional(row[DatabaseConstants.colCommonName] as String?);
+      final commonName = TextSanitizer.sanitizeOptional(
+        row[DatabaseConstants.colCommonName] as String?,
+      );
       if (commonName == null || _isGenericLabel(commonName)) {
         continue;
       }
@@ -329,10 +225,10 @@ class CatalogPrimaryCatalogService {
         final rowB = byId[b]!;
         final priA =
             _catalogPriority[rowA[DatabaseConstants.colCatalog] as String] ??
-                50;
+            50;
         final priB =
             _catalogPriority[rowB[DatabaseConstants.colCatalog] as String] ??
-                50;
+            50;
         final priCompare = priA.compareTo(priB);
         if (priCompare != 0) {
           return priCompare;
@@ -345,9 +241,11 @@ class CatalogPrimaryCatalogService {
           return featuredCompare;
         }
 
-        final displayA = rowA[DatabaseConstants.colDisplayPriority] as int? ??
+        final displayA =
+            rowA[DatabaseConstants.colDisplayPriority] as int? ??
             DatabaseConstants.defaultDisplayPriority;
-        final displayB = rowB[DatabaseConstants.colDisplayPriority] as int? ??
+        final displayB =
+            rowB[DatabaseConstants.colDisplayPriority] as int? ??
             DatabaseConstants.defaultDisplayPriority;
         final displayCompare = displayA.compareTo(displayB);
         if (displayCompare != 0) {

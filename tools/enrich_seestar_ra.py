@@ -23,117 +23,10 @@ REFERENCE_FILES = [
 ID_REMAP_PATH = ROOT / "assets/catalog/id_remap.json"
 SIMBAD_TAP = "https://simbad.cds.unistra.fr/simbad/sim-tap/sync"
 
-CALDWELL_NGC: dict[int, int] = {
-    1: 188,
-    2: 7635,
-    3: 4236,
-    4: 7023,
-    5: 342,
-    6: 6543,
-    7: 2403,
-    8: 559,
-    9: 6293,
-    10: 663,
-    11: 7635,
-    12: 6946,
-    13: 457,
-    14: 869,
-    15: 6826,
-    16: 7243,
-    17: 147,
-    18: 185,
-    19: 278,
-    20: 7000,
-    21: 4449,
-    22: 7662,
-    23: 891,
-    24: 1275,
-    25: 281,
-    26: 4244,
-    27: 6888,
-    28: 752,
-    29: 5005,
-    30: 7331,
-    31: 1805,
-    32: 4631,
-    33: 6992,
-    34: 1848,
-    35: 4889,
-    36: 4559,
-    37: 253,
-    38: 4565,
-    39: 2392,
-    40: 3626,
-    41: 3242,
-    42: 7006,
-    43: 7814,
-    44: 7479,
-    45: 5248,
-    46: 2261,
-    47: 6811,
-    48: 2775,
-    49: 2237,
-    50: 2244,
-    51: 2392,
-    52: 4697,
-    53: 253,
-    54: 5595,
-    55: 7009,
-    56: 246,
-    57: 7293,
-    58: 6720,
-    59: 3242,
-    60: 4038,
-    61: 4038,
-    62: 247,
-    63: 7293,
-    64: 2362,
-    65: 253,
-    66: 5694,
-    67: 1097,
-    68: 6729,
-    69: 6302,
-    70: 300,
-    71: 247,
-    72: 1435,
-    73: 1851,
-    74: 3132,
-    75: 6124,
-    76: 6231,
-    77: 5128,
-    78: 6543,
-    79: 6231,
-    80: 5139,
-    81: 3621,
-    82: 4631,
-    83: 4945,
-    84: 5286,
-    85: 3521,
-    86: 6397,
-    87: 6885,
-    88: 5823,
-    89: 6087,
-    90: 2865,
-    91: 3532,
-    92: 3372,
-    93: 6752,
-    94: 4755,
-    95: 6025,
-    96: 3621,
-    97: 246,
-    98: 205,
-    99: 1499,
-    100: 4372,
-    101: 6744,
-    102: 3621,
-    103: 2070,
-    104: 3621,
-    105: 4833,
-    106: 104,
-    107: 6101,
-    108: 4372,
-    109: 3198,
-}
+from catalog_identity import CALDWELL_PRIMARY as CALDWELL_NGC
+
+
+
 
 
 def has_valid_ra(ra: str | None) -> bool:
@@ -195,8 +88,9 @@ def lookup_coords(obj: dict, lookup: dict[str, tuple[str, str]]) -> tuple[str, s
     catalog = obj.get("catalog", "")
     number = obj.get("number")
     if catalog == "caldwell" and number in CALDWELL_NGC:
-        candidates.append(f"NGC{CALDWELL_NGC[number]}")
-        candidates.append(f"NGC {CALDWELL_NGC[number]}")
+        target = CALDWELL_NGC[number]
+        candidates.append(target)
+        candidates.append(re.sub(r"^(NGC|IC)", r"\1 ", target))
     if catalog == "ic":
         base = str(obj.get("id", ""))
         match = re.match(r"(IC\d+)", base, re.IGNORECASE)
@@ -232,7 +126,7 @@ def simbad_id_for_object(obj: dict, id_remap: dict[str, str]) -> list[str]:
     elif catalog == "ic" and number is not None:
         names.append(f"IC {number}")
     elif catalog == "caldwell" and number in CALDWELL_NGC:
-        names.append(f"NGC {CALDWELL_NGC[number]}")
+        names.extend(simbad_id_for_text(CALDWELL_NGC[number]))
     elif catalog == "sh2" and number is not None:
         names.append(f"SH 2-{number}")
         names.append(f"Sh2-{number}")
@@ -257,7 +151,10 @@ def simbad_id_for_text(text: str) -> list[str]:
     if re.fullmatch(r"C\d+", text, re.IGNORECASE):
         number = int(text[1:])
         if number in CALDWELL_NGC:
-            return [f"NGC {CALDWELL_NGC[number]}"]
+            target = CALDWELL_NGC[number]
+            if target.upper() == text.upper():
+                return [text.upper()]
+            return simbad_id_for_text(target)
     if re.fullmatch(r"M\d+", text, re.IGNORECASE):
         return [text.upper()]
     return [text]

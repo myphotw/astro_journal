@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -63,16 +64,16 @@ class CatalogSeedImportService {
 
     sanitized[DatabaseConstants.colSearchKeywords] =
         TextSanitizer.sanitizeSearchKeywords(
-      sanitized[DatabaseConstants.colSearchKeywords] as String?,
-    );
+          sanitized[DatabaseConstants.colSearchKeywords] as String?,
+        );
 
     sanitized[DatabaseConstants.colAliasesJson] = _sanitizeJsonListColumn(
       sanitized[DatabaseConstants.colAliasesJson] as String?,
     );
     sanitized[DatabaseConstants.colCrossCatalogRefsJson] =
         _sanitizeJsonListColumn(
-      sanitized[DatabaseConstants.colCrossCatalogRefsJson] as String?,
-    );
+          sanitized[DatabaseConstants.colCrossCatalogRefsJson] as String?,
+        );
 
     return sanitized;
   }
@@ -165,21 +166,30 @@ class CatalogSeedImportService {
       setIfPresent(column);
     }
 
-    final mergedAliases = _mergeJsonLists(
-      existing[DatabaseConstants.colAliasesJson] as String?,
-      seed[DatabaseConstants.colAliasesJson] as String?,
-    );
-    if (mergedAliases != null) {
-      updates[DatabaseConstants.colAliasesJson] = mergedAliases;
+    void replaceCatalogJsonList(String column) {
+      final existingItems = TextSanitizer.sanitizeList(
+        _parseJsonList(existing[column] as String?),
+      );
+      final incomingItems = TextSanitizer.sanitizeList(
+        _parseJsonList(seed[column] as String?),
+      );
+      final existingValue = existingItems.isEmpty
+          ? null
+          : jsonEncode(existingItems);
+      final incomingValue = incomingItems.isEmpty
+          ? null
+          : jsonEncode(incomingItems);
+      if (existingValue != incomingValue) {
+        updates[column] = incomingValue;
+      }
     }
 
-    final mergedCross = _mergeJsonLists(
-      existing[DatabaseConstants.colCrossCatalogRefsJson] as String?,
-      seed[DatabaseConstants.colCrossCatalogRefsJson] as String?,
-    );
-    if (mergedCross != null) {
-      updates[DatabaseConstants.colCrossCatalogRefsJson] = mergedCross;
-    }
+    // Alias and cross-catalog fields are generated catalog metadata. Replace
+    // them from the authoritative seed so a previously bad alias cannot live
+    // forever through append-only imports. User-owned capture fields are not
+    // part of this update.
+    replaceCatalogJsonList(DatabaseConstants.colAliasesJson);
+    replaceCatalogJsonList(DatabaseConstants.colCrossCatalogRefsJson);
 
     // 시드 재분류가 반영되도록 object_type은 항상 시드 값을 우선한다.
     final objectType = seed[DatabaseConstants.colObjectType] as String?;
@@ -196,28 +206,11 @@ class CatalogSeedImportService {
     return updates;
   }
 
-  static String? _mergeJsonLists(String? existingRaw, String? seedRaw) {
-    final existing = TextSanitizer.sanitizeList(_parseJsonList(existingRaw));
-    final incoming = TextSanitizer.sanitizeList(_parseJsonList(seedRaw));
-    if (incoming.isEmpty) {
-      final sanitizedExisting =
-          existing.isEmpty ? null : jsonEncode(existing);
-      if (sanitizedExisting == existingRaw) {
-        return null;
-      }
-      return sanitizedExisting;
-    }
-
-    final merged = TextSanitizer.sanitizeList([...existing, ...incoming]);
-    if (merged.isEmpty) {
-      return null;
-    }
-    final encoded = jsonEncode(merged);
-    if (encoded == existingRaw) {
-      return null;
-    }
-    return encoded;
-  }
+  @visibleForTesting
+  static Map<String, dynamic> buildMetadataUpdateForTesting(
+    Map<String, dynamic> existing,
+    Map<String, dynamic> seed,
+  ) => _buildMetadataUpdate(existing, seed);
 
   static List<String> _parseJsonList(String? raw) {
     if (raw == null || raw.isEmpty) {

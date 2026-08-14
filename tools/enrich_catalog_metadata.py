@@ -40,48 +40,7 @@ SEASON_BY_MONTH = {
     12: ("겨울", "12~2월"), 1: ("겨울", "12~2월"), 2: ("겨울", "12~2월"),
 }
 
-IAU_TO_KO = {
-    "And": "안드로메다자리", "Ant": "개미자리", "Aps": "파리자리", "Aql": "독수리자리",
-    "Aqr": "물병자리", "Ara": "제단자리", "Ari": "양자리", "Aur": "마차부자리",
-    "Boo": "목동자리", "CMa": "큰개자리", "CMi": "작은개자리", "Cnc": "게자리",
-    "CVn": "사냥개자리", "Cap": "염소자리", "Car": "용골자리", "Cas": "카시오페아자리",
-    "Cen": "센타우루스자리", "Cep": "세페우스자리", "Cet": "고래자리", "Cha": "카멜레온자리",
-    "Cir": "컴퍼스자리", "Col": "비둘기자리", "Com": "머리털자리", "CrA": "남쪽왕관자리",
-    "CrB": "북쪽왕관자리", "Crt": "컵자리", "Cru": "남십자자리", "Crv": "까마귀자리",
-    "Cyg": "백조자리", "Del": "돌고래자리", "Dor": "도라도자리", "Dra": "용자리",
-    "Equ": "승마자리", "Eri": "에리다누스자리", "For": "화로자리", "Gem": "쌍둥이자리",
-    "Gru": "두루미자리", "Her": "헤라클레스자리", "Hor": "시계자리", "Hya": "물뱀자리",
-    "Hyi": "작은바다뱀자리", "Ind": "인디언자리", "Lac": "도마뱀자리", "Leo": "사자자리",
-    "LMi": "작은사자자리", "Lep": "토끼자리", "Lib": "처녀자리", "Lup": "늑대자리",
-    "Lyn": "여우자리", "Lyr": "리라자리", "Men": "탁자자리", "Mic": "현미경자리",
-    "Mon": "외뿔소자리", "Mus": "쥐자리", "Nor": "정사각형자리", "Oct": "남극자리",
-    "Oph": "뱀주인자리", "Ori": "오리온자리", "Pav": "공작자리", "Peg": "페가수스자리",
-    "Per": "페르세우스자리", "Phe": "봉황자리", "Pic": "화가자리", "PsA": "남쪽물고기자리",
-    "Psc": "물고기자리", "Pup": "고물자리", "Pyx": "나침반자리", "Ret": "망원경자리",
-    "Sge": "화살자리", "Sgr": "궁수자리", "Sco": "전갈자리", "Scl": "조각가자리",
-    "Sct": "방패자리", "Ser": "뱀자리", "Sex": "육분의자리", "Tau": "황소자리",
-    "Tel": "망원경자리", "Tri": "삼각자리", "TrA": "남쪽삼각형자리", "Tuc": "큰부리자리",
-    "UMa": "큰곰자리", "UMi": "작은곰자리", "Vel": "돛자리", "Vir": "처녀자리",
-    "Vol": "비행고자리", "Vul": "거문고자리",
-}
-
-CALDWELL_NGC = {
-    1: 188, 2: 7635, 3: 4236, 4: 7023, 5: 342, 6: 6543, 7: 2403, 8: 559, 9: 6293,
-    10: 663, 11: 7635, 12: 6946, 13: 457, 14: 869, 15: 6826, 16: 7243, 17: 147,
-    18: 185, 19: 278, 20: 7000, 21: 4449, 22: 7662, 23: 891, 24: 1275, 25: 281,
-    26: 4244, 27: 6888, 28: 752, 29: 5005, 30: 7331, 31: 1805, 32: 4631, 33: 6992,
-    34: 1848, 35: 4889, 36: 4559, 37: 253, 38: 4565, 39: 2392, 40: 3626, 41: 3242,
-    42: 7006, 43: 7814, 44: 7479, 45: 5248, 46: 2261, 47: 6811, 48: 2775, 49: 2237,
-    50: 2244, 51: 2392, 52: 4697, 53: 253, 54: 5595, 55: 7009, 56: 246, 57: 7293,
-    58: 6720, 59: 3242, 60: 4038, 61: 4038, 62: 247, 63: 7293, 64: 2362, 65: 253,
-    66: 5694, 67: 1097, 68: 6729, 69: 6302, 70: 300, 71: 247, 72: 1435, 73: 1851,
-    74: 3132, 75: 6124, 76: 6231, 77: 5128, 78: 6543, 79: 6231, 80: 5139, 81: 3621,
-    82: 4631, 83: 4945, 84: 5286, 85: 3521, 86: 6397, 87: 6885, 88: 5823, 89: 6087,
-    90: 2865, 91: 3532, 92: 3372, 93: 6752, 94: 4755, 95: 6025, 96: 3621, 97: 246,
-    98: 205, 99: 1499, 100: 4372, 101: 6744, 102: 3621, 103: 2070, 104: 3621,
-    105: 4833, 106: 104, 107: 6101, 108: 4372, 109: 3198,
-}
-
+from catalog_identity import CALDWELL_PRIMARY as CALDWELL_NGC, IAU_TO_KO
 # OpenNGC·로컬 카탈로그에 없는 RCW/vdB/Sh2 별자리·별칭 (SIMBAD·좌표 기준).
 MANUAL_METADATA: dict[str, dict] = {
     "RCW57": {"constellation": "용골자리", "aliases": ["RCW 57"]},
@@ -172,8 +131,26 @@ def parse_openngc_row(row: dict) -> dict:
 
     common_names = split_csv_list(row.get("Common names", ""))
     identifiers = split_csv_list(row.get("Identifiers", ""))
+    object_type = {
+        "G": "은하",
+        "GPair": "은하",
+        "GTrpl": "은하",
+        "GGroup": "은하군",
+        "PN": "행성상성운",
+        "OCl": "산개성단",
+        "GCl": "구상성단",
+        "HII": "발광성운",
+        "EmN": "발광성운",
+        "RfN": "반사성운",
+        "SNR": "초신성잔해",
+        "Cl+N": "성단과 성운",
+    }.get(row.get("Type", "").strip())
     return {
+        "sourceId": row.get("Name", "").strip(),
+        "objectType": object_type,
         "constellation": IAU_TO_KO.get(const, const) if const else None,
+        "ra": row.get("RA", "").strip() or None,
+        "dec": row.get("Dec", "").strip() or None,
         "magnitude": magnitude if magnitude else None,
         "angularSize": angular_size,
         "aliases": common_names + identifiers,
@@ -267,7 +244,7 @@ def lookup_reference(obj: dict, lookup: dict[str, dict]) -> dict | None:
     catalog = obj.get("catalog")
     number = obj.get("number")
     if catalog == "caldwell" and number in CALDWELL_NGC:
-        candidates.append(f"NGC{CALDWELL_NGC[number]}")
+        candidates.append(CALDWELL_NGC[number])
     if catalog == "ic":
         match = re.match(r"(IC\d+)", str(obj.get("id", "")), re.IGNORECASE)
         if match:
@@ -297,7 +274,13 @@ def lookup_openngc(obj: dict, ngc_db, ic_db, messier_db) -> dict | None:
             return ic_db.get(int(match.group(1)[2:]))
         return None
     if catalog == "caldwell" and number in CALDWELL_NGC:
-        return ngc_db.get(CALDWELL_NGC[number])
+        target = CALDWELL_NGC[number]
+        match = re.fullmatch(r"NGC(\d+)", target)
+        if match:
+            return ngc_db.get(int(match.group(1)))
+        match = re.fullmatch(r"IC(\d+)", target)
+        if match:
+            return ic_db.get(int(match.group(1)))
     return None
 
 
@@ -358,16 +341,26 @@ def catalog_id_aliases(obj: dict) -> list[str]:
     return aliases
 
 
-def apply_source(obj: dict, source: dict, *, include_common: bool = True) -> bool:
+def apply_source(
+    obj: dict,
+    source: dict,
+    *,
+    include_common: bool = True,
+    replace_catalog_owned: bool = False,
+) -> bool:
     changed = False
-    if is_missing(obj.get("constellation")) and source.get("constellation"):
+    if (replace_catalog_owned or is_missing(obj.get("constellation"))) and source.get("constellation"):
         obj["constellation"] = source["constellation"]
         changed = True
-    if is_missing(obj.get("magnitude")) and source.get("magnitude"):
+    if (replace_catalog_owned or is_missing(obj.get("magnitude"))) and source.get("magnitude"):
         obj["magnitude"] = source["magnitude"]
         changed = True
-    if is_missing(obj.get("angularSize")) and source.get("angularSize"):
+    if (replace_catalog_owned or is_missing(obj.get("angularSize"))) and source.get("angularSize"):
         obj["angularSize"] = source["angularSize"]
+        changed = True
+    if replace_catalog_owned and source.get("objectType"):
+        obj["objectType"] = source["objectType"]
+        obj["type"] = source["objectType"]
         changed = True
     if include_common and source.get("commonName"):
         cn = source["commonName"]
@@ -377,7 +370,8 @@ def apply_source(obj: dict, source: dict, *, include_common: bool = True) -> boo
                 obj["name"] = cn
             changed = True
     if source.get("aliases"):
-        merged = unique_aliases([*(obj.get("aliases") or []), *source["aliases"]])
+        existing = [] if replace_catalog_owned else list(obj.get("aliases") or [])
+        merged = unique_aliases([*existing, *source["aliases"]])
         if merged != (obj.get("aliases") or []):
             obj["aliases"] = merged
             changed = True
@@ -396,12 +390,17 @@ def enrich_object(
     changed = False
     obj_id = obj.get("id", "")
 
-    for source in (
-        MANUAL_METADATA.get(obj_id),
-        lookup_reference(obj, reference_lookup),
-        lookup_openngc(obj, ngc_db, ic_db, messier_db),
+    openngc_source = lookup_openngc(obj, ngc_db, ic_db, messier_db)
+    for source, replace_catalog_owned in (
+        (openngc_source, True),
+        (lookup_reference(obj, reference_lookup), False),
+        (MANUAL_METADATA.get(obj_id), False),
     ):
-        if source and apply_source(obj, source):
+        if source and apply_source(
+            obj,
+            source,
+            replace_catalog_owned=replace_catalog_owned,
+        ):
             changed = True
 
     if obj_id in common_names:
@@ -411,6 +410,8 @@ def enrich_object(
             obj["name"] = cn
             changed = True
 
+    # Catalog-owned aliases are rebuilt from validated identity sources. This
+    # prevents a stale bad alias from surviving every enrichment run.
     aliases = list(obj.get("aliases") or [])
     aliases.extend(catalog_id_aliases(obj))
     aliases.extend(search_aliases.get(obj_id, []))

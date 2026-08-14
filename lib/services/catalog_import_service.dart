@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../core/constants/database_constants.dart';
 import '../data/database/app_database.dart';
@@ -36,8 +38,9 @@ class CatalogImportService {
   static Future<void> _loadIdRemap() async {
     if (_idRemap != null) return;
     try {
-      final jsonString =
-          await rootBundle.loadString('assets/catalog/id_remap.json');
+      final jsonString = await rootBundle.loadString(
+        'assets/catalog/id_remap.json',
+      );
       final map = jsonDecode(jsonString) as Map<String, dynamic>;
       _idRemap = map.map((k, v) => MapEntry(k, v as String));
     } catch (_) {
@@ -50,6 +53,13 @@ class CatalogImportService {
     final remap = _idRemap ?? {};
     if (remap.isEmpty) return;
 
+    await _remapShootingRecordsInDb(db, remap);
+  }
+
+  static Future<void> _remapShootingRecordsInDb(
+    Database db,
+    Map<String, String> remap,
+  ) async {
     await db.transaction((txn) async {
       for (final entry in remap.entries) {
         await txn.update(
@@ -61,6 +71,12 @@ class CatalogImportService {
       }
     });
   }
+
+  @visibleForTesting
+  static Future<void> remapShootingRecordsForTesting(
+    Database db,
+    Map<String, String> remap,
+  ) => _remapShootingRecordsInDb(db, remap);
 
   static Future<void> _importCatalog() async {
     final db = await AppDatabase.instance;

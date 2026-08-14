@@ -4,21 +4,19 @@
     "number": 1,
     "name": "태양",
     "commonName": "태양",
-    "type": "항성",
-    "objectType": "항성",
-    "constellation": "세페우스",
+    "type": "초신성잔해",
+    "objectType": "초신성잔해",
+    "constellation": "황소자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "-26.7",
+    "magnitude": "8.40",
     "aliases": [
-      "Sun",
-      "Sol",
       "Crab Nebula",
       "IRAS 05315+2158",
       "LBN 833"
     ],
     "bestSeason": "연중 관측",
-    "description": "세페우스에 위치한 항성. 태양.",
+    "description": "황소자리에 위치한 초신성잔해. 태양.",
     "angularSize": "8.00' × 4.00'"
   },
   {
@@ -26,19 +24,17 @@
     "number": 2,
     "name": "달",
     "commonName": "달",
-    "type": "위성",
-    "objectType": "위성",
-    "constellation": "마차부",
+    "type": "구상성단",
+    "objectType": "구상성단",
+    "constellation": "물병자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "-12.7",
+    "magnitude": "6.25",
     "aliases": [
-      "Moon",
-      "Luna",
       "MWSC 3526"
     ],
     "bestSeason": "연중 관측",
-    "description": "마차부에 위치한 위성. 달.",
+    "description": "물병자리에 위치한 구상성단. 달.",
     "angularSize": "8.40'"
   },
   {
@@ -46,18 +42,17 @@
     "number": 3,
     "name": "수성",
     "commonName": "수성",
-    "type": "행성",
-    "objectType": "행성",
-    "constellation": "용",
+    "type": "구상성단",
+    "objectType": "구상성단",
+    "constellation": "사냥개자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "-2.0",
+    "magnitude": "6.39",
     "aliases": [
-      "Mercury",
       "MWSC 2152"
     ],
     "bestSeason": "동·서배 일몰 전후",
-    "description": "용에 위치한 행성. 수성.",
+    "description": "사냥개자리에 위치한 구상성단. 수성.",
     "angularSize": "16.20'"
   },
   {
@@ -65,18 +60,17 @@
     "number": 4,
     "name": "금성",
     "commonName": "금성",
-    "type": "행성",
-    "objectType": "행성",
-    "constellation": "세페우스",
+    "type": "구상성단",
+    "objectType": "구상성단",
+    "constellation": "전갈자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "-4.6",
+    "magnitude": "5.40",
     "aliases": [
-      "Venus",
       "MWSC 2396"
     ],
     "bestSeason": "동·서배 일몰 전후",
-    "description": "세페우스에 위치한 행성. 금성.",
+    "description": "전갈자리에 위치한 구상성단. 금성.",
     "angularSize": "28.20'"
   },
   {
@@ -84,18 +78,17 @@
     "number": 5,
     "name": "화성",
     "commonName": "화성",
-    "type": "행성",
-    "objectType": "행성",
-    "constellation": "기린",
+    "type": "구상성단",
+    "objectType": "구상성단",
+    "constellation": "Se1",
     "ra": "-",
     "dec": "-",
-    "magnitude": "-2.9",
+    "magnitude": "5.95",
     "aliases": [
-      "Mars",
       "MWSC 2286"
     ],
     "bestSeason": "대합(근일) 전후",
-    "description": "기린에 위치한 행성. 화성.",
+    "description": "Se1에 위치한 구상성단. 화성.",
     "angularSize": "15.00'"
   },
   {
@@ -103,19 +96,18 @@
     "number": 6,
     "name": "목성",
     "commonName": "목성",
-    "type": "행성",
-    "objectType": "행성",
-    "constellation": "용",
+    "type": "산개성단",
+    "objectType": "산개성단",
+    "constellation": "전갈자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "-2.9",
+    "magnitude": "4.20",
     "aliases": [
-      "Jupiter",
       "Butterfly Cluster",
       "MWSC 2661"
     ],
     "bestSeason": "대합(근일) 전후",
-    "description": "용에 위치한 행성. 목성.",
+    "description": "전갈자리에 위치한 산개성단. 목성.",
     "angularSize": "15.60'"
   },
   {
@@ -123,19 +115,18 @@
     "number": 7,
     "name": "토성",
     "commonName": "토성",
-    "type": "행성",
-    "objectType": "행성",
-    "constellation": "기린",
+    "type": "산개성단",
+    "objectType": "산개성단",
+    "constellation": "전갈자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "+0.7",
+    "magnitude": "3.30",
     "aliases": [
-      "Saturn",
       "Ptolemy's Cluster",
       "MWSC 2739"
     ],
     "bestSeason": "대합(근일) 전후",
-    "description": "기린에 위치한 행성. 토성.",
+    "description": "전갈자리에 위치한 산개성단. 토성.",
     "angularSize": "22.20'"
   },
   {
@@ -145,17 +136,16 @@
     "commonName": "천왕성",
     "type": "행성",
     "objectType": "행성",
-    "constellation": "카시오페아",
+    "constellation": "궁수자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "+5.7",
+    "magnitude": "5.80",
     "aliases": [
-      "Uranus",
       "Lagoon Nebula",
       "LBN 25"
     ],
     "bestSeason": "대합(근일) 전후",
-    "description": "카시오페아에 위치한 행성. 천왕성.",
+    "description": "궁수자리에 위치한 행성. 천왕성.",
     "angularSize": "45.00' × 30.00'"
   },
   {
@@ -163,18 +153,17 @@
     "number": 9,
     "name": "해왕성",
     "commonName": "해왕성",
-    "type": "행성",
-    "objectType": "행성",
-    "constellation": "세페우스",
+    "type": "구상성단",
+    "objectType": "구상성단",
+    "constellation": "뱀주인자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "+7.8",
+    "magnitude": "8.42",
     "aliases": [
-      "Neptune",
       "MWSC 2567"
     ],
     "bestSeason": "대합(근일) 전후",
-    "description": "세페우스에 위치한 행성. 해왕성.",
+    "description": "뱀주인자리에 위치한 구상성단. 해왕성.",
     "angularSize": "6.90'"
   },
   {
@@ -182,18 +171,17 @@
     "number": 10,
     "name": "명왕성",
     "commonName": "명왕성",
-    "type": "왜소행성",
-    "objectType": "왜소행성",
-    "constellation": "뱀주인",
+    "type": "구상성단",
+    "objectType": "구상성단",
+    "constellation": "뱀주인자리",
     "ra": "-",
     "dec": "-",
-    "magnitude": "+14.4",
+    "magnitude": "4.98",
     "aliases": [
-      "Pluto",
       "MWSC 2498"
     ],
     "bestSeason": "대합(근일) 전후",
-    "description": "뱀주인에 위치한 왜소행성. 명왕성.",
+    "description": "뱀주인자리에 위치한 구상성단. 명왕성.",
     "angularSize": "9.30'"
   }
 ]

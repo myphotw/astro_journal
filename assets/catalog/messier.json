@@ -3,7 +3,7 @@
     "id": "M1",
     "number": 1,
     "name": "게 성운",
-    "type": "성운",
+    "type": "초신성잔해",
     "objectType": "초신성잔해",
     "tags": [
       "초신성잔해"
@@ -11,10 +11,12 @@
     "constellation": "황소자리",
     "ra": "05h 34m",
     "dec": "+22°01'",
-    "magnitude": "8.4",
+    "magnitude": "8.40",
     "commonName": "게 성운",
     "aliases": [
       "Crab Nebula",
+      "IRAS 05315+2158",
+      "LBN 833",
       "Crab"
     ],
     "peakMonth": 12,
@@ -34,13 +36,17 @@
     "constellation": "물병자리",
     "ra": "21h 33m",
     "dec": "-00°49'",
-    "magnitude": "6.5",
+    "magnitude": "6.25",
     "commonName": "구상성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
     "angularSize": "8.40'",
-    "description": "물병자리에 위치한 구상성단.",
+    "description": "물병자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 3526"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 3526"
     ]
   },
@@ -52,13 +58,17 @@
     "constellation": "사냥개자리",
     "ra": "13h 42m",
     "dec": "+28°23'",
-    "magnitude": "6.2",
+    "magnitude": "6.39",
     "commonName": "구상성단",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "16.20'",
-    "description": "사냥개자리에 위치한 구상성단.",
+    "description": "사냥개자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2152"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2152"
     ]
   },
@@ -70,13 +80,17 @@
     "constellation": "전갈자리",
     "ra": "16h 23m",
     "dec": "-26°32'",
-    "magnitude": "5.6",
+    "magnitude": "5.40",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "28.20'",
-    "description": "전갈자리에 위치한 구상성단.",
+    "description": "전갈자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2396"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2396"
     ]
   },
@@ -85,16 +99,20 @@
     "number": 5,
     "name": "구상성단",
     "type": "구상성단",
-    "constellation": "뱀자리",
+    "constellation": "Se1",
     "ra": "15h 18m",
     "dec": "+02°05'",
-    "magnitude": "5.6",
+    "magnitude": "5.95",
     "commonName": "구상성단",
     "peakMonth": 5,
     "bestSeason": "최적 5월 · 봄 (3~5월)",
     "angularSize": "15.00'",
-    "description": "뱀자리에 위치한 구상성단.",
+    "description": "Se1에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2286"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2286"
     ]
   },
@@ -106,10 +124,11 @@
     "constellation": "전갈자리",
     "ra": "17h 40m",
     "dec": "-32°13'",
-    "magnitude": "4.2",
+    "magnitude": "4.20",
     "commonName": "나비 성단",
     "aliases": [
-      "Butterfly Cluster"
+      "Butterfly Cluster",
+      "MWSC 2661"
     ],
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
@@ -117,7 +136,8 @@
     "description": "전갈자리에 위치한 산개성단. 나비 성단.",
     "crossCatalogRefs": [
       "MWSC 2661"
-    ]
+    ],
+    "objectType": "산개성단"
   },
   {
     "id": "M7",
@@ -127,11 +147,12 @@
     "constellation": "전갈자리",
     "ra": "17h 53m",
     "dec": "-34°49'",
-    "magnitude": "3.3",
+    "magnitude": "3.30",
     "commonName": "지대 성단",
     "aliases": [
-      "Ptolemy Cluster",
-      "Ptolemy's Cluster"
+      "Ptolemy's Cluster",
+      "MWSC 2739",
+      "Ptolemy Cluster"
     ],
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
@@ -139,7 +160,8 @@
     "description": "전갈자리에 위치한 산개성단. 지대 성단.",
     "crossCatalogRefs": [
       "MWSC 2739"
-    ]
+    ],
+    "objectType": "산개성단"
   },
   {
     "id": "M8",
@@ -153,10 +175,11 @@
     "constellation": "궁수자리",
     "ra": "18h 03m",
     "dec": "-24°23'",
-    "magnitude": "5.8",
+    "magnitude": "5.80",
     "commonName": "석호 성운",
     "aliases": [
       "Lagoon Nebula",
+      "LBN 25",
       "Lagoon"
     ],
     "peakMonth": 7,
@@ -175,13 +198,17 @@
     "constellation": "뱀주인자리",
     "ra": "17h 19m",
     "dec": "-18°31'",
-    "magnitude": "7.7",
+    "magnitude": "8.42",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "6.90'",
-    "description": "뱀주인자리에 위치한 구상성단.",
+    "description": "뱀주인자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2567"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2567"
     ]
   },
@@ -193,13 +220,17 @@
     "constellation": "뱀주인자리",
     "ra": "16h 57m",
     "dec": "-04°06'",
-    "magnitude": "6.4",
+    "magnitude": "4.98",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "9.30'",
-    "description": "뱀주인자리에 위치한 구상성단.",
+    "description": "뱀주인자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2498"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2498"
     ]
   },
@@ -211,11 +242,12 @@
     "constellation": "방패자리",
     "ra": "19h 51m",
     "dec": "+06°16'",
-    "magnitude": "5.8",
+    "magnitude": "5.80",
     "commonName": "야생오리 성단",
     "aliases": [
+      "Amas de l'Ecu de Sobieski",
       "Wild Duck Cluster",
-      "Amas de l'Ecu de Sobieski"
+      "MWSC 3008"
     ],
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
@@ -223,7 +255,8 @@
     "description": "방패자리에 위치한 산개성단. 야생오리 성단.",
     "crossCatalogRefs": [
       "MWSC 3008"
-    ]
+    ],
+    "objectType": "산개성단"
   },
   {
     "id": "M12",
@@ -233,13 +266,17 @@
     "constellation": "뱀주인자리",
     "ra": "16h 47m",
     "dec": "-01°57'",
-    "magnitude": "6.7",
+    "magnitude": "6.07",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "11.10'",
-    "description": "뱀주인자리에 위치한 구상성단.",
+    "description": "뱀주인자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2464"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2464"
     ]
   },
@@ -251,13 +288,15 @@
     "constellation": "헤라클레스자리",
     "ra": "16h 41m",
     "dec": "+36°28'",
-    "magnitude": "5.8",
+    "magnitude": "5.80",
     "commonName": "허큘리스 성단",
     "aliases": [
+      "Hercules Globular Cluster",
+      "2MASX J16414163+3627407",
+      "MWSC 2445",
       "Great Hercules Cluster",
       "Hercules Globular",
-      "Great Globular Cluster",
-      "Hercules Globular Cluster"
+      "Great Globular Cluster"
     ],
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
@@ -266,7 +305,8 @@
     "crossCatalogRefs": [
       "2MASX J16414163+3627407",
       "MWSC 2445"
-    ]
+    ],
+    "objectType": "구상성단"
   },
   {
     "id": "M14",
@@ -276,13 +316,17 @@
     "constellation": "뱀주인자리",
     "ra": "17h 37m",
     "dec": "-03°15'",
-    "magnitude": "7.6",
+    "magnitude": "5.73",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "9.9'",
-    "description": "뱀주인자리에 위치한 구상성단.",
+    "description": "뱀주인자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2643"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2643"
     ]
   },
@@ -294,13 +338,19 @@
     "constellation": "페가수스자리",
     "ra": "21h 30m",
     "dec": "+12°10'",
-    "magnitude": "6.2",
+    "magnitude": "6.30",
     "commonName": "구상성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
     "angularSize": "11.10'",
-    "description": "페가수스자리에 위치한 구상성단.",
+    "description": "페가수스자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "IRAS 21274+1156",
+      "MWSC 3518",
+      "PN G065.0-27.3"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "IRAS 21274+1156",
       "MWSC 3518",
       "PN G065.0-27.3"
@@ -316,20 +366,22 @@
       "발광성운",
       "산개성단"
     ],
-    "constellation": "뱀자리",
+    "constellation": "Se2",
     "ra": "18h 18m",
     "dec": "-13°47'",
-    "magnitude": "6.0",
+    "magnitude": "6.00",
     "commonName": "이글 성운",
     "aliases": [
       "Eagle Nebula",
+      "LBN 67",
+      "MWSC 2886",
       "Pillars of Creation",
       "Star Queen Nebula"
     ],
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "120.00' × 25.00'",
-    "description": "뱀자리에 위치한 성운+성단. 이글 성운.",
+    "description": "Se2에 위치한 성운+성단. 이글 성운.",
     "crossCatalogRefs": [
       "LBN 67",
       "MWSC 2886"
@@ -347,14 +399,17 @@
     "constellation": "궁수자리",
     "ra": "18h 20m",
     "dec": "-16°11'",
-    "magnitude": "6.0",
+    "magnitude": "7.00",
     "commonName": "오메가 성운",
     "aliases": [
-      "Omega Nebula",
-      "Swan Nebula",
-      "Horseshoe Nebula",
       "Checkmark Nebula",
-      "Lobster Nebula"
+      "Lobster Nebula",
+      "Swan Nebula",
+      "omega Nebula",
+      "LBN 60",
+      "MWSC 2896",
+      "Omega Nebula",
+      "Horseshoe Nebula"
     ],
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
@@ -373,13 +428,17 @@
     "constellation": "궁수자리",
     "ra": "18h 19m",
     "dec": "-17°08'",
-    "magnitude": "6.9",
+    "magnitude": "6.90",
     "commonName": "산개성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "6.00'",
-    "description": "궁수자리에 위치한 산개성단.",
+    "description": "궁수자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 2892"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 2892"
     ]
   },
@@ -391,13 +450,17 @@
     "constellation": "뱀주인자리",
     "ra": "17h 02m",
     "dec": "-26°16'",
-    "magnitude": "6.8",
+    "magnitude": "5.57",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "7.50'",
-    "description": "뱀주인자리에 위치한 구상성단.",
+    "description": "뱀주인자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2519"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2519"
     ]
   },
@@ -414,10 +477,12 @@
     "constellation": "궁수자리",
     "ra": "18h 02m",
     "dec": "-23°02'",
-    "magnitude": "6.3",
+    "magnitude": "8.50",
     "commonName": "삼렬 성운",
     "aliases": [
       "Trifid Nebula",
+      "LBN 27",
+      "MWSC 2789",
       "Trifid"
     ],
     "peakMonth": 7,
@@ -437,13 +502,17 @@
     "constellation": "궁수자리",
     "ra": "18h 04m",
     "dec": "-22°30'",
-    "magnitude": "5.9",
+    "magnitude": "5.90",
     "commonName": "산개성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "6.00'",
-    "description": "궁수자리에 위치한 산개성단.",
+    "description": "궁수자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 2796"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 2796"
     ]
   },
@@ -455,18 +524,20 @@
     "constellation": "궁수자리",
     "ra": "18h 36m",
     "dec": "-23°54'",
-    "magnitude": "5.1",
+    "magnitude": "6.17",
     "commonName": "구상성단",
     "aliases": [
+      "MWSC 2961",
       "Sagittarius Cluster"
     ],
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "12.60'",
-    "description": "궁수자리에 위치한 구상성단.",
+    "description": "궁수자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
       "MWSC 2961"
-    ]
+    ],
+    "objectType": "구상성단"
   },
   {
     "id": "M23",
@@ -476,13 +547,17 @@
     "constellation": "궁수자리",
     "ra": "17h 57m",
     "dec": "-19°01'",
-    "magnitude": "5.5",
+    "magnitude": "5.50",
     "commonName": "산개성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "16.80'",
-    "description": "궁수자리에 위치한 산개성단.",
+    "description": "궁수자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 2757"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 2757"
     ]
   },
@@ -494,12 +569,12 @@
     "constellation": "궁수자리",
     "ra": "18h 16m",
     "dec": "-18°29'",
-    "magnitude": "4.6",
+    "magnitude": "4.50",
     "commonName": "별무리",
     "aliases": [
+      "Small Sgr Star Cloud",
       "Sagittarius Star Cloud",
-      "Delphinus Nebula",
-      "Small Sgr Star Cloud"
+      "Delphinus Nebula"
     ],
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
@@ -514,13 +589,17 @@
     "constellation": "궁수자리",
     "ra": "18h 31m",
     "dec": "-19°15'",
-    "magnitude": "4.6",
+    "magnitude": "4.60",
     "commonName": "산개성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "14.10'",
-    "description": "궁수자리에 위치한 산개성단.",
+    "description": "궁수자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 2940"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 2940"
     ]
   },
@@ -532,13 +611,17 @@
     "constellation": "방패자리",
     "ra": "18h 45m",
     "dec": "-09°24'",
-    "magnitude": "8.0",
+    "magnitude": "8.87",
     "commonName": "산개성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "6.00'",
-    "description": "방패자리에 위치한 산개성단.",
+    "description": "방패자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 2987"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 2987"
     ]
   },
@@ -546,7 +629,7 @@
     "id": "M27",
     "number": 27,
     "name": "아령 성운",
-    "type": "성운",
+    "type": "행성상성운",
     "objectType": "행성상성운",
     "tags": [
       "행성상성운"
@@ -554,10 +637,12 @@
     "constellation": "여우자리",
     "ra": "19h 59m",
     "dec": "+22°43'",
-    "magnitude": "7.4",
+    "magnitude": "7.40",
     "commonName": "아령 성운",
     "aliases": [
       "Dumbbell Nebula",
+      "2MASX J19593637+2243157",
+      "PN G060.8-03.6",
       "Dumbbell"
     ],
     "peakMonth": 7,
@@ -579,13 +664,17 @@
     "constellation": "궁수자리",
     "ra": "18h 24m",
     "dec": "-24°52'",
-    "magnitude": "6.8",
+    "magnitude": "6.90",
     "commonName": "구상성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "5.10'",
-    "description": "궁수자리에 위치한 구상성단.",
+    "description": "궁수자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2908"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2908"
     ]
   },
@@ -597,13 +686,17 @@
     "constellation": "백조자리",
     "ra": "20h 23m",
     "dec": "+38°32'",
-    "magnitude": "6.6",
+    "magnitude": "6.60",
     "commonName": "산개성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
     "angularSize": "3.60'",
-    "description": "백조자리에 위치한 산개성단.",
+    "description": "백조자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 3329"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 3329"
     ]
   },
@@ -615,13 +708,17 @@
     "constellation": "염소자리",
     "ra": "21h 40m",
     "dec": "-23°11'",
-    "magnitude": "7.2",
+    "magnitude": "7.10",
     "commonName": "구상성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
     "angularSize": "9.00'",
-    "description": "염소자리에 위치한 구상성단.",
+    "description": "염소자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 3543"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 3543"
     ]
   },
@@ -633,12 +730,16 @@
     "constellation": "안드로메다자리",
     "ra": "00h 42m",
     "dec": "+41°16'",
-    "magnitude": "3.4",
+    "magnitude": "3.44",
     "commonName": "안드로메다 은하",
     "aliases": [
       "Andromeda Galaxy",
-      "Andromeda",
-      "MCG +07-02-016"
+      "2MASX J00424433+4116074",
+      "IRAS 00400+4059",
+      "MCG +07-02-016",
+      "PGC 002557",
+      "UGC 00454",
+      "Andromeda"
     ],
     "peakMonth": 10,
     "bestSeason": "최적 10월 · 가을 (9~11월)",
@@ -650,7 +751,8 @@
       "IRAS 00400+4059",
       "PGC 002557",
       "UGC 00454"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M32",
@@ -660,49 +762,59 @@
     "constellation": "안드로메다자리",
     "ra": "00h 42m",
     "dec": "+40°52'",
-    "magnitude": "8.1",
+    "magnitude": "8.13",
     "commonName": "안드로메다 위성은하",
     "peakMonth": 10,
     "bestSeason": "최적 10월 · 가을 (9~11월)",
     "angularSize": "7.74' × 4.86'",
     "aliases": [
-      "MCG +07-02-015"
+      "2MASX J00424182+4051546",
+      "IRAS 00399+4035",
+      "MCG +07-02-015",
+      "PGC 002555",
+      "UGC 00452"
     ],
-    "description": "안드로메다자리에 위치한 은하.",
+    "description": "안드로메다자리에 위치한 은하. 안드로메다 위성은하.",
     "crossCatalogRefs": [
       "2MASX J00424182+4051546",
       "IRAS 00399+4035",
       "PGC 002555",
       "UGC 00452"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M33",
     "number": 33,
     "name": "은하",
     "type": "은하",
-    "constellation": "삼각자리",
+    "constellation": "삼각형자리",
     "ra": "01h 33m",
     "dec": "+30°39'",
-    "magnitude": "5.7",
+    "magnitude": "5.79",
     "commonName": "은하",
     "aliases": [
       "Triangulum Galaxy",
-      "Triangulum",
-      "Pinwheel Galaxy",
       "Triangulum Pinwheel",
-      "MCG +05-04-069"
+      "2MASX J01335090+3039357",
+      "IRAS 01310+3024",
+      "MCG +05-04-069",
+      "PGC 005818",
+      "UGC 01117",
+      "Triangulum",
+      "Pinwheel Galaxy"
     ],
     "peakMonth": 10,
     "bestSeason": "최적 10월 · 가을 (9~11월)",
     "angularSize": "62.09' × 36.73'",
-    "description": "삼각자리에 위치한 은하. 은하.",
+    "description": "삼각형자리에 위치한 은하. 은하.",
     "crossCatalogRefs": [
       "2MASX J01335090+3039357",
       "IRAS 01310+3024",
       "PGC 005818",
       "UGC 01117"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M34",
@@ -712,13 +824,17 @@
     "constellation": "페르세우스자리",
     "ra": "02h 42m",
     "dec": "+42°45'",
-    "magnitude": "5.2",
+    "magnitude": "5.20",
     "commonName": "산개성단",
     "peakMonth": 11,
     "bestSeason": "최적 11월 · 가을 (9~11월)",
     "angularSize": "22.50'",
-    "description": "페르세우스자리에 위치한 산개성단.",
+    "description": "페르세우스자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 0223"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 0223"
     ]
   },
@@ -730,13 +846,17 @@
     "constellation": "쌍둥이자리",
     "ra": "06h 08m",
     "dec": "+24°21'",
-    "magnitude": "5.1",
+    "magnitude": "5.10",
     "commonName": "산개성단",
     "peakMonth": 1,
     "bestSeason": "최적 1월 · 겨울 (12~2월)",
     "angularSize": "24.00'",
-    "description": "쌍둥이자리에 위치한 산개성단.",
+    "description": "쌍둥이자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 0754"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 0754"
     ]
   },
@@ -748,13 +868,17 @@
     "constellation": "마차부자리",
     "ra": "05h 36m",
     "dec": "+34°08'",
-    "magnitude": "6.0",
+    "magnitude": "6.00",
     "commonName": "산개성단",
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
     "angularSize": "7.20'",
-    "description": "마차부자리에 위치한 산개성단.",
+    "description": "마차부자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 0594"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 0594"
     ]
   },
@@ -766,13 +890,17 @@
     "constellation": "마차부자리",
     "ra": "05h 52m",
     "dec": "+32°33'",
-    "magnitude": "5.6",
+    "magnitude": "5.60",
     "commonName": "산개성단",
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
     "angularSize": "11.40'",
-    "description": "마차부자리에 위치한 산개성단.",
+    "description": "마차부자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 0689"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 0689"
     ]
   },
@@ -784,13 +912,17 @@
     "constellation": "마차부자리",
     "ra": "05h 28m",
     "dec": "+35°50'",
-    "magnitude": "6.4",
+    "magnitude": "6.40",
     "commonName": "산개성단",
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
     "angularSize": "9.60'",
-    "description": "마차부자리에 위치한 산개성단.",
+    "description": "마차부자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 0557"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 0557"
     ]
   },
@@ -802,13 +934,17 @@
     "constellation": "백조자리",
     "ra": "21h 32m",
     "dec": "+48°26'",
-    "magnitude": "4.6",
+    "magnitude": "4.60",
     "commonName": "산개성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
     "angularSize": "19.50'",
-    "description": "백조자리에 위치한 산개성단.",
+    "description": "백조자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 3521"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 3521"
     ]
   },
@@ -837,13 +973,17 @@
     "constellation": "큰개자리",
     "ra": "06h 46m",
     "dec": "-20°46'",
-    "magnitude": "4.5",
+    "magnitude": "4.50",
     "commonName": "산개성단",
     "peakMonth": 1,
     "bestSeason": "최적 1월 · 겨울 (12~2월)",
     "angularSize": "12.00'",
-    "description": "큰개자리에 위치한 산개성단.",
+    "description": "큰개자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 0978"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 0978"
     ]
   },
@@ -851,25 +991,28 @@
     "id": "M42",
     "number": 42,
     "name": "오리온 성운",
-    "type": "성운",
-    "objectType": "발광성운",
+    "type": "성단과 성운",
+    "objectType": "성단과 성운",
     "tags": [
       "발광성운"
     ],
     "constellation": "오리온자리",
     "ra": "05h 35m",
     "dec": "-05°23'",
-    "magnitude": "4.0",
+    "magnitude": "4.00",
     "commonName": "오리온 성운",
     "aliases": [
+      "Great Orion Nebula",
       "Orion Nebula",
+      "LBN 974",
+      "MWSC 0582",
       "Orion",
-      "Great Orion Nebula"
+      "NGC2024"
     ],
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
     "angularSize": "90.00' × 60.00'",
-    "description": "오리온자리에 위치한 발광성운. 오리온 성운.",
+    "description": "오리온자리에 위치한 성단과 성운. 오리온 성운.",
     "crossCatalogRefs": [
       "NGC 1976",
       "NGC2024",
@@ -881,7 +1024,7 @@
     "id": "M43",
     "number": 43,
     "name": "드 메랑 성운",
-    "type": "성운",
+    "type": "발광성운",
     "objectType": "발광성운",
     "tags": [
       "발광성운"
@@ -889,12 +1032,12 @@
     "constellation": "오리온자리",
     "ra": "05h 35m",
     "dec": "-05°16'",
-    "magnitude": "9.0",
+    "magnitude": "9.00",
     "commonName": "드 메랑 성운",
     "aliases": [
-      "De Mairan Nebula",
       "Mairan's Nebula",
-      "2MASS J05353135-0516026"
+      "2MASS J05353135-0516026",
+      "De Mairan Nebula"
     ],
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
@@ -912,13 +1055,14 @@
     "constellation": "게자리",
     "ra": "08h 40m",
     "dec": "+19°59'",
-    "magnitude": "3.1",
+    "magnitude": "3.10",
     "commonName": "벌집 성단",
     "aliases": [
-      "Beehive Cluster",
-      "Praesepe",
       "Beehive",
-      "Praesepe Cluster"
+      "Praesepe Cluster",
+      "MWSC 1527",
+      "Beehive Cluster",
+      "Praesepe"
     ],
     "peakMonth": 2,
     "bestSeason": "최적 2월 · 겨울 (12~2월)",
@@ -927,7 +1071,8 @@
     "crossCatalogRefs": [
       "M44",
       "MWSC 1527"
-    ]
+    ],
+    "objectType": "산개성단"
   },
   {
     "id": "M45",
@@ -961,13 +1106,17 @@
     "constellation": "고물자리",
     "ra": "07h 41m",
     "dec": "-14°49'",
-    "magnitude": "6.1",
+    "magnitude": "6.10",
     "commonName": "산개성단",
     "peakMonth": 1,
     "bestSeason": "최적 1월 · 겨울 (12~2월)",
     "angularSize": "21.00'",
-    "description": "고물자리에 위치한 산개성단.",
+    "description": "고물자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 1313"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 1313"
     ]
   },
@@ -979,13 +1128,17 @@
     "constellation": "고물자리",
     "ra": "07h 36m",
     "dec": "-14°30'",
-    "magnitude": "4.2",
+    "magnitude": "4.40",
     "commonName": "산개성단",
     "peakMonth": 1,
     "bestSeason": "최적 1월 · 겨울 (12~2월)",
     "angularSize": "19.80'",
-    "description": "고물자리에 위치한 산개성단.",
+    "description": "고물자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 1278"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 1278"
     ]
   },
@@ -994,16 +1147,20 @@
     "number": 48,
     "name": "산개성단",
     "type": "산개성단",
-    "constellation": "바다뱀",
+    "constellation": "바다뱀자리",
     "ra": "08h 13m",
     "dec": "-05°48'",
-    "magnitude": "5.8",
+    "magnitude": "5.80",
     "commonName": "산개성단",
     "peakMonth": 2,
     "bestSeason": "최적 2월 · 겨울 (12~2월)",
     "angularSize": "28.20'",
-    "description": "바다뱀자리에 위치한 산개성단.",
+    "description": "바다뱀자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 1454"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 1454"
     ]
   },
@@ -1015,21 +1172,25 @@
     "constellation": "처녀자리",
     "ra": "12h 29m",
     "dec": "+08°00'",
-    "magnitude": "8.4",
+    "magnitude": "8.28",
     "commonName": "타원은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "10.21' × 8.38'",
     "aliases": [
+      "2MASX J12294679+0800014",
       "MCG +01-32-083",
-      "SDSS J122946.76+080001.7"
+      "PGC 041220",
+      "SDSS J122946.76+080001.7",
+      "UGC 07629"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J12294679+0800014",
       "PGC 041220",
       "UGC 07629"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M50",
@@ -1039,18 +1200,20 @@
     "constellation": "외뿔소자리",
     "ra": "07h 03m",
     "dec": "-08°20'",
-    "magnitude": "5.9",
+    "magnitude": "5.90",
     "commonName": "산개성단",
     "aliases": [
+      "MWSC 1072",
       "Heart-Shaped Cluster"
     ],
     "peakMonth": 1,
     "bestSeason": "최적 1월 · 겨울 (12~2월)",
     "angularSize": "14.10'",
-    "description": "외뿔소자리에 위치한 산개성단.",
+    "description": "외뿔소자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
       "MWSC 1072"
-    ]
+    ],
+    "objectType": "산개성단"
   },
   {
     "id": "M51",
@@ -1060,12 +1223,16 @@
     "constellation": "사냥개자리",
     "ra": "13h 29m",
     "dec": "+47°12'",
-    "magnitude": "8.4",
+    "magnitude": "8.36",
     "commonName": "소용돌이 은하",
     "aliases": [
       "Whirlpool Galaxy",
-      "Whirlpool",
-      "MCG +08-25-012"
+      "2MASX J13295269+4711429",
+      "IRAS 13277+4727",
+      "MCG +08-25-012",
+      "PGC 047404",
+      "UGC 08493",
+      "Whirlpool"
     ],
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
@@ -1077,23 +1244,28 @@
       "IRAS 13277+4727",
       "PGC 047404",
       "UGC 08493"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M52",
     "number": 52,
     "name": "산개성단",
     "type": "산개성단",
-    "constellation": "카시오페아자리",
+    "constellation": "카시오페이아자리",
     "ra": "23h 24m",
     "dec": "+61°35'",
-    "magnitude": "6.9",
+    "magnitude": "6.90",
     "commonName": "산개성단",
     "peakMonth": 9,
     "bestSeason": "최적 9월 · 가을 (9~11월)",
     "angularSize": "9.90'",
-    "description": "카시오페아자리에 위치한 산개성단.",
+    "description": "카시오페이아자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 3725"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 3725"
     ]
   },
@@ -1105,13 +1277,17 @@
     "constellation": "머리털자리",
     "ra": "13h 12m",
     "dec": "+18°10'",
-    "magnitude": "7.6",
+    "magnitude": "7.79",
     "commonName": "구상성단",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "9.00'",
-    "description": "머리털자리에 위치한 구상성단.",
+    "description": "머리털자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2094"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2094"
     ]
   },
@@ -1123,13 +1299,17 @@
     "constellation": "궁수자리",
     "ra": "18h 55m",
     "dec": "-30°29'",
-    "magnitude": "7.6",
+    "magnitude": "7.70",
     "commonName": "구상성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "5.10'",
-    "description": "궁수자리에 위치한 구상성단.",
+    "description": "궁수자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 3023"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 3023"
     ]
   },
@@ -1141,13 +1321,17 @@
     "constellation": "궁수자리",
     "ra": "19h 40m",
     "dec": "-30°58'",
-    "magnitude": "6.3",
+    "magnitude": "6.49",
     "commonName": "구상성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "12.00'",
-    "description": "궁수자리에 위치한 구상성단.",
+    "description": "궁수자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 3150"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 3150"
     ]
   },
@@ -1160,16 +1344,19 @@
     "tags": [
       "구상성단"
     ],
-    "constellation": "리라자리",
+    "constellation": "거문고자리",
     "ra": "19h 16m",
     "dec": "+30°11'",
-    "magnitude": "8.3",
+    "magnitude": "8.40",
     "commonName": "구상성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "5.80'",
-    "description": "리라자리에 위치한 구상성단.",
+    "description": "거문고자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 3077"
+    ],
+    "aliases": [
       "MWSC 3077"
     ]
   },
@@ -1177,7 +1364,7 @@
     "id": "M57",
     "number": 57,
     "name": "고리 성운",
-    "type": "성운",
+    "type": "행성상성운",
     "objectType": "행성상성운",
     "tags": [
       "행성상성운"
@@ -1185,10 +1372,12 @@
     "constellation": "거문고자리",
     "ra": "18h 53m",
     "dec": "+33°02'",
-    "magnitude": "8.8",
+    "magnitude": "8.80",
     "commonName": "고리 성운",
     "aliases": [
       "Ring Nebula",
+      "IRAS 18517+3257",
+      "PN G063.1+13.9",
       "Ring"
     ],
     "peakMonth": 7,
@@ -1208,22 +1397,27 @@
     "constellation": "처녀자리",
     "ra": "12h 37m",
     "dec": "+11°49'",
-    "magnitude": "9.7",
+    "magnitude": "10.30",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "5.01' × 3.84'",
     "aliases": [
+      "2MASX J12374359+1149051",
+      "IRAS 12351+1205",
       "MCG +02-32-160",
-      "SDSS J123743.52+114905.4"
+      "PGC 042168",
+      "SDSS J123743.52+114905.4",
+      "UGC 07796"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12374359+1149051",
       "IRAS 12351+1205",
       "PGC 042168",
       "UGC 07796"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M59",
@@ -1233,21 +1427,25 @@
     "constellation": "처녀자리",
     "ra": "12h 42m",
     "dec": "+11°39'",
-    "magnitude": "9.6",
+    "magnitude": "9.56",
     "commonName": "타원은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "4.55' × 3.21'",
     "aliases": [
+      "2MASX J12420232+1138489",
       "MCG +02-32-183",
-      "SDSS J124202.25+113848.8"
+      "PGC 042628",
+      "SDSS J124202.25+113848.8",
+      "UGC 07858"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J12420232+1138489",
       "PGC 042628",
       "UGC 07858"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M60",
@@ -1257,22 +1455,26 @@
     "constellation": "처녀자리",
     "ra": "12h 43m",
     "dec": "+11°33'",
-    "magnitude": "8.8",
+    "magnitude": "8.79",
     "commonName": "타원은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "6.78' × 5.45'",
     "aliases": [
       "2MASS J12434000+1133099",
+      "2MASX J12434000+1133093",
       "MCG +02-33-002",
-      "SDSS J124339.97+113309.7"
+      "PGC 042831",
+      "SDSS J124339.97+113309.7",
+      "UGC 07898"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J12434000+1133093",
       "PGC 042831",
       "UGC 07898"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M61",
@@ -1282,22 +1484,27 @@
     "constellation": "처녀자리",
     "ra": "12h 21m",
     "dec": "+04°28'",
-    "magnitude": "9.7",
+    "magnitude": "10.25",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "6.89' × 6.56'",
     "aliases": [
+      "2MASX J12215494+0428249",
+      "IRAS 12194+0444",
       "MCG +01-32-022",
-      "SDSS J122154.92+042825.6"
+      "PGC 040001",
+      "SDSS J122154.92+042825.6",
+      "UGC 07420"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12215494+0428249",
       "IRAS 12194+0444",
       "PGC 040001",
       "UGC 07420"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M62",
@@ -1307,13 +1514,17 @@
     "constellation": "뱀주인자리",
     "ra": "17h 01m",
     "dec": "-30°07'",
-    "magnitude": "6.5",
+    "magnitude": "7.39",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "7.80'",
-    "description": "뱀주인자리에 위치한 구상성단.",
+    "description": "뱀주인자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2512"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2512"
     ]
   },
@@ -1325,12 +1536,16 @@
     "constellation": "사냥개자리",
     "ra": "13h 15m",
     "dec": "+42°02'",
-    "magnitude": "8.6",
+    "magnitude": "8.61",
     "commonName": "해바라기 은하",
     "aliases": [
       "Sunflower Galaxy",
+      "2MASX J13154932+4201454",
+      "IRAS 13135+4217",
       "MCG +07-27-054",
-      "SDSS J131549.26+420145.8"
+      "PGC 046153",
+      "SDSS J131549.26+420145.8",
+      "UGC 08334"
     ],
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
@@ -1341,7 +1556,8 @@
       "IRAS 13135+4217",
       "PGC 046153",
       "UGC 08334"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M64",
@@ -1351,13 +1567,17 @@
     "constellation": "머리털자리",
     "ra": "12h 56m",
     "dec": "+21°41'",
-    "magnitude": "8.5",
+    "magnitude": "8.52",
     "commonName": "검은 눈 은하",
     "aliases": [
       "Black Eye Galaxy",
-      "Sleeping Beauty Galaxy",
       "Evil Eye Galaxy",
-      "MCG +04-31-001"
+      "2MASX J12564369+2140575",
+      "IRAS 12542+2157",
+      "MCG +04-31-001",
+      "PGC 044182",
+      "UGC 08062",
+      "Sleeping Beauty Galaxy"
     ],
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
@@ -1368,7 +1588,8 @@
       "IRAS 12542+2157",
       "PGC 044182",
       "UGC 08062"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M65",
@@ -1378,21 +1599,26 @@
     "constellation": "사자자리",
     "ra": "11h 18m",
     "dec": "+13°05'",
-    "magnitude": "9.3",
+    "magnitude": "9.32",
     "commonName": "나선은하",
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
     "angularSize": "7.64' × 1.97'",
     "aliases": [
-      "MCG +02-29-018"
+      "2MASX J11185595+1305319",
+      "IRAS 11163+1322",
+      "MCG +02-29-018",
+      "PGC 034612",
+      "UGC 06328"
     ],
-    "description": "사자자리에 위치한 은하.",
+    "description": "사자자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J11185595+1305319",
       "IRAS 11163+1322",
       "PGC 034612",
       "UGC 06328"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M66",
@@ -1402,22 +1628,27 @@
     "constellation": "사자자리",
     "ra": "11h 20m",
     "dec": "+12°59'",
-    "magnitude": "8.9",
+    "magnitude": "8.92",
     "commonName": "나선은하",
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
     "angularSize": "10.28' × 4.61'",
     "aliases": [
+      "2MASX J11201502+1259286",
+      "IRAS 11176+1315",
       "MCG +02-29-019",
-      "SDSS J112014.98+125929.4"
+      "PGC 034695",
+      "SDSS J112014.98+125929.4",
+      "UGC 06346"
     ],
-    "description": "사자자리에 위치한 은하.",
+    "description": "사자자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J11201502+1259286",
       "IRAS 11176+1315",
       "PGC 034695",
       "UGC 06346"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M67",
@@ -1427,13 +1658,17 @@
     "constellation": "게자리",
     "ra": "08h 50m",
     "dec": "+11°49'",
-    "magnitude": "6.1",
+    "magnitude": "6.90",
     "commonName": "산개성단",
     "peakMonth": 2,
     "bestSeason": "최적 2월 · 겨울 (12~2월)",
     "angularSize": "33.00'",
-    "description": "게자리에 위치한 산개성단.",
+    "description": "게자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 1585"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 1585"
     ]
   },
@@ -1442,16 +1677,20 @@
     "number": 68,
     "name": "구상성단",
     "type": "구상성단",
-    "constellation": "바다뱀",
+    "constellation": "바다뱀자리",
     "ra": "12h 39m",
     "dec": "-26°45'",
-    "magnitude": "7.3",
+    "magnitude": "7.96",
     "commonName": "구상성단",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "6.60'",
-    "description": "바다뱀자리에 위치한 구상성단.",
+    "description": "바다뱀자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2059"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2059"
     ]
   },
@@ -1463,13 +1702,17 @@
     "constellation": "궁수자리",
     "ra": "18h 31m",
     "dec": "-32°21'",
-    "magnitude": "7.6",
+    "magnitude": "8.31",
     "commonName": "구상성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "5.70'",
-    "description": "궁수자리에 위치한 구상성단.",
+    "description": "궁수자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2936"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2936"
     ]
   },
@@ -1481,13 +1724,17 @@
     "constellation": "궁수자리",
     "ra": "18h 43m",
     "dec": "-32°18'",
-    "magnitude": "7.9",
+    "magnitude": "9.06",
     "commonName": "구상성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "6.60'",
-    "description": "궁수자리에 위치한 구상성단.",
+    "description": "궁수자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2981"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2981"
     ]
   },
@@ -1499,13 +1746,17 @@
     "constellation": "화살자리",
     "ra": "19h 53m",
     "dec": "+18°47'",
-    "magnitude": "8.2",
+    "magnitude": "6.10",
     "commonName": "구상성단",
     "peakMonth": 7,
     "bestSeason": "최적 7월 · 여름 (6~8월)",
     "angularSize": "6.90'",
-    "description": "화살자리에 위치한 구상성단.",
+    "description": "화살자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 3200"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 3200"
     ]
   },
@@ -1517,13 +1768,17 @@
     "constellation": "물병자리",
     "ra": "20h 53m",
     "dec": "-12°32'",
-    "magnitude": "9.3",
+    "magnitude": "8.96",
     "commonName": "구상성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
     "angularSize": "4.50'",
-    "description": "물병자리에 위치한 구상성단.",
+    "description": "물병자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 3419"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 3419"
     ]
   },
@@ -1535,12 +1790,16 @@
     "constellation": "물병자리",
     "ra": "20h 59m",
     "dec": "-12°38'",
-    "magnitude": "9.0",
+    "magnitude": "8.90",
     "commonName": "산개성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
-    "description": "물병자리에 위치한 산개성단.",
+    "description": "물병자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "NGC 6994",
+      "NGC6994"
+    ],
+    "aliases": [
       "NGC 6994",
       "NGC6994"
     ]
@@ -1553,22 +1812,27 @@
     "constellation": "물고기자리",
     "ra": "01h 36m",
     "dec": "+15°47'",
-    "magnitude": "9.4",
+    "magnitude": "9.31",
     "commonName": "나선은하",
     "aliases": [
-      "Phantom Galaxy",
-      "MCG +03-05-011"
+      "2MASX J01364177+1547004",
+      "IRAS 01340+1532",
+      "MCG +03-05-011",
+      "PGC 005974",
+      "UGC 01149",
+      "Phantom Galaxy"
     ],
     "peakMonth": 10,
     "bestSeason": "최적 10월 · 가을 (9~11월)",
     "angularSize": "9.89' × 9.33'",
-    "description": "물고기자리에 위치한 은하.",
+    "description": "물고기자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J01364177+1547004",
       "IRAS 01340+1532",
       "PGC 005974",
       "UGC 01149"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M75",
@@ -1578,13 +1842,18 @@
     "constellation": "궁수자리",
     "ra": "20h 06m",
     "dec": "-21°55'",
-    "magnitude": "7.5",
+    "magnitude": "8.26",
     "commonName": "구상성단",
     "peakMonth": 8,
     "bestSeason": "최적 8월 · 여름 (6~8월)",
     "angularSize": "3.60'",
-    "description": "궁수자리에 위치한 구상성단.",
+    "description": "궁수자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "2MASX J20060484-2155201",
+      "MWSC 3254"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "2MASX J20060484-2155201",
       "MWSC 3254"
     ]
@@ -1593,7 +1862,7 @@
     "id": "M76",
     "number": 76,
     "name": "작은 아령 성운",
-    "type": "성운",
+    "type": "행성상성운",
     "objectType": "행성상성운",
     "tags": [
       "행성상성운"
@@ -1601,13 +1870,16 @@
     "constellation": "페르세우스자리",
     "ra": "01h 42m",
     "dec": "+51°34'",
-    "magnitude": "10.1",
+    "magnitude": "10.10",
     "commonName": "작은 아령 성운",
     "aliases": [
-      "Little Dumbbell Nebula",
+      "Barbell Nebula",
       "Cork Nebula",
-      "Butterfly Nebula",
-      "Barbell Nebula"
+      "Little Dumbbell Nebula",
+      "2MASX J01421808+5134243",
+      "IRAS 01391+5119",
+      "PN G130.9-10.5",
+      "Butterfly Nebula"
     ],
     "peakMonth": 10,
     "bestSeason": "최적 10월 · 가을 (9~11월)",
@@ -1627,27 +1899,32 @@
     "constellation": "고래자리",
     "ra": "02h 42m",
     "dec": "-00°01'",
-    "magnitude": "8.9",
+    "magnitude": "9.29",
     "commonName": "나선은하",
     "peakMonth": 11,
     "bestSeason": "최적 11월 · 가을 (9~11월)",
     "angularSize": "6.11' × 5.61'",
     "aliases": [
-      "MCG +00-07-083"
+      "2MASX J02424077-0000478",
+      "IRAS 02401-0013",
+      "MCG +00-07-083",
+      "PGC 010266",
+      "UGC 02188"
     ],
-    "description": "고래자리에 위치한 은하.",
+    "description": "고래자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J02424077-0000478",
       "IRAS 02401-0013",
       "PGC 010266",
       "UGC 02188"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M78",
     "number": 78,
     "name": "반사성운",
-    "type": "성운",
+    "type": "반사성운",
     "objectType": "반사성운",
     "tags": [
       "반사성운"
@@ -1655,13 +1932,16 @@
     "constellation": "오리온자리",
     "ra": "05h 46m",
     "dec": "+00°03'",
-    "magnitude": "8.3",
+    "magnitude": "8.00",
     "commonName": "반사성운",
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
     "angularSize": "4.50'",
-    "description": "오리온자리에 위치한 반사성운.",
+    "description": "오리온자리에 위치한 반사성운. 반사성운.",
     "crossCatalogRefs": [
+      "MWSC 0664"
+    ],
+    "aliases": [
       "MWSC 0664"
     ]
   },
@@ -1673,13 +1953,17 @@
     "constellation": "토끼자리",
     "ra": "05h 24m",
     "dec": "-24°33'",
-    "magnitude": "7.7",
+    "magnitude": "8.16",
     "commonName": "구상성단",
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
     "angularSize": "7.20'",
-    "description": "토끼자리에 위치한 구상성단.",
+    "description": "토끼자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 0528"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 0528"
     ]
   },
@@ -1691,13 +1975,17 @@
     "constellation": "전갈자리",
     "ra": "16h 17m",
     "dec": "-22°59'",
-    "magnitude": "7.3",
+    "magnitude": "7.30",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "5.70'",
-    "description": "전갈자리에 위치한 구상성단.",
+    "description": "전갈자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2376"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2376"
     ]
   },
@@ -1709,13 +1997,17 @@
     "constellation": "큰곰자리",
     "ra": "11h 06m",
     "dec": "+69°04'",
-    "magnitude": "6.9",
+    "magnitude": "6.92",
     "commonName": "보데 은하",
     "aliases": [
-      "Bode Galaxy",
       "Bode's Galaxy",
+      "2MASX J09553318+6903549",
+      "IRAS 09514+6918",
       "MCG +12-10-010",
-      "SDSS J095533.16+690355.1"
+      "PGC 028630",
+      "SDSS J095533.16+690355.1",
+      "UGC 05318",
+      "Bode Galaxy"
     ],
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
@@ -1727,7 +2019,8 @@
       "IRAS 09514+6918",
       "PGC 028630",
       "UGC 05318"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M82",
@@ -1737,13 +2030,17 @@
     "constellation": "큰곰자리",
     "ra": "09h 55m",
     "dec": "+69°41'",
-    "magnitude": "8.4",
+    "magnitude": "8.30",
     "commonName": "시가 은하",
     "aliases": [
       "Cigar Galaxy",
-      "Cigar",
+      "2MASX J09555243+6940469",
+      "IRAS 09517+6954",
       "MCG +12-10-011",
-      "SDSS J095551.73+694048.6"
+      "PGC 028655",
+      "SDSS J095551.73+694048.6",
+      "UGC 05322",
+      "Cigar"
     ],
     "peakMonth": 2,
     "bestSeason": "최적 2월 · 겨울 (12~2월)",
@@ -1755,27 +2052,34 @@
       "IRAS 09517+6954",
       "PGC 028655",
       "UGC 05322"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M83",
     "number": 83,
     "name": "남쪽 바람개비 은하",
     "type": "은하",
-    "constellation": "물뱀자리",
+    "constellation": "바다뱀자리",
     "ra": "13h 37m",
     "dec": "-29°52'",
-    "magnitude": "7.6",
+    "magnitude": "7.21",
     "commonName": "남쪽 바람개비 은하",
     "aliases": [
       "Southern Pinwheel Galaxy",
-      "Southern Pinwheel",
-      "MCG -05-32-050"
+      "2MASX J13370091-2951567",
+      "ESO 444-081",
+      "ESO-LV 444-0810",
+      "IRAS 13341-2936",
+      "MCG -05-32-050",
+      "PGC 048082",
+      "UGCA 366",
+      "Southern Pinwheel"
     ],
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "13.61' × 13.21'",
-    "description": "물뱀자리에 위치한 은하. 남쪽 바람개비 은하.",
+    "description": "바다뱀자리에 위치한 은하. 남쪽 바람개비 은하.",
     "crossCatalogRefs": [
       "2MASX J13370091-2951567",
       "ESO 444-081",
@@ -1783,7 +2087,8 @@
       "IRAS 13341-2936",
       "PGC 048082",
       "UGCA 366"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M84",
@@ -1793,22 +2098,27 @@
     "constellation": "처녀자리",
     "ra": "12h 25m",
     "dec": "+12°53'",
-    "magnitude": "9.1",
+    "magnitude": "9.79",
     "commonName": "타원은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "7.41' × 6.44'",
     "aliases": [
+      "2MASX J12250377+1253130",
+      "IRAS 12224+1309",
       "MCG +02-32-034",
-      "SDSS J122503.74+125312.8"
+      "PGC 040455",
+      "SDSS J122503.74+125312.8",
+      "UGC 07494"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J12250377+1253130",
       "IRAS 12224+1309",
       "PGC 040455",
       "UGC 07494"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M85",
@@ -1818,21 +2128,25 @@
     "constellation": "머리털자리",
     "ra": "12h 25m",
     "dec": "+18°11'",
-    "magnitude": "9.1",
+    "magnitude": "9.05",
     "commonName": "타원은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "6.95' × 5.35'",
     "aliases": [
+      "2MASX J12252405+1811278",
       "MCG +03-32-029",
-      "SDSS J122524.06+181127.7"
+      "PGC 040515",
+      "SDSS J122524.06+181127.7",
+      "UGC 07508"
     ],
-    "description": "머리털자리에 위치한 은하.",
+    "description": "머리털자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J12252405+1811278",
       "PGC 040515",
       "UGC 07508"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M86",
@@ -1842,21 +2156,25 @@
     "constellation": "처녀자리",
     "ra": "12h 26m",
     "dec": "+12°57'",
-    "magnitude": "8.9",
+    "magnitude": "8.86",
     "commonName": "타원은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "11.53' × 8.43'",
     "aliases": [
+      "2MASX J12261181+1256454",
       "MCG +02-32-046",
-      "SDSS J122611.75+125646.3"
+      "PGC 040653",
+      "SDSS J122611.75+125646.3",
+      "UGC 07532"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J12261181+1256454",
       "PGC 040653",
       "UGC 07532"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M87",
@@ -1866,14 +2184,18 @@
     "constellation": "처녀자리",
     "ra": "12h 30m",
     "dec": "+12°23'",
-    "magnitude": "8.6",
+    "magnitude": "9.00",
     "commonName": "처녀자리 A",
     "aliases": [
-      "Virgo A",
-      "Virgo A Galaxy",
       "Virgo Galaxy",
+      "2MASX J12304942+1223279",
+      "IRAS 12282+1240",
       "MCG +02-32-105",
-      "SDSS J123049.41+122328.1"
+      "PGC 041361",
+      "SDSS J123049.41+122328.1",
+      "UGC 07654",
+      "Virgo A",
+      "Virgo A Galaxy"
     ],
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
@@ -1884,31 +2206,37 @@
       "IRAS 12282+1240",
       "PGC 041361",
       "UGC 07654"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M88",
     "number": 88,
     "name": "나선은하",
     "type": "은하",
-    "constellation": "사냥개자리",
+    "constellation": "머리털자리",
     "ra": "12h 31m",
     "dec": "+14°25'",
-    "magnitude": "9.6",
+    "magnitude": "10.33",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "8.65' × 4.38'",
     "aliases": [
-      "MCG +03-32-059"
+      "2MASX J12315921+1425134",
+      "IRAS 12294+1441",
+      "MCG +03-32-059",
+      "PGC 041517",
+      "UGC 07675"
     ],
-    "description": "사냥개자리에 위치한 은하.",
+    "description": "머리털자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12315921+1425134",
       "IRAS 12294+1441",
       "PGC 041517",
       "UGC 07675"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M89",
@@ -1918,21 +2246,25 @@
     "constellation": "처녀자리",
     "ra": "12h 35m",
     "dec": "+12°33'",
-    "magnitude": "9.8",
+    "magnitude": "10.08",
     "commonName": "타원은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "8.13' × 8.00'",
     "aliases": [
+      "2MASX J12353988+1233217",
       "MCG +02-32-149",
-      "SDSS J123539.80+123322.8"
+      "PGC 041968",
+      "SDSS J123539.80+123322.8",
+      "UGC 07760"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J12353988+1233217",
       "PGC 041968",
       "UGC 07760"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M90",
@@ -1942,22 +2274,27 @@
     "constellation": "처녀자리",
     "ra": "12h 36m",
     "dec": "+13°10'",
-    "magnitude": "9.5",
+    "magnitude": "9.54",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "9.12' × 3.82'",
     "aliases": [
+      "2MASX J12364981+1309463",
+      "IRAS 12343+1326",
       "MCG +02-32-155",
-      "SDSS J123649.79+130946.5"
+      "PGC 042089",
+      "SDSS J123649.79+130946.5",
+      "UGC 07786"
     ],
-    "description": "처녀자리에 위치한 은하.",
+    "description": "처녀자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12364981+1309463",
       "IRAS 12343+1326",
       "PGC 042089",
       "UGC 07786"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M91",
@@ -1967,22 +2304,27 @@
     "constellation": "머리털자리",
     "ra": "12h 35m",
     "dec": "+14°30'",
-    "magnitude": "10.2",
+    "magnitude": "10.96",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "5.55' × 4.52'",
     "aliases": [
+      "2MASX J12352642+1429467",
+      "IRAS 12328+1446",
       "MCG +03-32-075",
-      "SDSS J123526.45+142946.8"
+      "PGC 041934",
+      "SDSS J123526.45+142946.8",
+      "UGC 07753"
     ],
-    "description": "머리털자리에 위치한 은하.",
+    "description": "머리털자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12352642+1429467",
       "IRAS 12328+1446",
       "PGC 041934",
       "UGC 07753"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M92",
@@ -1992,13 +2334,17 @@
     "constellation": "헤라클레스자리",
     "ra": "17h 17m",
     "dec": "+43°08'",
-    "magnitude": "6.4",
+    "magnitude": "6.52",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "14.40'",
-    "description": "헤라클레스자리에 위치한 구상성단.",
+    "description": "헤라클레스자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2557"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2557"
     ]
   },
@@ -2010,13 +2356,17 @@
     "constellation": "고물자리",
     "ra": "07h 44m",
     "dec": "-23°52'",
-    "magnitude": "6.0",
+    "magnitude": "6.20",
     "commonName": "산개성단",
     "peakMonth": 1,
     "bestSeason": "최적 1월 · 겨울 (12~2월)",
     "angularSize": "15.00'",
-    "description": "고물자리에 위치한 산개성단.",
+    "description": "고물자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 1324"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 1324"
     ]
   },
@@ -2028,21 +2378,26 @@
     "constellation": "사냥개자리",
     "ra": "12h 50m",
     "dec": "+41°07'",
-    "magnitude": "8.2",
+    "magnitude": "8.24",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "7.74' × 6.68'",
     "aliases": [
-      "MCG +07-26-058"
+      "2MASX J12505314+4107125",
+      "IRAS 12485+4123",
+      "MCG +07-26-058",
+      "PGC 043495",
+      "UGC 07996"
     ],
-    "description": "사냥개자리에 위치한 은하.",
+    "description": "사냥개자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12505314+4107125",
       "IRAS 12485+4123",
       "PGC 043495",
       "UGC 07996"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M95",
@@ -2052,23 +2407,28 @@
     "constellation": "사자자리",
     "ra": "10h 44m",
     "dec": "+11°42'",
-    "magnitude": "9.7",
+    "magnitude": "9.77",
     "commonName": "나선은하",
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
     "angularSize": "7.23' × 4.45'",
     "aliases": [
+      "2MASX J10435773+1142129",
+      "IRAS 10413+1158",
       "MCG +02-28-001",
+      "PGC 032007",
       "SDSS J104357.69+114213.6",
-      "SDSS J104357.70+114213.7"
+      "SDSS J104357.70+114213.7",
+      "UGC 05850"
     ],
-    "description": "사자자리에 위치한 은하.",
+    "description": "사자자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J10435773+1142129",
       "IRAS 10413+1158",
       "PGC 032007",
       "UGC 05850"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M96",
@@ -2078,28 +2438,33 @@
     "constellation": "사자자리",
     "ra": "10h 46m",
     "dec": "+11°50'",
-    "magnitude": "9.2",
+    "magnitude": "9.21",
     "commonName": "나선은하",
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
     "angularSize": "8.26' × 5.51'",
     "aliases": [
+      "2MASX J10464574+1149117",
+      "IRAS 10441+1205",
       "MCG +02-28-006",
-      "SDSS J104645.67+114911.8"
+      "PGC 032192",
+      "SDSS J104645.67+114911.8",
+      "UGC 05882"
     ],
-    "description": "사자자리에 위치한 은하.",
+    "description": "사자자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J10464574+1149117",
       "IRAS 10441+1205",
       "PGC 032192",
       "UGC 05882"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M97",
     "number": 97,
     "name": "올빼미 성운",
-    "type": "성운",
+    "type": "행성상성운",
     "objectType": "행성상성운",
     "tags": [
       "행성상성운"
@@ -2107,12 +2472,14 @@
     "constellation": "큰곰자리",
     "ra": "11h 14m",
     "dec": "+55°01'",
-    "magnitude": "9.9",
+    "magnitude": "9.90",
     "commonName": "올빼미 성운",
     "aliases": [
       "Owl Nebula",
-      "Owl",
-      "SDSS J111447.71+550108.5"
+      "IRAS 11119+5517",
+      "PN G148.4+57.0",
+      "SDSS J111447.71+550108.5",
+      "Owl"
     ],
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
@@ -2131,22 +2498,27 @@
     "constellation": "머리털자리",
     "ra": "12h 13m",
     "dec": "+14°54'",
-    "magnitude": "10.1",
+    "magnitude": "10.84",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "11.04' × 2.66'",
     "aliases": [
+      "2MASX J12134829+1454016",
+      "IRAS 12112+1510",
       "MCG +03-31-079",
-      "SDSS J121348.28+145401.6"
+      "PGC 039028",
+      "SDSS J121348.28+145401.6",
+      "UGC 07231"
     ],
-    "description": "머리털자리에 위치한 은하.",
+    "description": "머리털자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12134829+1454016",
       "IRAS 12112+1510",
       "PGC 039028",
       "UGC 07231"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M99",
@@ -2156,7 +2528,7 @@
     "constellation": "머리털자리",
     "ra": "12h 18m",
     "dec": "+14°25'",
-    "magnitude": "9.9",
+    "magnitude": "9.84",
     "commonName": "바람개비 은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
@@ -2164,8 +2536,12 @@
     "aliases": [
       "Coma Pinwheel",
       "Virgo Cluster Pinwheel",
+      "2MASX J12184962+1424593",
+      "IRAS 12162+1441",
       "MCG +03-31-099",
-      "SDSS J121849.60+142459.4"
+      "PGC 039578",
+      "SDSS J121849.60+142459.4",
+      "UGC 07345"
     ],
     "description": "머리털자리에 위치한 은하. 바람개비 은하.",
     "crossCatalogRefs": [
@@ -2173,7 +2549,8 @@
       "IRAS 12162+1441",
       "PGC 039578",
       "UGC 07345"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M100",
@@ -2183,22 +2560,27 @@
     "constellation": "머리털자리",
     "ra": "12h 22m",
     "dec": "+15°49'",
-    "magnitude": "9.3",
+    "magnitude": "9.47",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "6.10' × 5.62'",
     "aliases": [
+      "2MASX J12225489+1549205",
+      "IRAS 12204+1605",
       "MCG +03-32-015",
-      "SDSS J122254.91+154920.2"
+      "PGC 040153",
+      "SDSS J122254.91+154920.2",
+      "UGC 07450"
     ],
-    "description": "머리털자리에 위치한 은하.",
+    "description": "머리털자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12225489+1549205",
       "IRAS 12204+1605",
       "PGC 040153",
       "UGC 07450"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M101",
@@ -2208,13 +2590,16 @@
     "constellation": "큰곰자리",
     "ra": "14h 03m",
     "dec": "+54°21'",
-    "magnitude": "7.9",
+    "magnitude": "7.90",
     "commonName": "바람개비 은하",
     "aliases": [
-      "Pinwheel Galaxy",
-      "Pinwheel",
+      "IRAS 14013+5435",
       "MCG +09-23-028",
-      "SDSS J140312.52+542056.2"
+      "PGC 050063",
+      "SDSS J140312.52+542056.2",
+      "UGC 08981",
+      "Pinwheel Galaxy",
+      "Pinwheel"
     ],
     "peakMonth": 5,
     "bestSeason": "최적 5월 · 봄 (3~5월)",
@@ -2224,7 +2609,8 @@
       "IRAS 14013+5435",
       "PGC 050063",
       "UGC 08981"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M102",
@@ -2251,16 +2637,20 @@
     "number": 103,
     "name": "산개성단",
     "type": "산개성단",
-    "constellation": "카시오페아자리",
+    "constellation": "카시오페이아자리",
     "ra": "01h 33m",
     "dec": "+60°42'",
-    "magnitude": "7.4",
+    "magnitude": "7.40",
     "commonName": "산개성단",
     "peakMonth": 10,
     "bestSeason": "최적 10월 · 가을 (9~11월)",
     "angularSize": "4.50'",
-    "description": "카시오페아자리에 위치한 산개성단.",
+    "description": "카시오페이아자리에 위치한 산개성단. 산개성단.",
     "crossCatalogRefs": [
+      "MWSC 0124"
+    ],
+    "objectType": "산개성단",
+    "aliases": [
       "MWSC 0124"
     ]
   },
@@ -2272,12 +2662,16 @@
     "constellation": "처녀자리",
     "ra": "12h 40m",
     "dec": "-11°37'",
-    "magnitude": "8.0",
+    "magnitude": "8.59",
     "commonName": "솜브레로 은하",
     "aliases": [
       "Sombrero Galaxy",
-      "Sombrero",
-      "MCG -02-32-020"
+      "2MASX J12395949-1137230",
+      "IRAS 12373-1120",
+      "MCG -02-32-020",
+      "PGC 042407",
+      "UGCA 293",
+      "Sombrero"
     ],
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
@@ -2288,7 +2682,8 @@
       "IRAS 12373-1120",
       "PGC 042407",
       "UGCA 293"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M105",
@@ -2298,20 +2693,24 @@
     "constellation": "사자자리",
     "ra": "10h 47m",
     "dec": "+12°35'",
-    "magnitude": "9.3",
+    "magnitude": "9.27",
     "commonName": "타원은하",
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
     "angularSize": "4.89' × 4.25'",
     "aliases": [
-      "MCG +02-28-011"
+      "2MASX J10474959+1234538",
+      "MCG +02-28-011",
+      "PGC 032256",
+      "UGC 05902"
     ],
-    "description": "사자자리에 위치한 은하.",
+    "description": "사자자리에 위치한 은하. 타원은하.",
     "crossCatalogRefs": [
       "2MASX J10474959+1234538",
       "PGC 032256",
       "UGC 05902"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M106",
@@ -2321,21 +2720,25 @@
     "constellation": "사냥개자리",
     "ra": "12h 18m",
     "dec": "+47°18'",
-    "magnitude": "8.4",
+    "magnitude": "9.29",
     "commonName": "나선은하",
     "peakMonth": 4,
     "bestSeason": "최적 4월 · 봄 (3~5월)",
     "angularSize": "16.98' × 7.24'",
     "aliases": [
+      "2MASX J12185761+4718133",
       "MCG +08-22-104",
-      "SDSS J121857.50+471814.2"
+      "PGC 039600",
+      "SDSS J121857.50+471814.2",
+      "UGC 07353"
     ],
-    "description": "사냥개자리에 위치한 은하.",
+    "description": "사냥개자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J12185761+4718133",
       "PGC 039600",
       "UGC 07353"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M107",
@@ -2345,13 +2748,17 @@
     "constellation": "뱀주인자리",
     "ra": "16h 32m",
     "dec": "-13°03'",
-    "magnitude": "7.8",
+    "magnitude": "8.85",
     "commonName": "구상성단",
     "peakMonth": 6,
     "bestSeason": "최적 6월 · 여름 (6~8월)",
     "angularSize": "7.80'",
-    "description": "뱀주인자리에 위치한 구상성단.",
+    "description": "뱀주인자리에 위치한 구상성단. 구상성단.",
     "crossCatalogRefs": [
+      "MWSC 2422"
+    ],
+    "objectType": "구상성단",
+    "aliases": [
       "MWSC 2422"
     ]
   },
@@ -2363,22 +2770,27 @@
     "constellation": "큰곰자리",
     "ra": "11h 11m",
     "dec": "+55°40'",
-    "magnitude": "10.0",
+    "magnitude": "10.05",
     "commonName": "나선은하",
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
     "angularSize": "3.98' × 1.66'",
     "aliases": [
+      "2MASX J11113096+5540268",
+      "IRAS 11085+5556",
       "MCG +09-18-098",
-      "SDSS J111131.06+554027.4"
+      "PGC 034030",
+      "SDSS J111131.06+554027.4",
+      "UGC 06225"
     ],
-    "description": "큰곰자리에 위치한 은하.",
+    "description": "큰곰자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J11113096+5540268",
       "IRAS 11085+5556",
       "PGC 034030",
       "UGC 06225"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M109",
@@ -2388,22 +2800,27 @@
     "constellation": "큰곰자리",
     "ra": "11h 57m",
     "dec": "+53°23'",
-    "magnitude": "9.8",
+    "magnitude": "9.88",
     "commonName": "나선은하",
     "peakMonth": 3,
     "bestSeason": "최적 3월 · 봄 (3~5월)",
     "angularSize": "8.07' × 5.64'",
     "aliases": [
+      "2MASX J11573598+5322282",
+      "IRAS 11549+5339",
       "MCG +09-20-044",
-      "SDSS J115735.96+532228.9"
+      "PGC 037617",
+      "SDSS J115735.96+532228.9",
+      "UGC 06937"
     ],
-    "description": "큰곰자리에 위치한 은하.",
+    "description": "큰곰자리에 위치한 은하. 나선은하.",
     "crossCatalogRefs": [
       "2MASX J11573598+5322282",
       "IRAS 11549+5339",
       "PGC 037617",
       "UGC 06937"
-    ]
+    ],
+    "objectType": "은하"
   },
   {
     "id": "M110",
@@ -2413,20 +2830,25 @@
     "constellation": "안드로메다자리",
     "ra": "00h 40m",
     "dec": "+41°41'",
-    "magnitude": "8.0",
+    "magnitude": "8.15",
     "commonName": "안드로메다 위성은하",
     "peakMonth": 10,
     "bestSeason": "최적 10월 · 가을 (9~11월)",
     "angularSize": "16.22' × 9.59'",
     "aliases": [
-      "MCG +07-02-014"
+      "2MASX J00402207+4141070",
+      "IRAS 00376+4124",
+      "MCG +07-02-014",
+      "PGC 002429",
+      "UGC 00426"
     ],
-    "description": "안드로메다자리에 위치한 은하.",
+    "description": "안드로메다자리에 위치한 은하. 안드로메다 위성은하.",
     "crossCatalogRefs": [
       "2MASX J00402207+4141070",
       "IRAS 00376+4124",
       "PGC 002429",
       "UGC 00426"
-    ]
+    ],
+    "objectType": "은하"
   }
 ]

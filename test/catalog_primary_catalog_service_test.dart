@@ -42,25 +42,28 @@ void main() {
 
   setUpAll(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (
-      MethodCall methodCall,
-    ) async {
-      if (methodCall.method == 'getApplicationDocumentsDirectory') {
-        return '.';
-      }
-      return null;
-    });
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'getApplicationDocumentsDirectory') {
+              return '.';
+            }
+            return null;
+          },
+        );
 
     await CatalogSearchService.loadGlobalAliases();
   });
 
-  test('marks veil nebula members as secondary except primary', () async {
-    final db = await databaseFactory.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseConstants.databaseVersion,
-        onCreate: (database, version) async {
-          await database.execute('''
+  test(
+    'keeps distinct Veil NGC identifiers separate without mapping',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: DatabaseConstants.databaseVersion,
+          onCreate: (database, version) async {
+            await database.execute('''
             CREATE TABLE ${DatabaseConstants.tableCelestialObjects} (
               ${DatabaseConstants.colId} TEXT PRIMARY KEY,
               ${DatabaseConstants.colNum} INTEGER NOT NULL,
@@ -83,35 +86,39 @@ void main() {
               ${DatabaseConstants.colPrimaryCatalogId} TEXT
             )
           ''');
-        },
-      ),
-    );
+          },
+        ),
+      );
 
-    await _insertObject(db, id: 'NGC6960', catalog: 'ngc', num: 6960, isFeatured: 1);
-    await _insertObject(db, id: 'NGC6992', catalog: 'ngc', num: 6992);
-    await _insertObject(db, id: 'NGC6995', catalog: 'ngc', num: 6995);
+      await _insertObject(
+        db,
+        id: 'NGC6960',
+        catalog: 'ngc',
+        num: 6960,
+        isFeatured: 1,
+      );
+      await _insertObject(db, id: 'NGC6992', catalog: 'ngc', num: 6992);
+      await _insertObject(db, id: 'NGC6995', catalog: 'ngc', num: 6995);
 
-    await CatalogPrimaryCatalogService.apply(db);
+      await CatalogPrimaryCatalogService.apply(db);
 
-    final rows = await db.query(DatabaseConstants.tableCelestialObjects);
-    final byId = {
-      for (final row in rows)
-        row[DatabaseConstants.colId] as String: CatalogObject.fromMap(row),
-    };
+      final rows = await db.query(DatabaseConstants.tableCelestialObjects);
+      final byId = {
+        for (final row in rows)
+          row[DatabaseConstants.colId] as String: CatalogObject.fromMap(row),
+      };
 
-    expect(byId['NGC6960']!.isPrimaryCatalog, isTrue);
-    expect(byId['NGC6992']!.isPrimaryCatalog, isFalse);
-    expect(byId['NGC6992']!.primaryCatalogId, 'NGC6960');
-    expect(byId['NGC6995']!.primaryCatalogId, 'NGC6960');
-    expect(
-      byId['NGC6960']!.crossCatalogRefs,
-      containsAll(['NGC6992', 'NGC6995']),
-    );
+      expect(byId['NGC6960']!.isPrimaryCatalog, isTrue);
+      expect(byId['NGC6992']!.isPrimaryCatalog, isTrue);
+      expect(byId['NGC6995']!.isPrimaryCatalog, isTrue);
+      expect(byId['NGC6992']!.primaryCatalogId, isNull);
+      expect(byId['NGC6995']!.primaryCatalogId, isNull);
 
-    await db.close();
-  });
+      await db.close();
+    },
+  );
 
-  test('hides RCW120 when Sh2-3 is primary via cross refs', () async {
+  test('mutual cross refs do not create identity without mapping', () async {
     final db = await databaseFactory.openDatabase(
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
@@ -193,26 +200,24 @@ void main() {
         DatabaseConstants.tableCelestialObjects,
         where: '${DatabaseConstants.colId} = ?',
         whereArgs: ['RCW120'],
-      ))
-          .single,
+      )).single,
     );
     final sh2 = CatalogObject.fromMap(
       (await db.query(
         DatabaseConstants.tableCelestialObjects,
         where: '${DatabaseConstants.colId} = ?',
         whereArgs: ['Sh2-3'],
-      ))
-          .single,
+      )).single,
     );
 
     expect(sh2.isPrimaryCatalog, isTrue);
-    expect(rcw.isPrimaryCatalog, isFalse);
-    expect(rcw.primaryCatalogId, 'Sh2-3');
+    expect(rcw.isPrimaryCatalog, isTrue);
+    expect(rcw.primaryCatalogId, isNull);
 
     await db.close();
   });
 
-  test('replaces catalog-id common name with secondary Korean name', () async {
+  test('cross refs do not copy common name without identity mapping', () async {
     final db = await databaseFactory.openDatabase(
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
@@ -294,26 +299,24 @@ void main() {
         DatabaseConstants.tableCelestialObjects,
         where: '${DatabaseConstants.colId} = ?',
         whereArgs: ['NGC2264'],
-      ))
-          .single,
+      )).single,
     );
     final sh2 = CatalogObject.fromMap(
       (await db.query(
         DatabaseConstants.tableCelestialObjects,
         where: '${DatabaseConstants.colId} = ?',
         whereArgs: ['Sh2-273'],
-      ))
-          .single,
+      )).single,
     );
 
     expect(ngc.isPrimaryCatalog, isTrue);
-    expect(sh2.isPrimaryCatalog, isFalse);
-    expect(ngc.commonName, '크리스마스 트리 성운');
+    expect(sh2.isPrimaryCatalog, isTrue);
+    expect(ngc.commonName, 'NGC 2264');
 
     await db.close();
   });
 
-  test('one-way cross refs do not crash discovery', () async {
+  test('one-way cross refs remain searchable metadata', () async {
     final db = await databaseFactory.openDatabase(
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
@@ -347,7 +350,7 @@ void main() {
       ),
     );
 
-    // A -> B 단방향 참조: B는 edges에 키가 없어 기존에 ! crash가 발생했다.
+    // A -> B 단방향 참조는 identity union이 아니다.
     await db.insert(DatabaseConstants.tableCelestialObjects, {
       DatabaseConstants.colId: 'LBN833',
       DatabaseConstants.colNum: 833,
