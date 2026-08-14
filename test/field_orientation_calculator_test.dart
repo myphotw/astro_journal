@@ -21,19 +21,36 @@ void main() {
       expect(result.recommendation, FramingRecommendation.good);
     });
 
-    test('bestFramingDuringWindow finds sub-100% coverage over M31 transit', () {
-      final result = FieldOrientationCalculator.bestFramingDuringWindow(
-        framing: m31Framing,
-        fieldOfViewWidthDegrees: 2.24,
-        fieldOfViewHeightDegrees: 3.99,
+    test(
+      'bestFramingDuringWindow finds sub-100% coverage over M31 transit',
+      () {
+        final result = FieldOrientationCalculator.bestFramingDuringWindow(
+          framing: m31Framing,
+          fieldOfViewWidthDegrees: 2.24,
+          fieldOfViewHeightDegrees: 3.99,
+          latitudeDeg: 37.5,
+          longitudeDeg: 127.0,
+          raHours: 0.7,
+          declinationDeg: 41.27,
+          windowStart: DateTime(2026, 10, 15, 20),
+          windowEnd: DateTime(2026, 10, 16, 4),
+        );
+        expect(result.bestCoverage, lessThan(1.0));
+      },
+    );
+
+    test('field rotation span is finite and non-zero for Alt-Az window', () {
+      final span = FieldOrientationCalculator.fieldRotationSpanDuringWindow(
         latitudeDeg: 37.5,
         longitudeDeg: 127.0,
-        raHours: 0.7,
-        declinationDeg: 41.27,
-        windowStart: DateTime(2026, 10, 15, 20),
-        windowEnd: DateTime(2026, 10, 16, 4),
+        raHours: 19.73,
+        declinationDeg: -14.8,
+        windowStart: DateTime(2026, 7, 20, 21),
+        windowEnd: DateTime(2026, 7, 21, 1),
       );
-      expect(result.bestCoverage, lessThan(1.0));
+
+      expect(span, greaterThan(0));
+      expect(span.isFinite, isTrue);
     });
   });
 }

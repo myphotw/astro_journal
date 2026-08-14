@@ -20,6 +20,9 @@ import '../../../data/models/weather_forecast_slot.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
 import '../../../data/models/equipment_tonight_group.dart';
 import '../../../data/models/equipment_recommendation.dart';
+import '../../../data/models/equipment.dart';
+import '../../../data/models/imaging_suitability_assessment.dart';
+import '../../../data/models/object_observation_window.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../services/celestial_position_service.dart';
@@ -266,6 +269,7 @@ class HomeViewModel extends ChangeNotifier {
 
   RecommendationSettings _recommendationSettings =
       RecommendationSettings.defaults;
+  TrackingMode _trackingMode = TrackingMode.altAz;
 
   bool get isLoading => _isLoading;
   bool get isWeatherLoading => _isWeatherLoading;
@@ -286,6 +290,26 @@ class HomeViewModel extends ChangeNotifier {
   double get latitude => _latitude;
   double get longitude => _longitude;
   ObservationContext? get lastSessionContext => _lastSessionContext;
+  TrackingMode get trackingMode => _trackingMode;
+
+  Future<void> setTrackingMode(TrackingMode mode) async {
+    if (_trackingMode == mode) return;
+    _trackingMode = mode;
+    notifyListeners();
+
+    if (_cachedAllObjects.isEmpty || _nightStart == null || _nightEnd == null) {
+      return;
+    }
+
+    await _applyRecommendations(
+      allObjects: _cachedAllObjects,
+      now: DateTime.now(),
+      cloudCoverage: _observationCondition?.cloudCover ?? 0,
+      windSpeed: _observationCondition?.windSpeed ?? 0,
+      moonIllumination: _observationCondition?.moon.illumination,
+    );
+    notifyListeners();
+  }
 
   DateTime get _planDate {
     final night = _nightStart ?? DateTime.now();
@@ -327,8 +351,7 @@ class HomeViewModel extends ChangeNotifier {
 
   TodayEquipmentRecommendation? todayEquipmentRecommendationFor(
     String objectId,
-  ) =>
-      _todayEquipmentRecByObjectId[objectId];
+  ) => _todayEquipmentRecByObjectId[objectId];
 
   /// 오늘 촬영 장비 추천이 있는 대상만 촬영 계획에 추가 가능 (안시 전용 제외).
   bool canAddToShootingPlan(String objectId) {
@@ -338,8 +361,9 @@ class HomeViewModel extends ChangeNotifier {
 
   Future<void> toggleTonightPlan(String objectId) async {
     if (_plannedObjectOrder.contains(objectId)) {
-      _plannedObjectOrder =
-          _plannedObjectOrder.where((id) => id != objectId).toList();
+      _plannedObjectOrder = _plannedObjectOrder
+          .where((id) => id != objectId)
+          .toList();
     } else {
       if (!canAddToShootingPlan(objectId)) return;
       _plannedObjectOrder = [..._plannedObjectOrder, objectId];
@@ -373,7 +397,9 @@ class HomeViewModel extends ChangeNotifier {
   }) {
     ObservationWeather? slotWeather;
     if (summary?.bestSlot != null) {
-      slotWeather = ObservationWeather.fromForecast(summary!.bestSlot!.forecast);
+      slotWeather = ObservationWeather.fromForecast(
+        summary!.bestSlot!.forecast,
+      );
     } else if (currentWeather != null) {
       slotWeather = ObservationWeather.fallback(
         time: DateTime.now(),
@@ -420,14 +446,18 @@ class HomeViewModel extends ChangeNotifier {
         averageMoonIllumination: summary.averageMoonIllumination,
         averagePrecipitationPop: summary.averagePrecipitationPop,
         averageVisibilityMeters: summary.averageVisibilityMeters,
-        cloudCover: slotWeather?.cloudCover ?? summary.averageCloudCoverage.round(),
+        cloudCover:
+            slotWeather?.cloudCover ?? summary.averageCloudCoverage.round(),
         visibilityMeters:
             slotWeather?.visibility ?? summary.averageVisibilityMeters,
-        humidity: slotWeather?.humidity ?? summary.bestSlot?.forecast.humidity ?? 50,
+        humidity:
+            slotWeather?.humidity ?? summary.bestSlot?.forecast.humidity ?? 50,
         windSpeed: slotWeather?.windSpeed ?? summary.averageWindSpeed,
         precipitationProbability:
-            slotWeather?.precipitationProbability ?? summary.averagePrecipitationPop,
-        dewPoint: slotWeather?.dewPoint ??
+            slotWeather?.precipitationProbability ??
+            summary.averagePrecipitationPop,
+        dewPoint:
+            slotWeather?.dewPoint ??
             ObservationScoreService.dewPointCelsius(
               summary.averageTemperature,
               summary.bestSlot?.forecast.humidity ?? 50,
@@ -437,7 +467,8 @@ class HomeViewModel extends ChangeNotifier {
         isObservationFeasible:
             observationStatus != ObservationStatus.unavailable,
         observationStatus: observationStatus,
-        statusPrimaryReason: statusPrimaryReason ?? summary.primaryInfeasibleReason,
+        statusPrimaryReason:
+            statusPrimaryReason ?? summary.primaryInfeasibleReason,
         statusUserMessage: statusUserMessage ?? summary.infeasibleUserMessage,
         primaryInfeasibleReason: summary.primaryInfeasibleReason,
         infeasibleUserMessage: summary.infeasibleUserMessage,
@@ -466,7 +497,8 @@ class HomeViewModel extends ChangeNotifier {
       humidity: slotWeather?.humidity ?? currentWeather?.humidity ?? 0,
       windSpeed: slotWeather?.windSpeed ?? currentWeather?.windSpeed ?? 0,
       precipitationProbability: slotWeather?.precipitationProbability ?? 0,
-      dewPoint: slotWeather?.dewPoint ??
+      dewPoint:
+          slotWeather?.dewPoint ??
           (currentWeather != null
               ? ObservationScoreService.dewPointCelsius(
                   currentWeather.temperature,
@@ -552,6 +584,7 @@ class HomeViewModel extends ChangeNotifier {
       moonIllumination: moonIllumination ?? context.moonIllumination,
     );
 
+    final equipment = await _equipmentRepository.getAll(activeOnly: true);
     final result = await _recommendationEngine.build(
       catalog: allObjects,
       settings: _recommendationSettings,
@@ -560,6 +593,13 @@ class HomeViewModel extends ChangeNotifier {
       limit: allLimit,
       windSpeed: windSpeed,
       referenceTime: now,
+      trackingMode: _trackingMode,
+      equipmentFitResolver: (object, window) => _equipmentFitFor(
+        object: object,
+        window: window,
+        equipment: equipment,
+        context: sessionContext,
+      ),
     );
 
     _exclusionReasons = result.exclusionReasons;
@@ -574,7 +614,7 @@ class HomeViewModel extends ChangeNotifier {
     _lastSession = session;
     _lastReferenceTime = now;
 
-    await _buildEquipmentGroups();
+    await _buildEquipmentGroups(equipment: equipment);
     await _autoGenerateTonightPlanIfNeeded();
     _applyShootingPlanFilter();
   }
@@ -722,33 +762,76 @@ class HomeViewModel extends ChangeNotifier {
     }
 
     _scheduleEmptyMessage = _scheduleItems.isEmpty
-        ? (scheduleResult.emptyMessage ??
-            '촬영 계획 대상의 촬영 순서를 계산할 수 없습니다')
+        ? (scheduleResult.emptyMessage ?? '촬영 계획 대상의 촬영 순서를 계산할 수 없습니다')
         : null;
   }
 
-  Future<void> _buildEquipmentGroups() async {
+  ImagingEquipmentFit? _equipmentFitFor({
+    required CatalogObject object,
+    required ObjectObservationWindow window,
+    required List<Equipment> equipment,
+    required ObservationContext context,
+  }) {
+    if (equipment.isEmpty) return null;
+
+    ImagingOrientationContext? orientation;
+    if (_trackingMode == TrackingMode.altAz) {
+      final start =
+          window.recommendStartTime ??
+          window.optimalStartTime ??
+          window.peakAltitudeTime;
+      final end = window.observationEndTime ?? window.optimalEndTime;
+      if (start != null && end != null && end.isAfter(start)) {
+        orientation = ImagingOrientationContext(
+          latitude: context.latitude,
+          longitude: context.longitude,
+          raHours: CelestialPositionService.parseRaHours(object.ra),
+          declinationDeg: CelestialPositionService.parseDecDeg(object.dec),
+          windowStart: start,
+          windowEnd: end,
+        );
+      }
+    }
+
+    final recommendation = _equipmentRecommendationService.recommendForObject(
+      object: object,
+      equipment: equipment,
+      orientation: orientation,
+    );
+    if (recommendation.imaging.isEmpty) return null;
+    final best = recommendation.imaging.first;
+    return ImagingEquipmentFit(
+      score: best.score,
+      screenFillPercent: best.screenFillPercent,
+      equipmentId: best.equipment.id,
+      equipmentName: best.equipment.name,
+    );
+  }
+
+  Future<void> _buildEquipmentGroups({List<Equipment>? equipment}) async {
     _equipmentTonightGroups = [];
     _todayEquipmentChipsByObjectId.clear();
     _todayEquipmentRecByObjectId.clear();
 
-    final equipment = await _equipmentRepository.getAll(activeOnly: true);
-    if (equipment.isEmpty || _allRecommendedObjects.isEmpty) return;
+    final availableEquipment =
+        equipment ?? await _equipmentRepository.getAll(activeOnly: true);
+    if (availableEquipment.isEmpty || _allRecommendedObjects.isEmpty) return;
 
-    final sortedEquipment = [...equipment]
+    final sortedEquipment = [...availableEquipment]
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
     final todayRecByObjectId = <String, TodayEquipmentRecommendation>{};
     for (final rec in _allRecommendedObjects) {
-      todayRecByObjectId[rec.object.id] =
-          _equipmentRecommendationService.recommendForToday(
-        object: rec.object,
-        equipment: equipment,
-        recommendation: rec,
-        condition: _observationCondition,
-        observerLatitude: _hasLocation ? _latitude : null,
-        observerLongitude: _hasLocation ? _longitude : null,
-      );
+      todayRecByObjectId[rec.object.id] = _equipmentRecommendationService
+          .recommendForToday(
+            object: rec.object,
+            equipment: availableEquipment,
+            recommendation: rec,
+            condition: _observationCondition,
+            observerLatitude: _hasLocation ? _latitude : null,
+            observerLongitude: _hasLocation ? _longitude : null,
+            trackingMode: _trackingMode,
+          );
       _todayEquipmentRecByObjectId[rec.object.id] =
           todayRecByObjectId[rec.object.id]!;
       _cacheTodayEquipmentChips(
@@ -834,7 +917,9 @@ class HomeViewModel extends ChangeNotifier {
       break;
     }
 
-    _todayEquipmentChipsByObjectId[objectId] = CatalogEquipmentChips(items: items);
+    _todayEquipmentChipsByObjectId[objectId] = CatalogEquipmentChips(
+      items: items,
+    );
   }
 
   int _maxStarCount(List<RecommendationResult> targets) {
@@ -860,14 +945,13 @@ class HomeViewModel extends ChangeNotifier {
 
       final allObjects = await _catalogRepository.getAll(listOnly: true);
       _cachedAllObjects = allObjects;
-      debugPrint('[HomeVM] catalog getAll: ${sw.elapsedMilliseconds}ms '
-          '(${allObjects.length} objects)');
+      debugPrint(
+        '[HomeVM] catalog getAll: ${sw.elapsedMilliseconds}ms '
+        '(${allObjects.length} objects)',
+      );
 
       final moon = _moonFromPhase(ObservationScoreService.computeMoonInfo(now));
-      _observationCondition = _buildCondition(
-        moon: moon,
-        siteName: '현재 위치',
-      );
+      _observationCondition = _buildCondition(moon: moon, siteName: '현재 위치');
 
       if (_nightStart == null || _nightEnd == null) {
         final est = _estimateNightWindow(now);
@@ -935,27 +1019,26 @@ class HomeViewModel extends ChangeNotifier {
       now: now,
       moonIllumination: moonIllumination,
     );
-    debugPrint(
-      '[HomeVM] recommendations ready: ${sw.elapsedMilliseconds}ms',
-    );
+    debugPrint('[HomeVM] recommendations ready: ${sw.elapsedMilliseconds}ms');
 
-    _categoryProgress = [
-      CatalogType.messier,
-      CatalogType.ngc,
-      CatalogType.ic,
-      CatalogType.caldwell,
-      CatalogType.sh2,
-      CatalogType.star,
-      CatalogType.solar,
-      CatalogType.milky,
-    ].map((type) {
-      final objects = allObjects.where((o) => o.catalog == type).toList();
-      return CategoryProgress(
-        type: type,
-        total: objects.length,
-        captured: objects.where((o) => o.captured).length,
-      );
-    }).toList();
+    _categoryProgress =
+        [
+          CatalogType.messier,
+          CatalogType.ngc,
+          CatalogType.ic,
+          CatalogType.caldwell,
+          CatalogType.sh2,
+          CatalogType.star,
+          CatalogType.solar,
+          CatalogType.milky,
+        ].map((type) {
+          final objects = allObjects.where((o) => o.catalog == type).toList();
+          return CategoryProgress(
+            type: type,
+            total: objects.length,
+            captured: objects.where((o) => o.captured).length,
+          );
+        }).toList();
     debugPrint('[HomeVM] load complete: ${sw.elapsedMilliseconds}ms');
     notifyListeners();
   }
@@ -987,10 +1070,7 @@ class HomeViewModel extends ChangeNotifier {
           location.latitude,
           location.longitude,
         ),
-        _weatherService.getForecast(
-          location.latitude,
-          location.longitude,
-        ),
+        _weatherService.getForecast(location.latitude, location.longitude),
       ]);
 
       final weather = results[0] as WeatherData;

@@ -2,6 +2,7 @@ import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/core/constants/imaging_recommendation_rules.dart';
 import 'package:astro_journal/core/constants/recommendation_priority_mode.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
+import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/observation_feasibility_reason.dart';
 import 'package:astro_journal/data/models/observation_feasibility_result.dart';
@@ -104,12 +105,24 @@ void main() {
       final session = buildSession();
       final infeasibleSlots = <DateTime, ObservationFeasibilityResult>{
         for (var hour = 21; hour <= 23; hour++)
-          DateTime(2026, 7, 20, hour, 0): const ObservationFeasibilityResult.infeasible(
+          DateTime(
+            2026,
+            7,
+            20,
+            hour,
+            0,
+          ): const ObservationFeasibilityResult.infeasible(
             reason: '구름량 85%',
             failedConditions: [ObservationFeasibilityReason.cloudTooHigh],
           ),
         for (var hour = 0; hour <= 4; hour++)
-          DateTime(2026, 7, 21, hour, 0): const ObservationFeasibilityResult.infeasible(
+          DateTime(
+            2026,
+            7,
+            21,
+            hour,
+            0,
+          ): const ObservationFeasibilityResult.infeasible(
             reason: '구름량 85%',
             failedConditions: [ObservationFeasibilityReason.cloudTooHigh],
           ),
@@ -139,27 +152,30 @@ void main() {
       expect(result.recommendations.first.object.id, 'm8');
     });
 
-    test('returns recommendations with observation windows for session', () async {
-      final result = await engine.build(
-        catalog: [
-          buildObject(
-            id: 'm8',
-            number: 8,
-            ra: '18h 03m',
-            dec: '-24° 23m',
-            type: '발광성운',
-          ),
-        ],
-        settings: RecommendationSettings.defaults,
-        context: buildContext(),
-        session: buildSession(),
-        limit: 4,
-      );
+    test(
+      'returns recommendations with observation windows for session',
+      () async {
+        final result = await engine.build(
+          catalog: [
+            buildObject(
+              id: 'm8',
+              number: 8,
+              ra: '18h 03m',
+              dec: '-24° 23m',
+              type: '발광성운',
+            ),
+          ],
+          settings: RecommendationSettings.defaults,
+          context: buildContext(),
+          session: buildSession(),
+          limit: 4,
+        );
 
-      expect(result.recommendations, isNotEmpty);
-      expect(result.recommendations.first.observationWindow, isNotNull);
-      expect(result.scheduleResult.slots, isNotEmpty);
-    });
+        expect(result.recommendations, isNotEmpty);
+        expect(result.recommendations.first.observationWindow, isNotNull);
+        expect(result.scheduleResult.slots, isNotEmpty);
+      },
+    );
 
     test('uncaptured-first mode ranks uncaptured targets ahead', () async {
       final catalog = [
@@ -292,8 +308,36 @@ void main() {
       }
     });
 
-    test('observation window includes optimalTime from quality scoring', () async {
-      final result = await engine.build(
+    test(
+      'observation window includes optimalTime from quality scoring',
+      () async {
+        final result = await engine.build(
+          catalog: [
+            buildObject(
+              id: 'm8',
+              number: 8,
+              ra: '18h 03m',
+              dec: '-24° 23m',
+              type: '발광성운',
+            ),
+          ],
+          settings: RecommendationSettings.defaults,
+          context: buildContext(),
+          session: buildSession(),
+          limit: 1,
+        );
+
+        expect(result.recommendations, isNotEmpty);
+        final window = result.recommendations.first.observationWindow;
+        expect(window?.optimalTime, isNotNull);
+        expect(window?.optimalAltitude, isNotNull);
+        expect(result.recommendations.first.imagingAssessment, isNotNull);
+        expect(result.recommendations.first.recommendedExposure, isNotNull);
+      },
+    );
+
+    test('equipment fit resolver downrates a poorly framed target', () async {
+      final baseline = await engine.build(
         catalog: [
           buildObject(
             id: 'm8',
@@ -308,11 +352,28 @@ void main() {
         session: buildSession(),
         limit: 1,
       );
+      final poorFit = await engine.build(
+        catalog: [
+          buildObject(
+            id: 'm8',
+            number: 8,
+            ra: '18h 03m',
+            dec: '-24° 23m',
+            type: '발광성운',
+          ),
+        ],
+        settings: RecommendationSettings.defaults,
+        context: buildContext(),
+        session: buildSession(),
+        limit: 1,
+        equipmentFitResolver: (_, _) =>
+            const ImagingEquipmentFit(score: 15, screenFillPercent: 2),
+      );
 
-      expect(result.recommendations, isNotEmpty);
-      final window = result.recommendations.first.observationWindow;
-      expect(window?.optimalTime, isNotNull);
-      expect(window?.optimalAltitude, isNotNull);
+      expect(
+        poorFit.recommendations.single.score,
+        lessThan(baseline.recommendations.single.score),
+      );
     });
   });
 }

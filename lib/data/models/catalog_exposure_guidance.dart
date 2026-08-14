@@ -1,3 +1,5 @@
+import 'imaging_suitability_assessment.dart';
+
 /// Catalog detail suitability for the administrator reference Bortle site.
 enum CatalogExposureFeasibility {
   recommended,
@@ -8,11 +10,11 @@ enum CatalogExposureFeasibility {
 
 extension CatalogExposureFeasibilityLabels on CatalogExposureFeasibility {
   String get statusLabel => switch (this) {
-        CatalogExposureFeasibility.recommended => '추천',
-        CatalogExposureFeasibility.feasible => '촬영 가능',
-        CatalogExposureFeasibility.notRecommended => '비추천',
-        CatalogExposureFeasibility.stronglyNotRecommended => '매우 비추천',
-      };
+    CatalogExposureFeasibility.recommended => '추천',
+    CatalogExposureFeasibility.feasible => '촬영 가능',
+    CatalogExposureFeasibility.notRecommended => '비추천',
+    CatalogExposureFeasibility.stronglyNotRecommended => '매우 비추천',
+  };
 
   bool get showsCurrentExposureTime =>
       this == CatalogExposureFeasibility.recommended ||
@@ -34,6 +36,7 @@ class CatalogExposureGuidance {
     this.idealBortle,
     this.idealMinimumMinutes,
     this.idealRecommendedMinutes,
+    this.imagingAssessment,
   });
 
   final int referenceBortle;
@@ -47,6 +50,7 @@ class CatalogExposureGuidance {
   final int? idealBortle;
   final int? idealMinimumMinutes;
   final int? idealRecommendedMinutes;
+  final ImagingSuitabilityAssessment? imagingAssessment;
 
   String get currentEnvironmentLabel => '현재 환경 (Bortle $referenceBortle)';
 

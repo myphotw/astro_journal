@@ -7,6 +7,7 @@ import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
+import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/object_observation_window.dart';
 import '../../../data/models/observation_context.dart';
 import '../../../data/models/observation_score_contribution.dart';
@@ -128,15 +129,14 @@ class HomeScreen extends StatelessWidget {
           body: state.loading
               ? const Center(child: CircularProgressIndicator())
               : state.error != null
-                  ? Center(child: Text(state.error!))
-                  // deferred 로드 후 진척률·추천이 채워져도 Selector는 갱신되지
-                  // 않으므로, 본문만 VM listenable로 다시 그린다.
-                  : ListenableBuilder(
-                      listenable: context.read<HomeViewModel>(),
-                      builder: (context, _) => _HomeBody(
-                        viewModel: context.read<HomeViewModel>(),
-                      ),
-                    ),
+              ? Center(child: Text(state.error!))
+              // deferred 로드 후 진척률·추천이 채워져도 Selector는 갱신되지
+              // 않으므로, 본문만 VM listenable로 다시 그린다.
+              : ListenableBuilder(
+                  listenable: context.read<HomeViewModel>(),
+                  builder: (context, _) =>
+                      _HomeBody(viewModel: context.read<HomeViewModel>()),
+                ),
         );
       },
     );
@@ -256,8 +256,9 @@ class _HomeBodyState extends State<_HomeBody> {
     final equipmentIndex = equipmentGroups.isEmpty
         ? 0
         : _equipmentGroupIndex.clamp(0, equipmentGroups.length - 1);
-    final selectedEquipmentGroup =
-        equipmentGroups.isEmpty ? null : equipmentGroups[equipmentIndex];
+    final selectedEquipmentGroup = equipmentGroups.isEmpty
+        ? null
+        : equipmentGroups[equipmentIndex];
 
     // Expanded+비스크롤 Grid 때문에 휴대폰에서 상하 드래그가 막히던 구조.
     // 본문 전체를 스크롤하고, 카테고리 그리드는 shrinkWrap으로 넣는다.
@@ -283,16 +284,12 @@ class _HomeBodyState extends State<_HomeBody> {
             ),
           if (condition != null) const SizedBox(height: AppTheme.spacingSm),
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingLg,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
             child: _SeasonPlannerEntryCard(month: now.month),
           ),
           const SizedBox(height: AppTheme.spacingMd),
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingLg,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -304,11 +301,11 @@ class _HomeBodyState extends State<_HomeBody> {
                       children: [
                         Text(
                           '오늘의 추천',
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: AppColors.textPrimary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                         if (_recommendationTab ==
                             _RecommendationSectionTab.targets)
@@ -322,8 +319,8 @@ class _HomeBodyState extends State<_HomeBody> {
                       ],
                     ),
                     if ((_recommendationTab ==
-                            _RecommendationSectionTab.targets &&
-                        viewModel.allRecommendedObjects.isNotEmpty) ||
+                                _RecommendationSectionTab.targets &&
+                            viewModel.allRecommendedObjects.isNotEmpty) ||
                         (_recommendationTab ==
                                 _RecommendationSectionTab.equipment &&
                             selectedEquipmentGroup != null &&
@@ -345,8 +342,10 @@ class _HomeBodyState extends State<_HomeBody> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child:
-                            const Text('더보기', style: TextStyle(fontSize: 12)),
+                        child: const Text(
+                          '더보기',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                   ],
                 ),
@@ -397,8 +396,10 @@ class _HomeBodyState extends State<_HomeBody> {
                 horizontal: AppTheme.spacingLg,
               ),
               child: _LimitedRecommendationNotice(
-                message: viewModel
-                        .observationCondition?.limitedRecommendationNotice ??
+                message:
+                    viewModel
+                        .observationCondition
+                        ?.limitedRecommendationNotice ??
                     ObservationStatus.limited.limitedRecommendationNotice,
               ),
             ),
@@ -411,9 +412,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 horizontal: AppTheme.spacingLg,
               ),
               child: viewModel.recommendedObjects.isEmpty
-                  ? _NoRecommendationWidget(
-                      reasons: viewModel.exclusionReasons,
-                    )
+                  ? _NoRecommendationWidget(reasons: viewModel.exclusionReasons)
                   : _RecommendedObjectGrid(
                       items: viewModel.recommendedObjects.take(4).toList(),
                       onTap: (rec) => _showObjectDetail(context, rec),
@@ -440,6 +439,15 @@ class _HomeBodyState extends State<_HomeBody> {
                     },
                   ),
                   if (selectedEquipmentGroup != null &&
+                      !selectedEquipmentGroup.isVisual) ...[
+                    const SizedBox(height: AppTheme.spacingSm),
+                    _TrackingModeSelector(
+                      selected: viewModel.trackingMode,
+                      onChanged: (mode) =>
+                          context.read<HomeViewModel>().setTrackingMode(mode),
+                    ),
+                  ],
+                  if (selectedEquipmentGroup != null &&
                       selectedEquipmentGroup.targets.isNotEmpty) ...[
                     const SizedBox(height: AppTheme.spacingSm),
                     _RecommendedObjectGrid(
@@ -450,9 +458,8 @@ class _HomeBodyState extends State<_HomeBody> {
                       canAddToPlan: (id) =>
                           !selectedEquipmentGroup.isVisual &&
                           viewModel.canAddToShootingPlan(id),
-                      onTogglePlan: (id) => context
-                          .read<HomeViewModel>()
-                          .toggleTonightPlan(id),
+                      onTogglePlan: (id) =>
+                          context.read<HomeViewModel>().toggleTonightPlan(id),
                     ),
                   ],
                 ],
@@ -483,15 +490,13 @@ class _HomeBodyState extends State<_HomeBody> {
               viewModel.scheduleEmptyMessage != null)
             const SizedBox(height: AppTheme.spacingMd),
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingLg,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
             child: Text(
               '카테고리별 진행 현황',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(height: AppTheme.spacingSm),
@@ -557,7 +562,6 @@ class _SeasonPlannerEntryCard extends StatelessWidget {
     AstroSeason season,
     SeasonSummary summary,
   ) {
-
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(AppTheme.cardRadius),
@@ -589,8 +593,8 @@ class _SeasonPlannerEntryCard extends StatelessWidget {
                     Text(
                       '${season.label} 하늘 · 계절별 촬영 대상',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -648,15 +652,9 @@ class _ObservationIndexCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.surface,
-            const Color(0xFF0A1628),
-          ],
+          colors: [AppColors.surface, const Color(0xFF0A1628)],
         ),
-        border: Border.all(
-          color: scoreCol.withAlpha(100),
-          width: 1,
-        ),
+        border: Border.all(color: scoreCol.withAlpha(100), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -913,10 +911,7 @@ class _MetricsRow extends StatelessWidget {
             label: '${condition.weather!.windSpeed.toStringAsFixed(1)}m/s',
           ),
         ] else
-          _MetricChip(
-            icon: Icons.cloud_off_outlined,
-            label: '날씨 미연동',
-          ),
+          _MetricChip(icon: Icons.cloud_off_outlined, label: '날씨 미연동'),
         _MetricChip(
           icon: null,
           emoji: condition.moon.phaseEmoji,
@@ -928,11 +923,8 @@ class _MetricsRow extends StatelessWidget {
 }
 
 class _MetricChip extends StatelessWidget {
-  const _MetricChip({
-    this.icon,
-    this.emoji,
-    required this.label,
-  }) : assert(icon != null || emoji != null);
+  const _MetricChip({this.icon, this.emoji, required this.label})
+    : assert(icon != null || emoji != null);
 
   final IconData? icon;
   final String? emoji;
@@ -950,10 +942,7 @@ class _MetricChip extends StatelessWidget {
         const SizedBox(width: 3),
         Text(
           label,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
         ),
       ],
     );
@@ -1056,8 +1045,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                   children: [
                     _InfoRow(
                       label: '기온',
-                      value:
-                          '${w.temperature.toStringAsFixed(1)}°C',
+                      value: '${w.temperature.toStringAsFixed(1)}°C',
                     ),
                     _InfoRow(
                       label: '체감온도',
@@ -1066,8 +1054,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                     _InfoRow(label: '습도', value: '${w.humidity}%'),
                     _InfoRow(
                       label: '풍속',
-                      value:
-                          '${w.windSpeed.toStringAsFixed(1)} m/s',
+                      value: '${w.windSpeed.toStringAsFixed(1)} m/s',
                     ),
                     _InfoRow(
                       label: '풍향',
@@ -1077,8 +1064,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                     _InfoRow(label: '구름량', value: '${w.cloudCoverage}%'),
                     _InfoRow(
                       label: '가시거리',
-                      value:
-                          '${(w.visibility / 1000).toStringAsFixed(1)} km',
+                      value: '${(w.visibility / 1000).toStringAsFixed(1)} km',
                     ),
                     if (w.description.isNotEmpty)
                       _InfoRow(label: '날씨', value: w.description),
@@ -1097,8 +1083,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                 children: [
                   _InfoRow(
                     label: '월령',
-                    value:
-                        '${condition.moon.age.toStringAsFixed(1)}일',
+                    value: '${condition.moon.age.toStringAsFixed(1)}일',
                   ),
                   _InfoRow(
                     label: '달 위상',
@@ -1261,8 +1246,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                       ),
                       _InfoRow(
                         label: '평균 강수확률',
-                        value:
-                            '${condition.averagePrecipitationPop.round()}%',
+                        value: '${condition.averagePrecipitationPop.round()}%',
                       ),
                       _InfoRow(
                         label: '평균 가시거리',
@@ -1370,6 +1354,7 @@ class _TonightObservationMatrix extends StatelessWidget {
   static const _labelWidth = 52.0;
   static const _cellWidth = 56.0;
   static const _rowHeight = 32.0;
+
   /// 관측 불가 배지가 들어가는 시간 행은 조금 더 높게.
   static const _timeRowHeight = 44.0;
   static const _borderColor = AppColors.textSecondary;
@@ -1408,9 +1393,7 @@ class _TonightObservationMatrix extends StatelessWidget {
 
   BoxDecoration _cellDecoration(TonightObservationSlot slot) {
     if (!slot.canObserve) {
-      return BoxDecoration(
-        color: AppColors.textSecondary.withAlpha(24),
-      );
+      return BoxDecoration(color: AppColors.textSecondary.withAlpha(24));
     }
 
     final isBest = bestSlot?.targetTime == slot.targetTime;
@@ -1418,21 +1401,19 @@ class _TonightObservationMatrix extends StatelessWidget {
     final isStart = _isWindowStart(slot);
     final isEnd = _isWindowEnd(slot);
     return BoxDecoration(
-      color:
-          isBest
-              ? AppColors.ic.withAlpha(36)
-              : inWindow
-              ? const Color(0xFF60A5FA).withAlpha(24)
-              : Colors.transparent,
-      border:
-          inWindow
-              ? Border.all(
-                color: const Color(0xFF60A5FA).withAlpha(
-                  isStart || isEnd ? 180 : 120,
-                ),
-                width: isStart || isEnd ? 1.2 : 0.8,
-              )
-              : null,
+      color: isBest
+          ? AppColors.ic.withAlpha(36)
+          : inWindow
+          ? const Color(0xFF60A5FA).withAlpha(24)
+          : Colors.transparent,
+      border: inWindow
+          ? Border.all(
+              color: const Color(
+                0xFF60A5FA,
+              ).withAlpha(isStart || isEnd ? 180 : 120),
+              width: isStart || isEnd ? 1.2 : 0.8,
+            )
+          : null,
     );
   }
 
@@ -1483,8 +1464,8 @@ class _TonightObservationMatrix extends StatelessWidget {
           color: inactive
               ? AppColors.textSecondary
               : emphasizeScore
-                  ? _scoreColor(slot.score)
-                  : AppColors.textPrimary,
+              ? _scoreColor(slot.score)
+              : AppColors.textPrimary,
           fontSize: 10,
           fontWeight: isBest ? FontWeight.bold : FontWeight.normal,
         ),
@@ -1495,9 +1476,7 @@ class _TonightObservationMatrix extends StatelessWidget {
 
   Widget _infeasibleBadge(TonightObservationSlot slot) {
     final reason = slot.feasibility.reason;
-    final shortReason = (reason != null && reason.isNotEmpty)
-        ? reason
-        : null;
+    final shortReason = (reason != null && reason.isNotEmpty) ? reason : null;
     return Text(
       shortReason == null ? '불가' : '불가·$shortReason',
       style: const TextStyle(fontSize: 7, height: 1.05),
@@ -1529,11 +1508,7 @@ class _TonightObservationMatrix extends StatelessWidget {
                     _infeasibleBadge(slot),
                   ],
                 )
-              : Text(
-                  slot.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              : Text(slot.label, maxLines: 1, overflow: TextOverflow.ellipsis),
         );
       }
 
@@ -1567,10 +1542,7 @@ class _TonightObservationMatrix extends StatelessWidget {
         4 => _valueCell(slot, Text(f.windSpeed.toStringAsFixed(1))),
         5 => _valueCell(slot, Text('${f.humidity}%')),
         6 => _valueCell(slot, Text('${f.pop.round()}%')),
-        7 => _valueCell(
-          slot,
-          Text((f.visibility / 1000).toStringAsFixed(0)),
-        ),
+        7 => _valueCell(slot, Text((f.visibility / 1000).toStringAsFixed(0))),
         8 => _valueCell(
           slot,
           Text(
@@ -1599,8 +1571,10 @@ class _TonightObservationMatrix extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (observationWindow != null) _ObservationWindowCard(observationWindow!),
-        if (observationWindow != null) const SizedBox(height: AppTheme.spacingMd),
+        if (observationWindow != null)
+          _ObservationWindowCard(observationWindow!),
+        if (observationWindow != null)
+          const SizedBox(height: AppTheme.spacingMd),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1616,9 +1590,7 @@ class _TonightObservationMatrix extends StatelessWidget {
                 child: Column(
                   children: List.generate(
                     _rowLabels.length,
-                    (rowIndex) => Row(
-                      children: _buildRowValues(rowIndex),
-                    ),
+                    (rowIndex) => Row(children: _buildRowValues(rowIndex)),
                   ),
                 ),
               ),
@@ -1851,10 +1823,7 @@ class _ObservationUnavailableNotice extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             '기상은 변할 수 있어 추천 대상과 촬영 순서는 참고용으로 계속 표시합니다.',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            ),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
         ],
       ),
@@ -1878,7 +1847,9 @@ class _LimitedRecommendationNotice extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: AppColors.textSecondary.withValues(alpha: 0.2)),
+        border: Border.all(
+          color: AppColors.textSecondary.withValues(alpha: 0.2),
+        ),
       ),
       child: Row(
         children: [
@@ -1905,18 +1876,63 @@ class _LimitedRecommendationNotice extends StatelessWidget {
 
 // ── 추천 없음 위젯 ───────────────────────────────────────────────────────────
 
+class _TrackingModeSelector extends StatelessWidget {
+  const _TrackingModeSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final TrackingMode selected;
+  final ValueChanged<TrackingMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Text(
+          '촬영 모드',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: AppTheme.spacingSm),
+        Expanded(
+          child: SegmentedButton<TrackingMode>(
+            segments: const [
+              ButtonSegment(
+                value: TrackingMode.altAz,
+                label: Text('Alt-Az', style: TextStyle(fontSize: 11)),
+              ),
+              ButtonSegment(
+                value: TrackingMode.eq,
+                label: Text('EQ', style: TextStyle(fontSize: 11)),
+              ),
+            ],
+            selected: {selected},
+            onSelectionChanged: (selection) => onChanged(selection.first),
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _NoRecommendationWidget extends StatelessWidget {
   const _NoRecommendationWidget({required this.reasons});
   final List<String> reasons;
 
   @override
   Widget build(BuildContext context) {
-    final title = reasons.isNotEmpty &&
-            reasons.first.contains('기상 조건')
+    final title = reasons.isNotEmpty && reasons.first.contains('기상 조건')
         ? reasons.first
         : '추천 가능한 대상이 없습니다.';
-    final detailReasons = reasons.isNotEmpty &&
-            reasons.first.contains('기상 조건')
+    final detailReasons = reasons.isNotEmpty && reasons.first.contains('기상 조건')
         ? reasons.skip(1).toList()
         : reasons;
 
@@ -2074,6 +2090,7 @@ class _RecommendCompactCard extends StatelessWidget {
     final color = recommended.object.catalog.accentColor;
     final captured = recommended.object.captured;
     final w = recommended.observationWindow;
+    final assessment = recommended.imagingAssessment;
 
     return Container(
       decoration: BoxDecoration(
@@ -2093,9 +2110,7 @@ class _RecommendCompactCard extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Padding(
-            padding: EdgeInsets.only(
-              right: showPlanButton ? 72 : 44,
-            ),
+            padding: EdgeInsets.only(right: showPlanButton ? 72 : 44),
             child: GestureDetector(
               onTap: onTap,
               behavior: HitTestBehavior.opaque,
@@ -2161,6 +2176,20 @@ class _RecommendCompactCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     CatalogEquipmentChipsRow(chips: equipmentChips),
                   ],
+                  if (assessment != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      '필터 ${assessment.filterMode.label} · '
+                      '${assessment.quality.starLabel} ${assessment.quality.label}',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 9,
+                        height: 1.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                   const SizedBox(height: 2),
                   if (w != null)
                     Text.rich(
@@ -2208,8 +2237,7 @@ class _RecommendCompactCard extends StatelessWidget {
                           ],
                           _dot,
                           TextSpan(
-                            text:
-                                '달거리 ${recommended.moonSeparation.round()}°',
+                            text: '달거리 ${recommended.moonSeparation.round()}°',
                             style: const TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 9,
@@ -2269,7 +2297,6 @@ class _RecommendCompactCard extends StatelessWidget {
   }
 }
 
-
 // ── 추천 상세 시트 ───────────────────────────────────────────────────────────
 
 class _TodayEquipmentRecommendationBlock extends StatelessWidget {
@@ -2280,8 +2307,9 @@ class _TodayEquipmentRecommendationBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final homeVm = context.watch<HomeViewModel>();
-    final todayRec =
-        homeVm.todayEquipmentRecommendationFor(recommended.object.id);
+    final todayRec = homeVm.todayEquipmentRecommendationFor(
+      recommended.object.id,
+    );
     if (todayRec == null) {
       return const SizedBox.shrink();
     }
@@ -2299,9 +2327,12 @@ class _RecommendDetailSheet extends StatelessWidget {
     final color = recommended.object.catalog.accentColor;
     final captured = recommended.object.captured;
     final successRate = recommended.successRate.round();
-    final equipmentChips =
-        homeVm.todayEquipmentChipsFor(recommended.object.id);
+    final equipmentChips = homeVm.todayEquipmentChipsFor(recommended.object.id);
     final isPlanned = homeVm.isPlanned(recommended.object.id);
+    final assessment = recommended.imagingAssessment;
+    final todayEquipment = homeVm.todayEquipmentRecommendationFor(
+      recommended.object.id,
+    );
 
     return DraggableScrollableSheet(
       expand: false,
@@ -2408,8 +2439,7 @@ class _RecommendDetailSheet extends StatelessWidget {
               const SizedBox(height: AppTheme.spacingSm),
               ShootingPlanActionButton(
                 isPlanned: isPlanned,
-                onToggle: () =>
-                    homeVm.toggleTonightPlan(recommended.object.id),
+                onToggle: () => homeVm.toggleTonightPlan(recommended.object.id),
               ),
             ],
             const SizedBox(height: AppTheme.spacingSm),
@@ -2420,11 +2450,53 @@ class _RecommendDetailSheet extends StatelessWidget {
               _ObservationWindowSection(
                 window: recommended.observationWindow!,
                 moonSeparation: recommended.moonSeparation,
-                exposureTimeLineLabel:
-                    _resolveExposureTimeLineLabel(context, homeVm, recommended),
+                exposureTimeLineLabel: _resolveExposureTimeLineLabel(
+                  context,
+                  homeVm,
+                  recommended,
+                ),
               ),
             if (recommended.observationWindow != null)
               const SizedBox(height: AppTheme.spacingMd),
+
+            if (assessment != null) ...[
+              _SheetSection(
+                icon: Icons.camera_alt_outlined,
+                iconColor: AppColors.ic,
+                title: '촬영 가이드',
+                child: Column(
+                  children: [
+                    _InfoRow(
+                      label: '장비',
+                      value: todayEquipment?.imaging?.equipment.name ?? '등록 장비',
+                    ),
+                    _InfoRow(label: '모드', value: assessment.trackingMode.label),
+                    _InfoRow(label: '필터', value: assessment.filterMode.label),
+                    if (recommended.recommendedExposure != null)
+                      _InfoRow(
+                        label: '추천 촬영',
+                        value:
+                            '${recommended.recommendedExposure!.inMinutes}분 이상',
+                      ),
+                    _InfoRow(
+                      label: '예상 결과',
+                      value:
+                          '${assessment.quality.starLabel} ${assessment.quality.label}',
+                    ),
+                    const SizedBox(height: AppTheme.spacingXs),
+                    Text(
+                      assessment.reason,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+            ],
 
             // 추천 이유 체크리스트
             _SheetSection(
@@ -2441,8 +2513,7 @@ class _RecommendDetailSheet extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: AppColors.solar.withAlpha(38),
-                      borderRadius:
-                          BorderRadius.circular(AppTheme.spacingSm),
+                      borderRadius: BorderRadius.circular(AppTheme.spacingSm),
                     ),
                     child: Text(
                       '${recommended.season} 추천',
@@ -2497,18 +2568,9 @@ class _RecommendDetailSheet extends StatelessWidget {
                     label: '별자리',
                     value: recommended.object.displayConstellation,
                   ),
-                  _InfoRow(
-                    label: '등급',
-                    value: recommended.object.magnitude,
-                  ),
-                  _InfoRow(
-                    label: '적경 (RA)',
-                    value: recommended.object.ra,
-                  ),
-                  _InfoRow(
-                    label: '적위 (Dec)',
-                    value: recommended.object.dec,
-                  ),
+                  _InfoRow(label: '등급', value: recommended.object.magnitude),
+                  _InfoRow(label: '적경 (RA)', value: recommended.object.ra),
+                  _InfoRow(label: '적위 (Dec)', value: recommended.object.dec),
                 ],
               ),
             ),
@@ -2519,32 +2581,25 @@ class _RecommendDetailSheet extends StatelessWidget {
               icon: captured
                   ? Icons.check_circle
                   : Icons.radio_button_unchecked,
-              iconColor:
-                  captured ? AppColors.ic : AppColors.textSecondary,
+              iconColor: captured ? AppColors.ic : AppColors.textSecondary,
               title: '촬영 여부',
               child: Row(
                 children: [
                   Icon(
-                    captured
-                        ? Icons.check_circle
-                        : Icons.cancel_outlined,
-                    color:
-                        captured ? AppColors.ic : AppColors.textSecondary,
+                    captured ? Icons.check_circle : Icons.cancel_outlined,
+                    color: captured ? AppColors.ic : AppColors.textSecondary,
                     size: 20,
                   ),
                   const SizedBox(width: AppTheme.spacingSm),
                   Text(
                     captured ? '촬영 완료' : '미촬영',
                     style: TextStyle(
-                      color: captured
-                          ? AppColors.ic
-                          : AppColors.textSecondary,
+                      color: captured ? AppColors.ic : AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
                     ),
                   ),
-                  if (captured &&
-                      recommended.object.capturedDate != null) ...[
+                  if (captured && recommended.object.capturedDate != null) ...[
                     const SizedBox(width: AppTheme.spacingSm),
                     Text(
                       recommended.object.capturedDate!,
@@ -2633,9 +2688,7 @@ class _RecommendedListSheet extends StatelessWidget {
                       children: [
                         Text(
                           title ?? '오늘의 추천 대상',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.bold,
@@ -2676,15 +2729,17 @@ class _RecommendedListSheet extends StatelessWidget {
                   separatorBuilder: (_, _) => const SizedBox(height: 2),
                   itemBuilder: (context, index) {
                     final rec = items[index];
-                    final showPlan = canAddToPlan?.call(rec.object.id) ??
+                    final showPlan =
+                        canAddToPlan?.call(rec.object.id) ??
                         homeVm.canAddToShootingPlan(rec.object.id);
                     return _RecommendListTile(
                       recommended: rec,
                       rank: index + 1,
                       onTap: () => _showDetail(context, rec),
                       isPlanned: homeVm.isPlanned(rec.object.id),
-                      equipmentChips:
-                          homeVm.todayEquipmentChipsFor(rec.object.id),
+                      equipmentChips: homeVm.todayEquipmentChipsFor(
+                        rec.object.id,
+                      ),
                       showPlanButton: showPlan,
                       onTogglePlan: () =>
                           homeVm.toggleTonightPlan(rec.object.id),
@@ -2699,7 +2754,6 @@ class _RecommendedListSheet extends StatelessWidget {
     );
   }
 }
-
 
 class _RecommendListTile extends StatelessWidget {
   const _RecommendListTile({
@@ -2922,10 +2976,7 @@ class _RecommendListTile extends StatelessWidget {
 // ── ③ 카테고리 진행현황 카드 ─────────────────────────────────────────────────
 
 class _CategoryProgressCard extends StatelessWidget {
-  const _CategoryProgressCard({
-    required this.progress,
-    this.compact = false,
-  });
+  const _CategoryProgressCard({required this.progress, this.compact = false});
 
   final CategoryProgress progress;
   final bool compact;
@@ -2935,8 +2986,7 @@ class _CategoryProgressCard extends StatelessWidget {
     final color = progress.type.accentColor;
     final percent = progress.progressPercent;
     final label = _catalogLabel(progress.type);
-    final verticalPadding =
-        compact ? AppTheme.spacingSm : AppTheme.spacingMd;
+    final verticalPadding = compact ? AppTheme.spacingSm : AppTheme.spacingMd;
     final titleSize = compact ? 12.0 : 14.0;
     final statSize = compact ? 11.0 : 12.0;
     final percentSize = compact ? 12.0 : 13.0;
@@ -2944,9 +2994,7 @@ class _CategoryProgressCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        context
-            .read<AppNavigationNotifier>()
-            .navigateToCatalog(progress.type);
+        context.read<AppNavigationNotifier>().navigateToCatalog(progress.type);
       },
       child: Container(
         width: double.infinity,
@@ -3104,9 +3152,9 @@ class _ObservationSessionTimeline extends StatelessWidget {
               Text(
                 '오늘 밤 촬영 순서',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const Spacer(),
               IconButton(
@@ -3162,10 +3210,7 @@ class _ObservationSessionTimeline extends StatelessWidget {
 }
 
 class _SessionTableCell extends StatelessWidget {
-  const _SessionTableCell({
-    required this.item,
-    required this.onTap,
-  });
+  const _SessionTableCell({required this.item, required this.onTap});
 
   final ScheduleItem item;
   final VoidCallback onTap;
@@ -3212,8 +3257,9 @@ class _SessionTableCell extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            if (CatalogObjectDisplayFormatter.subtitleText(item.catalogObject)
-                .isNotEmpty)
+            if (CatalogObjectDisplayFormatter.subtitleText(
+              item.catalogObject,
+            ).isNotEmpty)
               Text(
                 CatalogObjectDisplayFormatter.subtitleText(item.catalogObject),
                 style: const TextStyle(
@@ -3226,19 +3272,13 @@ class _SessionTableCell extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               item.durationLabel,
-              style: TextStyle(
-                color: color.withAlpha(180),
-                fontSize: 9,
-              ),
+              style: TextStyle(color: color.withAlpha(180), fontSize: 9),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
             Text(
               '★' * item.starCount,
-              style: TextStyle(
-                color: color.withAlpha(200),
-                fontSize: 9,
-              ),
+              style: TextStyle(color: color.withAlpha(200), fontSize: 9),
             ),
             Text(
               item.status.label,
@@ -3299,14 +3339,8 @@ class _ObservationWindowSection extends StatelessWidget {
                 ),
               ),
             ),
-          _InfoRow(
-            label: '현재 고도',
-            value: '${window.currentAltitude.round()}°',
-          ),
-          _InfoRow(
-            label: '현재 방위각',
-            value: '${window.currentAzimuth.round()}°',
-          ),
+          _InfoRow(label: '현재 고도', value: '${window.currentAltitude.round()}°'),
+          _InfoRow(label: '현재 방위각', value: '${window.currentAzimuth.round()}°'),
           if (window.recommendStartTime != null)
             _InfoRow(
               label: '추천 시작',
@@ -3325,23 +3359,14 @@ class _ObservationWindowSection extends StatelessWidget {
                   '${window.peakAltitude!.round()}° (${_formatTime(window.peakAltitudeTime!)})',
             ),
           if (exposureTimeLineLabel != null)
-            _InfoRow(
-              label: '촬영시간(최소/권장)',
-              value: exposureTimeLineLabel!,
-            ),
-          _InfoRow(
-            label: '달과 거리',
-            value: '${moonSeparation.round()}°',
-          ),
+            _InfoRow(label: '촬영시간(최소/권장)', value: exposureTimeLineLabel!),
+          _InfoRow(label: '달과 거리', value: '${moonSeparation.round()}°'),
           if (window.observationEndTime != null)
             _InfoRow(
               label: '관측 종료',
               value: _formatTime(window.observationEndTime!),
             ),
-          _InfoRow(
-            label: '총 관측 시간',
-            value: window.totalObservableLabel,
-          ),
+          _InfoRow(label: '총 관측 시간', value: window.totalObservableLabel),
           if (window.isCurrentlyVisible)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -3529,8 +3554,8 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
                   child: Text(
                     '오늘 밤 촬영 순서 편집',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -3543,10 +3568,7 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
             const Text(
               '드래그하여 순서를 바꾸거나 항목을 삭제할 수 있습니다. '
               '추천 대상은 하루에 한 번 자동으로 갱신됩니다.',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: AppTheme.spacingMd),
             Flexible(

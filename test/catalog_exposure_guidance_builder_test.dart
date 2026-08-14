@@ -3,6 +3,7 @@ import 'package:astro_journal/core/constants/object_type.dart';
 import 'package:astro_journal/core/constants/surface_brightness_class.dart';
 import 'package:astro_journal/data/models/catalog_exposure_guidance.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
+import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
 import 'package:astro_journal/services/catalog_exposure_guidance_builder.dart';
 import 'package:astro_journal/services/imaging_profile_resolver.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
@@ -18,6 +19,7 @@ void main() {
       required String type,
       String? objectType,
       String magnitude = '5.0',
+      String? angularSize,
     }) {
       return CatalogObject(
         id: id,
@@ -30,6 +32,7 @@ void main() {
         ra: '0h',
         dec: '+0°',
         magnitude: magnitude,
+        angularSize: angularSize,
       );
     }
 
@@ -61,12 +64,7 @@ void main() {
 
     test('strongly not recommended shows one short reason', () {
       final profile = provider.profileFor(
-        object(
-          id: 'dark1',
-          type: '암흑성운',
-          objectType: '암흑성운',
-          magnitude: '9.0',
-        ),
+        object(id: 'dark1', type: '암흑성운', objectType: '암흑성운', magnitude: '9.0'),
       );
       final guidance = builder.build(profile: profile, referenceBortle: 8);
 
@@ -76,6 +74,23 @@ void main() {
       );
       expect(guidance.reason, '현재 환경에서는 촬영을 권장하지 않습니다.');
       expect(guidance.currentExposureLine, isNull);
+    });
+
+    test('NGC 6822 uses the shared low-quality and Filter OFF assessment', () {
+      final profile = provider.profileFor(
+        object(
+          id: 'ngc6822',
+          type: '은하',
+          objectType: '은하',
+          magnitude: '10.05',
+          angularSize: "17.38' × 16.75'",
+        ),
+      );
+      final guidance = builder.build(profile: profile, referenceBortle: 8);
+
+      expect(guidance.imagingAssessment, isNotNull);
+      expect(guidance.imagingAssessment!.quality, ExpectedResultQuality.trace);
+      expect(guidance.imagingAssessment!.filterMode, FilterMode.off);
     });
   });
 

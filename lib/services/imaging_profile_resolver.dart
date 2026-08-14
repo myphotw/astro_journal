@@ -8,6 +8,7 @@ import '../core/constants/object_type.dart';
 import '../core/constants/surface_brightness_class.dart';
 import '../data/models/catalog_object.dart';
 import '../data/models/object_imaging_profile.dart';
+import '../data/models/representative_framing_size.dart';
 import 'equipment/angular_size_parser.dart';
 
 /// Infers per-target imaging traits from catalog metadata and type templates.
@@ -19,14 +20,23 @@ class ImagingProfileResolver {
 
   ObjectImagingProfile resolve(CatalogObject object, ObjectType objectType) {
     final template = ObjectImagingProfileDefaults.forType(objectType);
-    final maxArcmin = _resolveMaxArcminutes(object);
+    final angularSize = _resolveAngularSize(object);
+    final maxArcmin = angularSize == null
+        ? null
+        : math.max(angularSize.widthArcmin, angularSize.heightArcmin);
     final angularSizeClass = _resolveAngularSizeClass(maxArcmin);
     final magnitude = _parseMagnitude(object.magnitude);
+    final estimatedSurfaceBrightness = _estimateSurfaceBrightness(
+      magnitude: magnitude,
+      widthArcmin: angularSize?.widthArcmin,
+      heightArcmin: angularSize?.heightArcmin,
+    );
 
     final brightness = _inferSurfaceBrightness(
       objectType: objectType,
       magnitude: magnitude,
       maxArcmin: maxArcmin,
+      estimatedSurfaceBrightness: estimatedSurfaceBrightness,
     );
     final difficulty = _inferImagingDifficulty(
       objectType: objectType,
@@ -38,10 +48,21 @@ class ImagingProfileResolver {
       imagingDifficulty: difficulty,
       angularSizeClass: angularSizeClass,
       baseExposureMinutes: brightness.baseExposureMinutes,
+      estimatedSurfaceBrightness: estimatedSurfaceBrightness,
     );
   }
 
-  double? _resolveMaxArcminutes(CatalogObject object) {
+  RepresentativeFramingSize? _resolveAngularSize(CatalogObject object) {
+    if (object.majorAxis != null &&
+        object.minorAxis != null &&
+        object.majorAxis! > 0 &&
+        object.minorAxis! > 0) {
+      return RepresentativeFramingSize(
+        widthArcmin: object.majorAxis!,
+        heightArcmin: object.minorAxis!,
+      );
+    }
+
     final candidates = <String?>[
       object.angularSize,
       CatalogObjectMetadataOverrides.forId(object.id)?.angularSize,
@@ -54,16 +75,38 @@ class ImagingProfileResolver {
       ),
     ];
 
-    double? best;
+    RepresentativeFramingSize? best;
     for (final raw in candidates) {
       final parsed = AngularSizeParser.parse(raw);
       if (parsed == null) continue;
       final maxSide = math.max(parsed.widthArcmin, parsed.heightArcmin);
-      if (best == null || maxSide > best) {
-        best = maxSide;
+      final bestMaxSide = best == null
+          ? null
+          : math.max(best.widthArcmin, best.heightArcmin);
+      if (bestMaxSide == null || maxSide > bestMaxSide) {
+        best = parsed;
       }
     }
     return best;
+  }
+
+  double? _estimateSurfaceBrightness({
+    required double? magnitude,
+    required double? widthArcmin,
+    required double? heightArcmin,
+  }) {
+    if (magnitude == null ||
+        widthArcmin == null ||
+        heightArcmin == null ||
+        widthArcmin <= 0 ||
+        heightArcmin <= 0) {
+      return null;
+    }
+
+    // Mean surface brightness for an elliptical target:
+    // mu = integrated magnitude + 2.5 log10(area in arcsec^2).
+    final areaArcsecSquared = math.pi * widthArcmin * heightArcmin * 3600 / 4;
+    return magnitude + 2.5 * math.log(areaArcsecSquared) / math.ln10;
   }
 
   double? _parseMagnitude(String raw) {
@@ -89,6 +132,7 @@ class ImagingProfileResolver {
     required ObjectType objectType,
     required double? magnitude,
     required double? maxArcmin,
+    required double? estimatedSurfaceBrightness,
   }) {
     final general = _inferGeneralBrightness(
       magnitude: magnitude,
@@ -97,24 +141,29 @@ class ImagingProfileResolver {
 
     return switch (objectType) {
       ObjectType.galaxy => _inferGalaxyBrightness(
-          magnitude: magnitude,
-          maxArcmin: maxArcmin,
-        ),
-      ObjectType.planetaryNebula ||
-      ObjectType.complexNebula =>
-        general.atLeast(SurfaceBrightnessClass.bright),
+        magnitude: magnitude,
+        maxArcmin: maxArcmin,
+        estimatedSurfaceBrightness: estimatedSurfaceBrightness,
+      ),
+      ObjectType.planetaryNebula || ObjectType.complexNebula => general.atLeast(
+        SurfaceBrightnessClass.bright,
+      ),
       ObjectType.nebulaWithCluster => _inferNebulaWithClusterBrightness(
-          maxArcmin: maxArcmin,
-        ),
-      ObjectType.supernovaRemnant =>
-        general.atLeast(SurfaceBrightnessClass.dim),
+        maxArcmin: maxArcmin,
+      ),
+      ObjectType.supernovaRemnant => general.atLeast(
+        SurfaceBrightnessClass.dim,
+      ),
       ObjectType.emissionNebula => _inferEmissionNebulaBrightness(
-          general: general,
-          magnitude: magnitude,
-        ),
-      ObjectType.openCluster => _inferOpenClusterBrightness(magnitude: magnitude),
-      ObjectType.globularCluster =>
-        _inferGlobularClusterBrightness(magnitude: magnitude),
+        general: general,
+        magnitude: magnitude,
+      ),
+      ObjectType.openCluster => _inferOpenClusterBrightness(
+        magnitude: magnitude,
+      ),
+      ObjectType.globularCluster => _inferGlobularClusterBrightness(
+        magnitude: magnitude,
+      ),
       _ => general,
     };
   }
@@ -167,7 +216,29 @@ class ImagingProfileResolver {
   SurfaceBrightnessClass _inferGalaxyBrightness({
     required double? magnitude,
     required double? maxArcmin,
+    required double? estimatedSurfaceBrightness,
   }) {
+    if (estimatedSurfaceBrightness != null) {
+      if (estimatedSurfaceBrightness < 20.5) {
+        return SurfaceBrightnessClass.veryBright;
+      }
+      if (estimatedSurfaceBrightness < 22.5) {
+        return SurfaceBrightnessClass.bright;
+      }
+      if (estimatedSurfaceBrightness < 23.0) {
+        return SurfaceBrightnessClass.normal;
+      }
+      if (estimatedSurfaceBrightness < 23.7) {
+        return SurfaceBrightnessClass.dim;
+      }
+      if (estimatedSurfaceBrightness < 24.5) {
+        return SurfaceBrightnessClass.veryDim;
+      }
+      return SurfaceBrightnessClass.extremeDim;
+    }
+
+    // Catalogs without enough photometry retain the previous magnitude-only
+    // fallback instead of being treated as confidently low surface brightness.
     if (magnitude == null) {
       return SurfaceBrightnessClass.normal;
     }
@@ -235,14 +306,16 @@ class ImagingProfileResolver {
     return switch (objectType) {
       ObjectType.galaxy when brightness == SurfaceBrightnessClass.dim =>
         ImagingDifficulty.normal,
-      ObjectType.supernovaRemnant =>
-        fromBrightness.atLeast(ImagingDifficulty.hard),
+      ObjectType.supernovaRemnant => fromBrightness.atLeast(
+        ImagingDifficulty.hard,
+      ),
       ObjectType.emissionNebula ||
       ObjectType.complexNebula ||
       ObjectType.planetaryNebula ||
       ObjectType.openCluster ||
-      ObjectType.globularCluster =>
-        fromBrightness.atMost(ImagingDifficulty.easy),
+      ObjectType.globularCluster => fromBrightness.atMost(
+        ImagingDifficulty.easy,
+      ),
       _ => fromBrightness,
     };
   }

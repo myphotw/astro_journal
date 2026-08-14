@@ -4,7 +4,9 @@ import '../core/constants/catalog_type.dart';
 import '../core/constants/imaging_difficulty.dart';
 import '../core/constants/observation_status_config.dart';
 import '../data/models/catalog_object.dart';
+import '../data/models/imaging_suitability_assessment.dart';
 import '../data/models/observation_context.dart';
+import '../data/models/object_observation_window.dart';
 import '../data/models/observation_status.dart';
 import '../data/models/recommendation_build_result.dart';
 import '../data/models/recommendation_result.dart';
@@ -14,6 +16,8 @@ import '../data/models/tonight_observation_session.dart';
 import 'app_logger.dart';
 import 'celestial_position_service.dart';
 import 'exposure_policy.dart';
+import 'equipment/field_orientation_calculator.dart';
+import 'imaging_suitability_service.dart';
 import 'object_imaging_profile_provider.dart';
 import 'recommendation/feasibility_exclusion_messages.dart';
 import 'recommendation/limited_recommendation_policy.dart';
@@ -34,9 +38,14 @@ class RecommendationEngine {
     this._schedulerEngine, {
     RecommendationScore? recommendationScore,
     ObservationWindowCalculator? windowCalculator,
-  })  : _recommendationScore = recommendationScore ?? const RecommendationScore(),
-        _windowCalculator = windowCalculator ??
-            ObservationWindowCalculator(_celestialPositionService);
+    ImagingSuitabilityService? imagingSuitabilityService,
+  }) : _recommendationScore =
+           recommendationScore ?? const RecommendationScore(),
+       _windowCalculator =
+           windowCalculator ??
+           ObservationWindowCalculator(_celestialPositionService),
+       _imagingSuitabilityService =
+           imagingSuitabilityService ?? const ImagingSuitabilityService();
 
   final CelestialPositionService _celestialPositionService;
   final ExposurePolicy _exposurePolicy;
@@ -44,6 +53,7 @@ class RecommendationEngine {
   final SchedulerEngine _schedulerEngine;
   final RecommendationScore _recommendationScore;
   final ObservationWindowCalculator _windowCalculator;
+  final ImagingSuitabilityService _imagingSuitabilityService;
 
   Future<RecommendationBuildResult> build({
     required List<CatalogObject> catalog,
@@ -53,6 +63,12 @@ class RecommendationEngine {
     int limit = 20,
     double windSpeed = 0,
     DateTime? referenceTime,
+    TrackingMode trackingMode = TrackingMode.altAz,
+    ImagingEquipmentFit? Function(
+      CatalogObject object,
+      ObjectObservationWindow window,
+    )?
+    equipmentFitResolver,
   }) async {
     final filtered = _filterCatalog(catalog, settings);
     if (filtered.isEmpty) {
@@ -68,7 +84,8 @@ class RecommendationEngine {
     final refTime = _clampReferenceTime(now, session);
 
     // 관측 불가여도 기상은 변할 수 있으므로, 천체·광해 기준으로 추천/스케줄은 계속 계산한다.
-    final evalContext = context.observationStatus == ObservationStatus.unavailable
+    final evalContext =
+        context.observationStatus == ObservationStatus.unavailable
         ? _planningContextIgnoringWeather(context)
         : context;
 
@@ -82,7 +99,8 @@ class RecommendationEngine {
     var excludedInsufficientDuration = 0;
     var excludedLimitedDifficulty = 0;
 
-    final isLimited = evalContext.observationStatus == ObservationStatus.limited;
+    final isLimited =
+        evalContext.observationStatus == ObservationStatus.limited;
 
     final candidates = <ScoredObservationTarget>[];
 
@@ -153,6 +171,31 @@ class RecommendationEngine {
       }
 
       final window = windowResult.window!;
+      final equipmentFit = equipmentFitResolver?.call(object, window);
+      final rotationSpan = trackingMode == TrackingMode.altAz
+          ? _fieldRotationSpan(
+              object: object,
+              context: evalContext,
+              window: window,
+            )
+          : 0.0;
+      final assessment = _imagingSuitabilityService.assess(
+        profile: profile,
+        bortle: _exposurePolicy.resolveBortle(
+          bortle: evalContext.bortle,
+          brightness: evalContext.brightness,
+        ),
+        trackingMode: trackingMode,
+        equipmentFit: equipmentFit,
+        recommendedExposure: recommendedExposure,
+        targetAltitude: window.peakAltitude ?? window.currentAltitude,
+        moonIllumination: evalContext.moonIllumination,
+        moonSeparation: windowResult.moonSeparation,
+        cloudCover:
+            (window.optimalFeasibleCloudCoverage ?? evalContext.cloudCover)
+                .toDouble(),
+        fieldRotationSpanDegrees: rotationSpan,
+      );
       final evaluationTime =
           window.optimalTime ?? window.peakAltitudeTime ?? session.start;
       var score = _recommendationScore.calculate(
@@ -163,9 +206,9 @@ class RecommendationEngine {
         evaluationTime: evaluationTime,
         positionService: _celestialPositionService,
       );
+      score *= assessment.scoreMultiplier;
 
-      if (isLimited &&
-          profile.imagingDifficulty == ImagingDifficulty.normal) {
+      if (isLimited && profile.imagingDifficulty == ImagingDifficulty.normal) {
         score *= ObservationStatusConfig.limitedNormalDifficultyScoreMultiplier;
       }
 
@@ -180,6 +223,7 @@ class RecommendationEngine {
           moonSeparation: windowResult.moonSeparation,
           minimumExposure: minimumExposure,
           recommendedExposure: recommendedExposure,
+          imagingAssessment: assessment,
         ),
       );
     }
@@ -226,13 +270,17 @@ class RecommendationEngine {
               moonIllumination: evalContext.moonIllumination,
               season: season,
               month: month,
-              cloudCoverage: candidate.window.optimalFeasibleCloudCoverage ?? -1,
+              cloudCoverage:
+                  candidate.window.optimalFeasibleCloudCoverage ?? -1,
               windSpeed: candidate.window.optimalFeasibleWindSpeed ?? -1,
             ),
             season: season,
             score: candidate.score,
             moonSeparation: candidate.moonSeparation,
             observationWindow: candidate.window,
+            imagingAssessment: candidate.imagingAssessment,
+            minimumExposure: candidate.minimumExposure,
+            recommendedExposure: candidate.recommendedExposure,
           ),
         )
         .toList();
@@ -270,9 +318,33 @@ class RecommendationEngine {
     );
   }
 
+  double _fieldRotationSpan({
+    required CatalogObject object,
+    required ObservationContext context,
+    required ObjectObservationWindow window,
+  }) {
+    final start =
+        window.recommendStartTime ??
+        window.optimalStartTime ??
+        window.peakAltitudeTime;
+    final end = window.observationEndTime ?? window.optimalEndTime;
+    if (start == null || end == null || !end.isAfter(start)) return 0;
+
+    return FieldOrientationCalculator.fieldRotationSpanDuringWindow(
+      latitudeDeg: context.latitude,
+      longitudeDeg: context.longitude,
+      raHours: CelestialPositionService.parseRaHours(object.ra),
+      declinationDeg: CelestialPositionService.parseDecDeg(object.dec),
+      windowStart: start,
+      windowEnd: end,
+    );
+  }
+
   /// 관측 불가 시에도 추천·스케줄을 보여주기 위한 기상 무시 컨텍스트.
   /// 위치·달·Bortle 등 천체/광해 조건은 유지한다.
-  ObservationContext _planningContextIgnoringWeather(ObservationContext context) {
+  ObservationContext _planningContextIgnoringWeather(
+    ObservationContext context,
+  ) {
     return ObservationContext(
       latitude: context.latitude,
       longitude: context.longitude,
@@ -304,7 +376,10 @@ class RecommendationEngine {
     }).toList();
   }
 
-  DateTime _clampReferenceTime(DateTime time, TonightObservationSession session) {
+  DateTime _clampReferenceTime(
+    DateTime time,
+    TonightObservationSession session,
+  ) {
     if (time.isBefore(session.start)) return session.start;
     if (time.isAfter(session.end)) return session.start;
     return time;
@@ -341,13 +416,18 @@ class RecommendationEngine {
   ) {
     if (!kDebugMode || recommendations.isEmpty) return;
 
-    final byId = {for (final candidate in candidates) candidate.object.id: candidate};
+    final byId = {
+      for (final candidate in candidates) candidate.object.id: candidate,
+    };
 
     for (final recommendation in recommendations.take(4)) {
       final candidate = byId[recommendation.object.id];
       if (candidate == null) continue;
 
-      AppLogger.info('RECOMMEND', 'Target : ${recommendation.object.displayName}');
+      AppLogger.info(
+        'RECOMMEND',
+        'Target : ${recommendation.object.displayName}',
+      );
       AppLogger.info('RECOMMEND', 'FinalScore : ${candidate.score.round()}');
     }
   }

@@ -1,6 +1,7 @@
 import 'catalog_object.dart';
 import 'object_imaging_profile.dart';
 import 'object_observation_window.dart';
+import 'imaging_suitability_assessment.dart';
 
 /// A catalog target that passed filtering and scoring for tonight's session.
 class ScoredObservationTarget {
@@ -14,6 +15,7 @@ class ScoredObservationTarget {
     required this.recommendedExposure,
     this.schedulerPriority = 0,
     this.urgencyScore = 0,
+    this.imagingAssessment,
   });
 
   final CatalogObject object;
@@ -25,22 +27,26 @@ class ScoredObservationTarget {
   final Duration recommendedExposure;
   final double schedulerPriority;
   final double urgencyScore;
+  final ImagingSuitabilityAssessment? imagingAssessment;
 
   ScoredObservationTarget copyWith({
     ObjectObservationWindow? window,
+    double? score,
     double? schedulerPriority,
     double? urgencyScore,
+    ImagingSuitabilityAssessment? imagingAssessment,
   }) {
     return ScoredObservationTarget(
       object: object,
       window: window ?? this.window,
       profile: profile,
-      score: score,
+      score: score ?? this.score,
       moonSeparation: moonSeparation,
       minimumExposure: minimumExposure,
       recommendedExposure: recommendedExposure,
       schedulerPriority: schedulerPriority ?? this.schedulerPriority,
       urgencyScore: urgencyScore ?? this.urgencyScore,
+      imagingAssessment: imagingAssessment ?? this.imagingAssessment,
     );
   }
 }

@@ -5,6 +5,7 @@ import '../../data/models/catalog_object.dart';
 import '../../data/models/equipment.dart';
 import '../../data/models/equipment_recommendation.dart';
 import '../../data/models/fov_box.dart';
+import '../../data/models/imaging_suitability_assessment.dart';
 import '../../data/models/object_imaging_profile.dart';
 import '../../data/models/recommendation_result.dart';
 import '../../data/models/representative_framing_size.dart';
@@ -24,11 +25,11 @@ class EquipmentRecommendationService {
     ObjectImagingProfileProvider? profileProvider,
     RepresentativeFramingResolver? framingResolver,
     VisualObservationScorer? visualScorer,
-  })  : _profileProvider =
-            profileProvider ?? const ObjectImagingProfileProvider(),
-        _framingResolver =
-            framingResolver ?? const RepresentativeFramingResolver(),
-        _visualScorer = visualScorer ?? const VisualObservationScorer();
+  }) : _profileProvider =
+           profileProvider ?? const ObjectImagingProfileProvider(),
+       _framingResolver =
+           framingResolver ?? const RepresentativeFramingResolver(),
+       _visualScorer = visualScorer ?? const VisualObservationScorer();
 
   final ObjectImagingProfileProvider _profileProvider;
   final RepresentativeFramingResolver _framingResolver;
@@ -76,12 +77,14 @@ class EquipmentRecommendationService {
     double? targetAltitude,
     double? observerLatitude,
     double? observerLongitude,
+    TrackingMode trackingMode = TrackingMode.altAz,
   }) {
     final orientation = _orientationFromRecommendation(
       object: object,
       recommendation: recommendation,
       observerLatitude: observerLatitude,
       observerLongitude: observerLongitude,
+      trackingMode: trackingMode,
     );
 
     final base = recommendForObject(
@@ -102,16 +105,17 @@ class EquipmentRecommendationService {
 
     ImagingEquipmentRecommendation? bestImaging;
     if (base.imaging.isNotEmpty) {
-      final scored = base.imaging
-          .map(
-            (item) => (
-              item: item,
-              todayScore: (item.score * contextFactor.imagingMultiplier)
-                  .clamp(0, 100),
-            ),
-          )
-          .toList()
-        ..sort((a, b) => b.todayScore.compareTo(a.todayScore));
+      final scored =
+          base.imaging
+              .map(
+                (item) => (
+                  item: item,
+                  todayScore: (item.score * contextFactor.imagingMultiplier)
+                      .clamp(0, 100),
+                ),
+              )
+              .toList()
+            ..sort((a, b) => b.todayScore.compareTo(a.todayScore));
 
       final top = scored.first;
       final todayScore = top.todayScore.toDouble();
@@ -133,7 +137,8 @@ class EquipmentRecommendationService {
 
     List<VisualEquipmentRecommendation> todayVisual = const [];
     if (base.visual.isNotEmpty) {
-      final blocked = base.visual.length == 1 && !base.visual.first.isRecommended;
+      final blocked =
+          base.visual.length == 1 && !base.visual.first.isRecommended;
       if (blocked) {
         final visual = base.visual.first;
         todayVisual = [
@@ -149,37 +154,39 @@ class EquipmentRecommendationService {
           ),
         ];
       } else {
-        todayVisual = base.visual
-            .map((visual) {
-              final todayScore = (visual.score * contextFactor.visualMultiplier)
-                  .clamp(0, 100)
-                  .toDouble();
-              final feasible =
-                  contextFactor.visualFeasible && visual.isRecommended;
-              return VisualEquipmentRecommendation(
-                equipment: visual.equipment,
-                eyepiece: feasible ? visual.eyepiece : null,
-                score: todayScore,
-                starCount: ObservationScoreService.recommendationStarCount(
-                  todayScore.round(),
-                ),
-                reason: feasible
-                    ? _prioritizeEquipmentReason(
-                        equipmentReason: visual.reason,
-                        conditionReason: contextFactor.visualReason,
-                      )
-                    : (contextFactor.visualBlockReason ?? visual.reason),
-                isRecommended: visual.isRecommended && feasible,
-                screenFillPercent: visual.screenFillPercent,
-                screenFillNote: visual.screenFillNote,
-                isFeasibleToday: feasible,
-              );
-            })
-            .where(
-              (visual) => visual.isFeasibleToday && visual.eyepiece != null,
-            )
-            .toList()
-          ..sort((a, b) => b.score.compareTo(a.score));
+        todayVisual =
+            base.visual
+                .map((visual) {
+                  final todayScore =
+                      (visual.score * contextFactor.visualMultiplier)
+                          .clamp(0, 100)
+                          .toDouble();
+                  final feasible =
+                      contextFactor.visualFeasible && visual.isRecommended;
+                  return VisualEquipmentRecommendation(
+                    equipment: visual.equipment,
+                    eyepiece: feasible ? visual.eyepiece : null,
+                    score: todayScore,
+                    starCount: ObservationScoreService.recommendationStarCount(
+                      todayScore.round(),
+                    ),
+                    reason: feasible
+                        ? _prioritizeEquipmentReason(
+                            equipmentReason: visual.reason,
+                            conditionReason: contextFactor.visualReason,
+                          )
+                        : (contextFactor.visualBlockReason ?? visual.reason),
+                    isRecommended: visual.isRecommended && feasible,
+                    screenFillPercent: visual.screenFillPercent,
+                    screenFillNote: visual.screenFillNote,
+                    isFeasibleToday: feasible,
+                  );
+                })
+                .where(
+                  (visual) => visual.isFeasibleToday && visual.eyepiece != null,
+                )
+                .toList()
+              ..sort((a, b) => b.score.compareTo(a.score));
       }
     }
 
@@ -276,13 +283,16 @@ class EquipmentRecommendationService {
     required RecommendationResult recommendation,
     double? observerLatitude,
     double? observerLongitude,
+    TrackingMode trackingMode = TrackingMode.altAz,
   }) {
+    if (trackingMode == TrackingMode.eq) return null;
     if (observerLatitude == null || observerLongitude == null) return null;
 
     final window = recommendation.observationWindow;
     if (window == null) return null;
 
-    final start = window.recommendStartTime ??
+    final start =
+        window.recommendStartTime ??
         window.optimalStartTime ??
         window.peakAltitudeTime;
     final end = window.observationEndTime ?? window.optimalEndTime;
@@ -363,7 +373,8 @@ class EquipmentRecommendationService {
     String? visualReason;
     String? visualBlockReason;
 
-    final altitude = targetAltitude ??
+    final altitude =
+        targetAltitude ??
         recommendation.observationWindow?.currentAltitude ??
         recommendation.observationWindow?.peakAltitude;
 

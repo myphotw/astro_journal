@@ -33,8 +33,60 @@ abstract final class FieldOrientationCalculator {
 
   static double altAzFieldRotationDegrees({
     required double parallacticAngleDeg,
-  }) =>
-      parallacticAngleDeg;
+  }) => parallacticAngleDeg;
+
+  /// Total unwrapped Alt-Az field rotation across an observing window.
+  ///
+  /// The unwrapping avoids a false 360 degree jump around +/-180 degrees.
+  static double fieldRotationSpanDuringWindow({
+    required double latitudeDeg,
+    required double longitudeDeg,
+    required double raHours,
+    required double declinationDeg,
+    required DateTime windowStart,
+    required DateTime windowEnd,
+    Duration step = const Duration(minutes: 20),
+  }) {
+    if (!windowEnd.isAfter(windowStart)) return 0;
+
+    double? previous;
+    var cumulative = 0.0;
+    var minimum = 0.0;
+    var maximum = 0.0;
+    var cursor = windowStart;
+
+    while (!cursor.isAfter(windowEnd)) {
+      final hourAngle = hourAngleDegrees(
+        longitudeDeg: longitudeDeg,
+        time: cursor,
+        raHours: raHours,
+      );
+      final angle = altAzFieldRotationDegrees(
+        parallacticAngleDeg: parallacticAngleDegrees(
+          latitudeDeg: latitudeDeg,
+          hourAngleDeg: hourAngle,
+          declinationDeg: declinationDeg,
+        ),
+      );
+
+      if (previous != null) {
+        var delta = angle - previous;
+        while (delta > 180) {
+          delta -= 360;
+        }
+        while (delta < -180) {
+          delta += 360;
+        }
+        cumulative += delta;
+        minimum = math.min(minimum, cumulative);
+        maximum = math.max(maximum, cumulative);
+      }
+      previous = angle;
+      cursor = cursor.add(step);
+    }
+
+    return maximum - minimum;
+  }
 
   static FramingCoverageResult bestFramingDuringWindow({
     required RepresentativeFramingSize framing,
@@ -154,7 +206,8 @@ abstract final class FieldOrientationCalculator {
     final a = (14 - m) ~/ 12;
     final yr = y + 4800 - a;
     final mo = m + 12 * a - 3;
-    final jdn = d +
+    final jdn =
+        d +
         (153 * mo + 2) ~/ 5 +
         365 * yr +
         yr ~/ 4 -
@@ -166,7 +219,8 @@ abstract final class FieldOrientationCalculator {
 
   static double _gmst(double jd) {
     final t = (jd - 2451545.0) / 36525.0;
-    final gmst = 280.46061837 +
+    final gmst =
+        280.46061837 +
         360.98564736629 * (jd - 2451545.0) +
         0.000387933 * t * t -
         t * t * t / 38710000.0;

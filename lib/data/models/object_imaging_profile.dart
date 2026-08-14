@@ -15,6 +15,7 @@ class ObjectImagingProfile {
     required this.recommendedBortle,
     required this.supportsNarrowband,
     required this.recommendedFilters,
+    this.estimatedSurfaceBrightness,
   });
 
   final ObjectType objectType;
@@ -31,6 +32,13 @@ class ObjectImagingProfile {
   final bool supportsNarrowband;
   final List<String> recommendedFilters;
 
+  /// Estimated mean surface brightness in mag/arcsec^2.
+  ///
+  /// This is only populated when both integrated magnitude and angular size
+  /// are available. A null value means the catalog metadata is insufficient;
+  /// callers must keep the existing type-based fallback.
+  final double? estimatedSurfaceBrightness;
+
   ObjectImagingProfile copyWith({
     ObjectType? objectType,
     ImagingDifficulty? imagingDifficulty,
@@ -41,6 +49,7 @@ class ObjectImagingProfile {
     int? recommendedBortle,
     bool? supportsNarrowband,
     List<String>? recommendedFilters,
+    double? estimatedSurfaceBrightness,
   }) {
     return ObjectImagingProfile(
       objectType: objectType ?? this.objectType,
@@ -54,6 +63,8 @@ class ObjectImagingProfile {
       recommendedBortle: recommendedBortle ?? this.recommendedBortle,
       supportsNarrowband: supportsNarrowband ?? this.supportsNarrowband,
       recommendedFilters: recommendedFilters ?? this.recommendedFilters,
+      estimatedSurfaceBrightness:
+          estimatedSurfaceBrightness ?? this.estimatedSurfaceBrightness,
     );
   }
 }
