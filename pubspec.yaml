@@ -51,7 +51,7 @@ dependencies:
   photo_manager: ^3.7.1
 
   # EXIF 자동 추출
-  native_exif: ^0.6.0
+  native_exif: ^0.8.0
 
   # API Key 저장 (SharedPreferences)
   shared_preferences: ^2.3.5
@@ -60,7 +60,7 @@ dependencies:
   archive: ^3.6.1
 
   # 백업 파일 선택
-  file_picker: ^8.1.7
+  file_picker: ^10.3.8
 
   # 백업 파일 공유/내보내기
   share_plus: ^10.1.4
