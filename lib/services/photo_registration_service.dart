@@ -19,6 +19,7 @@ import '../data/models/seestar_metadata.dart';
 
 import '../data/models/shooting_record.dart';
 import '../data/models/backend_upload_result.dart';
+import '../data/models/catalog_object.dart';
 import '../data/models/sync_outbox_item.dart';
 
 import '../data/repositories/catalog_repository.dart';
@@ -298,6 +299,7 @@ class PhotoRegistrationService {
     required PhotoRegistrationPayload payload,
     required ConfirmedMetadata confirmed,
     required String celestialObjectId,
+    CatalogObject? catalogObject,
     DetectMethod? detectMethod,
     AnalysisStatus analysisStatus = AnalysisStatus.completed,
     PlateSolveResult? plateSolve,
@@ -327,6 +329,14 @@ class PhotoRegistrationService {
 
     final record = saveData.toRecord(isRepresentative: shouldBeRepresentative);
 
+    final uploadMetadata = TcBackendUploadMetadata(
+      observationDate: _hasObservationDate(payload, confirmed)
+          ? _formatObservationDate(saveData.capturedAt)
+          : null,
+      canonicalTargetId: catalogObject?.effectivePrimaryId ?? celestialObjectId,
+      targetDisplayName: catalogObject?.displayCommonName,
+    );
+
     await shootingRecordRepository.save(record);
     AppLogger.metadata('PhotoRegistration', 'ShootingRecord 저장 완료');
     await Future<void>.delayed(Duration.zero);
@@ -342,17 +352,61 @@ class PhotoRegistrationService {
     );
     AppLogger.metadata('PhotoRegistration', 'Catalog captured 갱신 완료');
     final outbox = _syncOutboxRepository;
-    if (outbox != null && record.photoUri != null && record.photoUri!.isNotEmpty) {
-      final item = SyncOutboxItem(operationId: _uuid.v4(), localRecordId: record.id, clientFileId: _uuid.v4(), clientRecordId: _uuid.v4(), payload: {'local_path': record.photoUri, 'catalog_object_id': record.celestialObjectId, 'captured_at': record.capturedAt.toUtc().toIso8601String(), 'latitude': record.exif?.lat, 'longitude': record.exif?.lng, 'location_name': record.location ?? record.exif?.locationName, 'memo': record.memo, 'favorite': record.isFavorite, 'representative': record.isRepresentative});
+    if (outbox != null &&
+        record.photoUri != null &&
+        record.photoUri!.isNotEmpty) {
+      final item = SyncOutboxItem(
+        operationId: _uuid.v4(),
+        localRecordId: record.id,
+        clientFileId: _uuid.v4(),
+        clientRecordId: _uuid.v4(),
+        payload: {
+          'local_path': record.photoUri,
+          'catalog_object_id': record.celestialObjectId,
+          'captured_at': record.capturedAt.toUtc().toIso8601String(),
+          'latitude': record.exif?.lat,
+          'longitude': record.exif?.lng,
+          'location_name': record.location ?? record.exif?.locationName,
+          'memo': record.memo,
+          'favorite': record.isFavorite,
+          'representative': record.isRepresentative,
+          ...uploadMetadata.toFields(),
+        },
+      );
       await outbox.create(item);
       final coordinator = _syncCoordinator;
-      if (coordinator != null) unawaited(coordinator.drain());
+      if (coordinator != null) {
+        unawaited(coordinator.drain());
+      }
     } else {
       final uploadService = _tcBackendUploadService;
-      if (uploadService != null) unawaited(uploadService.uploadRecord(record).then((result) => _lastBackendUploadResult = result));
+      if (uploadService != null) {
+        unawaited(
+          uploadService
+              .uploadRecord(record, metadata: uploadMetadata)
+              .then((result) => _lastBackendUploadResult = result),
+        );
+      }
     }
     return record;
   }
+
+  bool _hasObservationDate(
+    PhotoRegistrationPayload payload,
+    ConfirmedMetadata confirmed,
+  ) {
+    final confirmedDate = confirmed.capturedAt?.trim();
+    if (confirmedDate != null && confirmedDate.isNotEmpty) {
+      return DateTime.tryParse(confirmedDate) != null;
+    }
+    final exifDate = payload.exifInfo.date.trim();
+    return exifDate.isNotEmpty && DateTime.tryParse(exifDate) != null;
+  }
+
+  String _formatObservationDate(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
 
   DateTime _resolveCapturedAt(
     PhotoRegistrationPayload payload,

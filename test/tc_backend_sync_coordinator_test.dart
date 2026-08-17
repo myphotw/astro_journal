@@ -43,12 +43,13 @@ void main() {
     int retryCount = 0,
     DateTime? retryAt,
     String? error,
+    Map<String, dynamic> payload = const {},
   }) => SyncOutboxItem(
     operationId: 'operation',
     localRecordId: record.id,
     clientFileId: 'stable-client-id',
     clientRecordId: 'client-record-id',
-    payload: const {},
+    payload: payload,
     state: state,
     uploadJobId: jobId,
     backendFileId: fileId,
@@ -123,7 +124,15 @@ void main() {
   });
 
   test('queued upload preserves client_file_id', () async {
-    final outbox = _FakeOutbox(item());
+    final outbox = _FakeOutbox(
+      item(
+        payload: const {
+          'observation_date': '2026-08-17',
+          'canonical_target_id': 'M42',
+          'target_display_name': 'Orion Nebula',
+        },
+      ),
+    );
     final upload = _FakeStages();
     await TcBackendSyncCoordinator(
       outbox,
@@ -133,6 +142,11 @@ void main() {
     ).drain();
     expect(upload.clientFileId, 'stable-client-id');
     expect(upload.clientRecordId, 'client-record-id');
+    expect(upload.metadata?.toFields(), {
+      'observation_date': '2026-08-17',
+      'canonical_target_id': 'M42',
+      'target_display_name': 'Orion Nebula',
+    });
   });
 
   test('record POST replay preserves durable client_record_id', () async {
@@ -402,13 +416,16 @@ class _FakeStages implements TcBackendUploadStages {
   int startCalls = 0, pollCalls = 0, recordCalls = 0;
   String? clientFileId;
   String? clientRecordId;
+  TcBackendUploadMetadata? metadata;
   @override
   Future<UploadStartResult> startUpload(
     ShootingRecord record, {
     required String clientFileId,
+    TcBackendUploadMetadata? metadata,
   }) async {
     startCalls++;
     this.clientFileId = clientFileId;
+    this.metadata = metadata;
     if (error != null) throw error!;
     return startGate?.future ?? const UploadStartResult(uploadJobId: 'job');
   }
@@ -508,5 +525,6 @@ class _ReplayRecordStages implements TcBackendUploadStages {
   Future<UploadStartResult> startUpload(
     ShootingRecord record, {
     required String clientFileId,
+    TcBackendUploadMetadata? metadata,
   }) => throw StateError('upload must not run');
 }

@@ -47,10 +47,10 @@ class PhotoFirstRegistrationViewModel extends ChangeNotifier {
         await loadCatalog();
       }
       if (!context.mounted) return [];
-      final payloads =
-          await _registrationService.pickMultipleAndCopyOnly(context);
-      _previewLocalPath =
-          payloads.isNotEmpty ? payloads.last.localPath : null;
+      final payloads = await _registrationService.pickMultipleAndCopyOnly(
+        context,
+      );
+      _previewLocalPath = payloads.isNotEmpty ? payloads.last.localPath : null;
       return payloads;
     } catch (error) {
       _errorMessage = error.toString();
@@ -65,8 +65,7 @@ class PhotoFirstRegistrationViewModel extends ChangeNotifier {
   /// 레거시: 복사 + EXIF 일괄 분석.
   Future<List<PhotoRegistrationPayload>> pickPhotosFromGallery(
     BuildContext context,
-  ) =>
-      pickPhotosCopyOnly(context);
+  ) => pickPhotosCopyOnly(context);
 
   Future<PhotoRegistrationPayload> enrichPayload(
     PhotoRegistrationPayload stub,
@@ -112,6 +111,7 @@ class PhotoFirstRegistrationViewModel extends ChangeNotifier {
         payload: payload,
         confirmed: confirmed,
         celestialObjectId: object.id,
+        catalogObject: object,
         detectMethod: detectMethod,
         analysisStatus: analysisStatus,
         plateSolve: plateSolve,

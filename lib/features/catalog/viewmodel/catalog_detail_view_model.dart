@@ -374,6 +374,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
         payload: payload,
         confirmed: confirmedWithTarget,
         celestialObjectId: object.id,
+        catalogObject: object,
         detectMethod: DetectMethod.manual,
         plateSolve: plateSolve,
       );

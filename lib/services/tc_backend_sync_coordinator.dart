@@ -117,6 +117,7 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
         final started = await _upload.startUpload(
           record,
           clientFileId: clientFileId,
+          metadata: TcBackendUploadMetadata.fromPayload(item.payload),
         );
         jobId = started.uploadJobId;
         fileId = started.backendFileId;

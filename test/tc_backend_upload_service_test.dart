@@ -82,7 +82,14 @@ void main() {
         );
       }),
     );
-    final result = await service.uploadRecord(record());
+    final result = await service.uploadRecord(
+      record(),
+      metadata: const TcBackendUploadMetadata(
+        observationDate: '2026-01-02',
+        canonicalTargetId: 'M42',
+        targetDisplayName: 'Orion Nebula',
+      ),
+    );
     expect(result.success, isTrue);
     expect(result.backendFileId, 'sha-file');
     expect(result.backendRecordId, 'record-1');
@@ -91,6 +98,48 @@ void main() {
     expect(body['catalog_object_id'], 'M42');
     expect(body['captured_at'], '2026-01-01T18:04:05.000Z');
     expect(body['location_name'], 'Seoul');
+    final uploadBody = requests.first.body;
+    expect(_multipartField(uploadBody, 'service_name'), 'AstroJournal');
+    expect(
+      _multipartField(uploadBody, 'observation_date'),
+      '2026-01-02',
+    );
+    expect(_multipartField(uploadBody, 'canonical_target_id'), 'M42');
+    expect(_multipartField(uploadBody, 'target_display_name'), 'Orion Nebula');
+    expect(
+      _multipartField(uploadBody, 'client_content_sha256'),
+      matches(RegExp(r'^[0-9a-f]{64}$')),
+    );
+  });
+
+  test('omits empty optional upload metadata fields', () async {
+    await settings.save(
+      const TcBackendSettings(
+        baseUrl: 'https://backend.example',
+        enabled: true,
+      ),
+    );
+    late http.Request sent;
+    final service = TcBackendUploadService(
+      settingsService: settings,
+      client: MockClient((request) async {
+        sent = request;
+        return http.Response(jsonEncode({'job_id': 'job-1'}), 200);
+      }),
+    );
+
+    await service.startUpload(
+      record(),
+      clientFileId: 'stable-client-id',
+      metadata: const TcBackendUploadMetadata(
+        observationDate: ' ',
+        canonicalTargetId: '',
+      ),
+    );
+
+    expect(sent.body, isNot(contains('name="observation_date"')));
+    expect(sent.body, isNot(contains('name="canonical_target_id"')));
+    expect(sent.body, isNot(contains('name="target_display_name"')));
   });
 
   test('stage create forwards durable client_record_id', () async {
@@ -252,3 +301,6 @@ void main() {
     },
   );
 }
+
+String? _multipartField(String body, String name) =>
+    RegExp('name="$name"\\r?\\n\\r?\\n([^\\r\\n]*)').firstMatch(body)?.group(1);

@@ -11,10 +11,51 @@ import '../data/models/backend_upload_result.dart';
 import '../data/models/shooting_record.dart';
 import 'tc_backend_settings_service.dart';
 
+/// Upload-only metadata used by tc-backend to choose the physical file path.
+/// ObservationRecord data remains a separate API concern.
+class TcBackendUploadMetadata {
+  const TcBackendUploadMetadata({
+    this.observationDate,
+    this.canonicalTargetId,
+    this.targetDisplayName,
+  });
+
+  final String? observationDate;
+  final String? canonicalTargetId;
+  final String? targetDisplayName;
+
+  Map<String, String> toFields() {
+    final fields = <String, String>{};
+    _addIfPresent(fields, 'observation_date', observationDate);
+    _addIfPresent(fields, 'canonical_target_id', canonicalTargetId);
+    _addIfPresent(fields, 'target_display_name', targetDisplayName);
+    return fields;
+  }
+
+  static TcBackendUploadMetadata? fromPayload(Map<String, dynamic> payload) {
+    final metadata = TcBackendUploadMetadata(
+      observationDate: payload['observation_date'] as String?,
+      canonicalTargetId: payload['canonical_target_id'] as String?,
+      targetDisplayName: payload['target_display_name'] as String?,
+    );
+    return metadata.toFields().isEmpty ? null : metadata;
+  }
+
+  static void _addIfPresent(
+    Map<String, String> fields,
+    String name,
+    String? value,
+  ) {
+    final trimmed = value?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) fields[name] = trimmed;
+  }
+}
+
 abstract class TcBackendUploadStages {
   Future<UploadStartResult> startUpload(
     ShootingRecord record, {
     required String clientFileId,
+    TcBackendUploadMetadata? metadata,
   });
   Future<UploadJobResult> pollUploadJob(String uploadJobId);
   Future<ObservationRecordResult> createObservationRecord(
@@ -47,6 +88,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
   Future<UploadStartResult> startUpload(
     ShootingRecord record, {
     required String clientFileId,
+    TcBackendUploadMetadata? metadata,
   }) async {
     final settings = await settingsService.load();
     final base = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
@@ -68,6 +110,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
       file,
       clientFileId,
       await contentSha256(file),
+      metadata: metadata,
     );
     return UploadStartResult(
       uploadJobId: response.jobId,
@@ -117,6 +160,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
   Future<BackendUploadResult> uploadRecord(
     ShootingRecord record, {
     String? clientFileId,
+    TcBackendUploadMetadata? metadata,
   }) async {
     final settings = await settingsService.load();
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
@@ -148,7 +192,13 @@ class TcBackendUploadService implements TcBackendUploadStages {
         );
       }
       sha256 = await contentSha256(file);
-      final upload = await _upload(baseUrl, file, resolvedClientFileId, sha256);
+      final upload = await _upload(
+        baseUrl,
+        file,
+        resolvedClientFileId,
+        sha256,
+        metadata: metadata,
+      );
       jobId = upload.jobId;
       backendFileId = upload.backendFileId;
       backendFileId ??= (await _pollUploadJob(baseUrl, jobId)).backendFileId;
@@ -227,14 +277,16 @@ class TcBackendUploadService implements TcBackendUploadStages {
     String baseUrl,
     File file,
     String clientFileId,
-    String sha256,
-  ) async {
+    String sha256, {
+    TcBackendUploadMetadata? metadata,
+  }) async {
     final request =
         http.MultipartRequest('POST', Uri.parse('$baseUrl/api/common/upload'))
           ..headers['Accept'] = 'application/json'
           ..fields['service_name'] = 'AstroJournal'
           ..fields['client_file_id'] = clientFileId
           ..fields['client_content_sha256'] = sha256
+          ..fields.addAll(metadata?.toFields() ?? const <String, String>{})
           ..files.add(
             await http.MultipartFile.fromPath(
               'file',
