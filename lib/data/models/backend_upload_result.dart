@@ -6,6 +6,7 @@ class BackendUploadResult {
     this.contentSha256,
     this.uploadJobId,
     this.backendFileId,
+    this.commonFileId,
     this.backendRecordId,
     this.recordRevision,
     this.errorType,
@@ -19,6 +20,7 @@ class BackendUploadResult {
       contentSha256 = null,
       uploadJobId = null,
       backendFileId = null,
+      commonFileId = null,
       backendRecordId = null,
       recordRevision = null,
       errorType = null,
@@ -30,6 +32,7 @@ class BackendUploadResult {
   final String? contentSha256;
   final String? uploadJobId;
   final String? backendFileId;
+  final int? commonFileId;
   final String? backendRecordId;
   final int? recordRevision;
   final BackendUploadErrorType? errorType;
@@ -64,7 +67,40 @@ extension BackendUploadErrorRetryPolicy on BackendUploadErrorType {
   };
 }
 
-class UploadStartResult { const UploadStartResult({required this.uploadJobId,this.backendFileId,this.idempotentReplay=false}); final String uploadJobId; final String? backendFileId; final bool idempotentReplay; }
+class UploadStartResult {
+  const UploadStartResult({
+    required this.uploadJobId,
+    this.backendFileId,
+    this.commonFileId,
+    this.idempotentReplay = false,
+  });
+
+  final String uploadJobId;
+  final String? backendFileId;
+  final int? commonFileId;
+  final bool idempotentReplay;
+}
+
 enum TcBackendUploadJobStatus { waiting, processing, completed, failed }
-class UploadJobResult { const UploadJobResult({required this.uploadJobId,required this.status,this.backendFileId,this.errorMessage}); final String uploadJobId; final TcBackendUploadJobStatus status; final String? backendFileId; final String? errorMessage; }
-class ObservationRecordResult { const ObservationRecordResult({required this.backendRecordId,this.revision}); final String backendRecordId; final int? revision; }
+
+class UploadJobResult {
+  const UploadJobResult({
+    required this.uploadJobId,
+    required this.status,
+    this.backendFileId,
+    this.commonFileId,
+    this.errorMessage,
+  });
+
+  final String uploadJobId;
+  final TcBackendUploadJobStatus status;
+  final String? backendFileId;
+  final int? commonFileId;
+  final String? errorMessage;
+}
+
+class ObservationRecordResult {
+  const ObservationRecordResult({required this.backendRecordId, this.revision});
+  final String backendRecordId;
+  final int? revision;
+}

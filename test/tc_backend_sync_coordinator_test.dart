@@ -71,6 +71,16 @@ void main() {
     state: state,
   );
 
+  test('common_file_id survives the Outbox payload JSON round trip', () {
+    final map = item(payload: const {'common_file_id': 178}).toMap();
+    map['id'] = 1;
+
+    final restored = SyncOutboxItem.fromMap(map);
+
+    expect(restored.payload['common_file_id'], 178);
+    expect(restored.payload['common_file_id'], isA<int>());
+  });
+
   test('resumes from upload_job_id without retransmitting upload', () async {
     final outbox = _FakeOutbox(
       item(state: SyncOutboxState.processing, jobId: 'job'),
@@ -85,24 +95,43 @@ void main() {
     expect(upload.startCalls, 0);
     expect(upload.pollCalls, 1);
     expect(upload.recordCalls, 1);
+    expect(upload.commonFileId, 178);
+    expect(outbox.markedBackendFileId, 'file');
+    expect(
+      outbox.patches.any(
+        (patch) =>
+            patch['payload_json'] is String &&
+            (patch['payload_json'] as String).contains('"common_file_id":178'),
+      ),
+      isTrue,
+    );
     expect(outbox.synced, isTrue);
   });
 
-  test('resumes from backend_file_id without upload or polling', () async {
-    final outbox = _FakeOutbox(
-      item(state: SyncOutboxState.recordCreating, fileId: 'file'),
-    );
-    final upload = _FakeStages();
-    await TcBackendSyncCoordinator(
-      outbox,
-      _FakeRecords(record),
-      settings,
-      upload,
-    ).drain();
-    expect(upload.startCalls, 0);
-    expect(upload.pollCalls, 0);
-    expect(upload.recordCalls, 1);
-  });
+  test(
+    'app restart restores common_file_id without upload or polling',
+    () async {
+      final outbox = _FakeOutbox(
+        item(
+          state: SyncOutboxState.recordCreating,
+          jobId: 'job',
+          fileId: 'logical-file',
+          payload: const {'common_file_id': 178},
+        ),
+      );
+      final upload = _FakeStages();
+      await TcBackendSyncCoordinator(
+        outbox,
+        _FakeRecords(record),
+        settings,
+        upload,
+      ).drain();
+      expect(upload.startCalls, 0);
+      expect(upload.pollCalls, 0);
+      expect(upload.recordCalls, 1);
+      expect(upload.commonFileId, 178);
+    },
+  );
 
   test('backend_record_id marks synced without record POST', () async {
     final outbox = _FakeOutbox(
@@ -154,7 +183,11 @@ void main() {
     for (var attempt = 0; attempt < 2; attempt++) {
       await TcBackendSyncCoordinator(
         _FakeOutbox(
-          item(state: SyncOutboxState.recordCreating, fileId: 'file'),
+          item(
+            state: SyncOutboxState.recordCreating,
+            fileId: 'logical-file',
+            payload: const {'common_file_id': 178},
+          ),
         ),
         _FakeRecords(record),
         settings,
@@ -163,6 +196,25 @@ void main() {
     }
 
     expect(stages.clientRecordIds, ['client-record-id', 'client-record-id']);
+    expect(stages.commonFileIds, [178, 178]);
+  });
+
+  test('missing common_file_id never sends an ObservationRecord', () async {
+    final outbox = _FakeOutbox(
+      item(state: SyncOutboxState.recordCreating, fileId: 'logical-file'),
+    );
+    final upload = _FakeStages();
+
+    await TcBackendSyncCoordinator(
+      outbox,
+      _FakeRecords(record),
+      settings,
+      upload,
+    ).drain();
+
+    expect(upload.recordCalls, 0);
+    expect(outbox.lastState, SyncOutboxState.failed);
+    expect(outbox.lastError, startsWith('malformedResponse|'));
   });
 
   test('PATCH resumes, stores revision, and marks outbox synced', () async {
@@ -341,6 +393,7 @@ class _FakeOutbox implements SyncOutboxRepository {
   String? lastError;
   DateTime? nextRetryAt;
   bool synced = false;
+  String? markedBackendFileId;
   @override
   Future<List<SyncOutboxItem>> listPending() async => [item];
   @override
@@ -366,6 +419,7 @@ class _FakeOutbox implements SyncOutboxRepository {
     String? uploadJobId,
   }) async {
     synced = true;
+    markedBackendFileId = backendFileId;
     lastState = SyncOutboxState.synced;
   }
 
@@ -416,6 +470,7 @@ class _FakeStages implements TcBackendUploadStages {
   int startCalls = 0, pollCalls = 0, recordCalls = 0;
   String? clientFileId;
   String? clientRecordId;
+  int? commonFileId;
   TcBackendUploadMetadata? metadata;
   @override
   Future<UploadStartResult> startUpload(
@@ -438,17 +493,19 @@ class _FakeStages implements TcBackendUploadStages {
       uploadJobId: id,
       status: TcBackendUploadJobStatus.completed,
       backendFileId: 'file',
+      commonFileId: 178,
     );
   }
 
   @override
   Future<ObservationRecordResult> createObservationRecord(
     ShootingRecord record,
-    String fileId, {
+    int commonFileId, {
     String? clientRecordId,
   }) async {
     recordCalls++;
     this.clientRecordId = clientRecordId;
+    this.commonFileId = commonFileId;
     if (error != null) throw error!;
     return const ObservationRecordResult(
       backendRecordId: 'remote-record',
@@ -497,14 +554,16 @@ class _FakeRecordMutations implements TcBackendRecordMutations {
 
 class _ReplayRecordStages implements TcBackendUploadStages {
   final List<String?> clientRecordIds = [];
+  final List<int> commonFileIds = [];
 
   @override
   Future<ObservationRecordResult> createObservationRecord(
     ShootingRecord record,
-    String backendFileId, {
+    int commonFileId, {
     String? clientRecordId,
   }) async {
     clientRecordIds.add(clientRecordId);
+    commonFileIds.add(commonFileId);
     if (clientRecordIds.length == 1) {
       throw const TcBackendUploadException(
         BackendUploadErrorType.network,

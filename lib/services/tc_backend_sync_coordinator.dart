@@ -93,6 +93,8 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
     }
     var jobId = item.uploadJobId;
     var fileId = item.backendFileId;
+    var commonFileId = _commonFileId(item.payload);
+    final durablePayload = <String, Object?>{...item.payload};
     try {
       final localRecordId = item.localRecordId;
       final clientFileId = item.clientFileId;
@@ -121,17 +123,39 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
         );
         jobId = started.uploadJobId;
         fileId = started.backendFileId;
+        commonFileId = started.commonFileId;
+        if (commonFileId != null) {
+          durablePayload['common_file_id'] = commonFileId;
+        }
         await _outbox.patch(item.operationId, {
           'upload_job_id': jobId,
           'backend_file_id': fileId,
+          if (commonFileId != null) 'payload_json': jsonEncode(durablePayload),
         });
       }
 
-      if (fileId == null) {
+      if (fileId == null || commonFileId == null) {
+        if (jobId == null) {
+          throw const TcBackendUploadException(
+            BackendUploadErrorType.malformedResponse,
+            'Upload state has no job ID for common_file_id recovery.',
+          );
+        }
         await _outbox.updateState(item.operationId, SyncOutboxState.processing);
-        final job = await _upload.pollUploadJob(jobId!);
-        fileId = job.backendFileId;
-        await _outbox.patch(item.operationId, {'backend_file_id': fileId});
+        final job = await _upload.pollUploadJob(jobId);
+        fileId ??= job.backendFileId;
+        commonFileId ??= job.commonFileId;
+        if (commonFileId == null) {
+          throw const TcBackendUploadException(
+            BackendUploadErrorType.malformedResponse,
+            'Completed upload has no valid common_file_id.',
+          );
+        }
+        durablePayload['common_file_id'] = commonFileId;
+        await _outbox.patch(item.operationId, {
+          'backend_file_id': fileId,
+          'payload_json': jsonEncode(durablePayload),
+        });
       }
 
       await _outbox.updateState(
@@ -140,13 +164,13 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
       );
       final created = await _upload.createObservationRecord(
         record,
-        fileId!,
+        commonFileId,
         clientRecordId: clientRecordId,
       );
       await _outbox.patch(item.operationId, {
         'backend_record_id': created.backendRecordId,
         'payload_json': jsonEncode(<String, Object?>{
-          ...item.payload,
+          ...durablePayload,
           if (created.revision != null) 'revision': created.revision,
         }),
       });
@@ -159,6 +183,11 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
     } on TcBackendUploadException catch (error) {
       await _fail(item, error);
     }
+  }
+
+  int? _commonFileId(Map<String, dynamic> payload) {
+    final value = payload['common_file_id'];
+    return value is int ? value : null;
   }
 
   Future<void> _processRecordPatch(SyncOutboxItem item) async {

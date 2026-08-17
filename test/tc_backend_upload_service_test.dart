@@ -72,7 +72,11 @@ void main() {
         }
         if (request.url.path.endsWith('/jobs/job-1')) {
           return http.Response(
-            jsonEncode({'status': 'COMPLETED', 'backend_file_id': 'sha-file'}),
+            jsonEncode({
+              'status': 'COMPLETED',
+              'backend_file_id': 'sha-file',
+              'common_file_id': 178,
+            }),
             200,
           );
         }
@@ -92,18 +96,18 @@ void main() {
     );
     expect(result.success, isTrue);
     expect(result.backendFileId, 'sha-file');
+    expect(result.commonFileId, 178);
     expect(result.backendRecordId, 'record-1');
     expect(result.recordRevision, 2);
     final body = jsonDecode(requests.last.body) as Map<String, dynamic>;
+    expect(body['file_id'], 178);
+    expect(body['file_id'], isA<int>());
     expect(body['catalog_object_id'], 'M42');
     expect(body['captured_at'], '2026-01-01T18:04:05.000Z');
     expect(body['location_name'], 'Seoul');
     final uploadBody = requests.first.body;
     expect(_multipartField(uploadBody, 'service_name'), 'AstroJournal');
-    expect(
-      _multipartField(uploadBody, 'observation_date'),
-      '2026-01-02',
-    );
+    expect(_multipartField(uploadBody, 'observation_date'), '2026-01-02');
     expect(_multipartField(uploadBody, 'canonical_target_id'), 'M42');
     expect(_multipartField(uploadBody, 'target_display_name'), 'Orion Nebula');
     expect(
@@ -124,11 +128,18 @@ void main() {
       settingsService: settings,
       client: MockClient((request) async {
         sent = request;
-        return http.Response(jsonEncode({'job_id': 'job-1'}), 200);
+        return http.Response(
+          jsonEncode({
+            'job_id': 'job-1',
+            'backend_file_id': 'logical-file',
+            'common_file_id': 178,
+          }),
+          200,
+        );
       }),
     );
 
-    await service.startUpload(
+    final started = await service.startUpload(
       record(),
       clientFileId: 'stable-client-id',
       metadata: const TcBackendUploadMetadata(
@@ -137,6 +148,8 @@ void main() {
       ),
     );
 
+    expect(started.backendFileId, 'logical-file');
+    expect(started.commonFileId, 178);
     expect(sent.body, isNot(contains('name="observation_date"')));
     expect(sent.body, isNot(contains('name="canonical_target_id"')));
     expect(sent.body, isNot(contains('name="target_display_name"')));
@@ -163,11 +176,13 @@ void main() {
 
     await service.createObservationRecord(
       record(),
-      'sha-file',
+      178,
       clientRecordId: 'durable-client-record',
     );
 
     final body = jsonDecode(sent.body) as Map<String, dynamic>;
+    expect(body['file_id'], 178);
+    expect(body['file_id'], isA<int>());
     expect(body['client_record_id'], 'durable-client-record');
   });
 
@@ -215,7 +230,11 @@ void main() {
       client: MockClient((request) async {
         if (request.url.path.endsWith('/upload')) {
           return http.Response(
-            jsonEncode({'job_id': 'done', 'backend_file_id': 'file'}),
+            jsonEncode({
+              'job_id': 'done',
+              'backend_file_id': 'file',
+              'common_file_id': 178,
+            }),
             200,
           );
         }
@@ -251,6 +270,7 @@ void main() {
                     : {
                         'status': 'COMPLETED',
                         'backend_file_id': 'file-$initial',
+                        'common_file_id': 178,
                       },
               ),
               200,
@@ -260,6 +280,7 @@ void main() {
         final result = await service.pollUploadJob('job-$initial');
         expect(result.status, TcBackendUploadJobStatus.completed);
         expect(result.backendFileId, 'file-$initial');
+        expect(result.commonFileId, 178);
         expect(calls, 2);
       }
     },
@@ -293,6 +314,15 @@ void main() {
 
       await expectJob({
         'status': 'COMPLETED',
+      }, BackendUploadErrorType.malformedResponse);
+      await expectJob({
+        'status': 'COMPLETED',
+        'backend_file_id': 'logical-file',
+      }, BackendUploadErrorType.malformedResponse);
+      await expectJob({
+        'status': 'COMPLETED',
+        'backend_file_id': 'logical-file',
+        'common_file_id': '178',
       }, BackendUploadErrorType.malformedResponse);
       await expectJob({'status': 'FAILED'}, BackendUploadErrorType.jobFailed);
       await expectJob({

@@ -60,7 +60,7 @@ abstract class TcBackendUploadStages {
   Future<UploadJobResult> pollUploadJob(String uploadJobId);
   Future<ObservationRecordResult> createObservationRecord(
     ShootingRecord record,
-    String backendFileId, {
+    int commonFileId, {
     String? clientRecordId,
   });
 }
@@ -115,6 +115,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
     return UploadStartResult(
       uploadJobId: response.jobId,
       backendFileId: response.backendFileId,
+      commonFileId: response.commonFileId,
     );
   }
 
@@ -134,7 +135,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
   @override
   Future<ObservationRecordResult> createObservationRecord(
     ShootingRecord record,
-    String backendFileId, {
+    int commonFileId, {
     String? clientRecordId,
   }) async {
     final settings = await settingsService.load();
@@ -147,7 +148,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
     }
     final result = await _createRecord(
       base,
-      backendFileId,
+      commonFileId,
       record,
       clientRecordId: clientRecordId,
     );
@@ -180,6 +181,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
     String? sha256;
     String? jobId;
     String? backendFileId;
+    int? commonFileId;
     try {
       final file = File(record.photoUri!);
       if (!await file.exists()) {
@@ -201,12 +203,17 @@ class TcBackendUploadService implements TcBackendUploadStages {
       );
       jobId = upload.jobId;
       backendFileId = upload.backendFileId;
-      backendFileId ??= (await _pollUploadJob(baseUrl, jobId)).backendFileId;
+      commonFileId = upload.commonFileId;
+      if (backendFileId == null || commonFileId == null) {
+        final completed = await _pollUploadJob(baseUrl, jobId);
+        backendFileId ??= completed.backendFileId;
+        commonFileId ??= completed.commonFileId;
+      }
       // A2 compatibility: the public all-in-one result has historically
       // represented every ObservationRecord-create failure with this type.
       final _RecordResponse created;
       try {
-        created = await _createRecord(baseUrl, backendFileId!, record);
+        created = await _createRecord(baseUrl, commonFileId!, record);
       } on TcBackendUploadException catch (error) {
         return BackendUploadResult(
           attempted: true,
@@ -215,6 +222,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
           contentSha256: sha256,
           uploadJobId: jobId,
           backendFileId: backendFileId,
+          commonFileId: commonFileId,
           errorType: BackendUploadErrorType.recordCreateFailed,
           errorMessage: error.message,
         );
@@ -226,6 +234,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
         contentSha256: sha256,
         uploadJobId: jobId,
         backendFileId: backendFileId,
+        commonFileId: commonFileId,
         backendRecordId: created.id,
         recordRevision: created.revision,
       );
@@ -237,6 +246,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
         contentSha256: sha256,
         uploadJobId: jobId,
         backendFileId: backendFileId,
+        commonFileId: commonFileId,
         errorType: error.type,
         errorMessage: error.message,
       );
@@ -248,6 +258,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
         contentSha256: sha256,
         uploadJobId: jobId,
         backendFileId: backendFileId,
+        commonFileId: commonFileId,
         errorType: BackendUploadErrorType.unreachable,
         errorMessage: 'TC-Backend connection failed.',
       );
@@ -309,7 +320,11 @@ class TcBackendUploadService implements TcBackendUploadStages {
         'Upload response has no job_id.',
       );
     }
-    return _UploadResponse(jobId, _string(json['backend_file_id']));
+    return _UploadResponse(
+      jobId,
+      _string(json['backend_file_id']),
+      _int(json['common_file_id']),
+    );
   }
 
   Future<UploadJobResult> _getUploadJobStatus(
@@ -332,16 +347,24 @@ class TcBackendUploadService implements TcBackendUploadStages {
       ),
     };
     final fileId = _string(map['backend_file_id'] ?? map['file_id']);
+    final commonFileId = _int(map['common_file_id']);
     if (status == TcBackendUploadJobStatus.completed && fileId == null) {
       throw const _UploadException(
         BackendUploadErrorType.malformedResponse,
         'Completed upload has no backend_file_id.',
       );
     }
+    if (status == TcBackendUploadJobStatus.completed && commonFileId == null) {
+      throw const _UploadException(
+        BackendUploadErrorType.malformedResponse,
+        'Completed upload has no valid common_file_id.',
+      );
+    }
     return UploadJobResult(
       uploadJobId: jobId,
       status: status,
       backendFileId: fileId,
+      commonFileId: commonFileId,
       errorMessage: _string(map['error_message']),
     );
   }
@@ -369,13 +392,13 @@ class TcBackendUploadService implements TcBackendUploadStages {
 
   Future<_RecordResponse> _createRecord(
     String baseUrl,
-    String backendFileId,
+    int commonFileId,
     ShootingRecord record, {
     String? clientRecordId,
   }) async {
     final payload = observationRecordPayload(
       record,
-      backendFileId,
+      commonFileId,
       clientRecordId: clientRecordId,
     );
     final request =
@@ -403,11 +426,11 @@ class TcBackendUploadService implements TcBackendUploadStages {
 
   Map<String, dynamic> observationRecordPayload(
     ShootingRecord record,
-    String backendFileId, {
+    int commonFileId, {
     String? clientRecordId,
   }) {
     final payload = <String, dynamic>{
-      'file_id': backendFileId,
+      'file_id': commonFileId,
       'catalog_object_id': record.celestialObjectId,
       'captured_at': record.capturedAt.toUtc().toIso8601String(),
       'latitude': record.exif?.lat,
@@ -513,6 +536,8 @@ class TcBackendUploadService implements TcBackendUploadStages {
 String? _string(Object? value) =>
     value?.toString().trim().isEmpty ?? true ? null : value.toString();
 
+int? _int(Object? value) => value is int ? value : null;
+
 class _HashCacheEntry {
   const _HashCacheEntry(this.length, this.modified, this.value);
   final int length;
@@ -529,9 +554,10 @@ class _DigestSink implements Sink<Digest> {
 }
 
 class _UploadResponse {
-  const _UploadResponse(this.jobId, this.backendFileId);
+  const _UploadResponse(this.jobId, this.backendFileId, this.commonFileId);
   final String jobId;
   final String? backendFileId;
+  final int? commonFileId;
 }
 
 class _RecordResponse {
