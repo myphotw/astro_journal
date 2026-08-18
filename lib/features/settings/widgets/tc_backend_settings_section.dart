@@ -15,6 +15,7 @@ class TcBackendSettingsSection extends StatefulWidget {
 
 class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
   final _controller = TextEditingController();
+  final _tokenController = TextEditingController();
   var _enabled = false;
   var _loaded = false;
 
@@ -36,6 +37,7 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
   @override
   void dispose() {
     _controller.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
@@ -80,9 +82,49 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
             style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 12),
+          TextField(
+            key: const Key('tc_backend_token'),
+            controller: _tokenController,
+            enabled: !checking,
+            obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              labelText: 'Client token',
+              hintText: viewModel.hasStoredToken
+                  ? 'Stored securely (enter to replace)'
+                  : 'Optional for legacy tokenless servers',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                viewModel.hasStoredToken
+                    ? 'Token stored securely'
+                    : 'No token stored',
+                key: const Key('tc_backend_token_status'),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                key: const Key('tc_backend_token_delete'),
+                onPressed: !checking && viewModel.hasStoredToken
+                    ? () => _deleteToken(context, viewModel)
+                    : null,
+                child: const Text('Delete token'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
               OutlinedButton(
+                key: const Key('tc_backend_save'),
                 onPressed: checking ? null : () => _save(context, viewModel),
                 child: const Text('저장'),
               ),
@@ -121,6 +163,10 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
   Future<void> _save(BuildContext context, TcBackendViewModel viewModel) async {
     try {
       await viewModel.save(baseUrl: _controller.text, enabled: _enabled);
+      if (_tokenController.text.trim().isNotEmpty) {
+        await viewModel.saveToken(_tokenController.text);
+        _tokenController.clear();
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -131,6 +177,18 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.message)));
     }
+  }
+
+  Future<void> _deleteToken(
+    BuildContext context,
+    TcBackendViewModel viewModel,
+  ) async {
+    await viewModel.deleteToken();
+    _tokenController.clear();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('TC-Backend token deleted.')));
   }
 
   Future<void> _test(BuildContext context, TcBackendViewModel viewModel) async {
@@ -262,6 +320,7 @@ class _ResultPanel extends StatelessWidget {
     TcBackendConnectionStatus.degraded => '연결됨 (일부 기능 제한)',
     TcBackendConnectionStatus.incompatible => '호환되지 않음',
     TcBackendConnectionStatus.unreachable => '연결 실패',
+    TcBackendConnectionStatus.authenticationFailed => '인증 실패',
   };
 }
 

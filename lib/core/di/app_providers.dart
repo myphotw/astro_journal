@@ -81,6 +81,7 @@ import '../../services/tc_backend_external_api_client.dart';
 import '../../services/tc_backend_plate_solve_service.dart';
 import '../../services/tc_backend_pull_sync_coordinator.dart';
 import '../../services/tc_backend_sync_gate.dart';
+import '../../services/tc_backend_auth_service.dart';
 import '../navigation/app_navigation_notifier.dart';
 
 class AppProviders {
@@ -98,8 +99,15 @@ class AppProviders {
     final photoService = PhotoService(photoRepository, exifService);
     final apiKeyService = ApiKeyService();
     final tcBackendSettingsService = TcBackendSettingsService();
+    final tcBackendAuthService = TcBackendAuthService();
+    final tcBackendAuthHeaders = TcBackendAuthHeaders(tcBackendAuthService);
+    final tcBackendMediaAuthService = TcBackendMediaAuthService(
+      tcBackendSettingsService,
+      tcBackendAuthHeaders,
+    );
     final externalApiClient = TcBackendExternalApiClient(
       settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
     );
     final geocodingService = GeocodingService(backendClient: externalApiClient);
     final galleryCache = GalleryCacheLocalDataSource();
@@ -108,12 +116,15 @@ class AppProviders {
     final galleryRepository = HybridGalleryRepository(
       settingsService: tcBackendSettingsService,
       cache: galleryCache,
+      authHeaders: tcBackendAuthHeaders,
     );
     final tcBackendUploadService = TcBackendUploadService(
       settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
     );
     final tcBackendRecordService = TcBackendRecordService(
       settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
     );
     final syncOutboxRepository = SyncOutboxRepositoryImpl();
     final syncGate = TcBackendSyncGate();
@@ -129,6 +140,7 @@ class AppProviders {
     final syncCheckpoints = GalleryCacheSyncCheckpointDataSource(galleryCache);
     final changesService = TcBackendChangesService(
       settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
     );
     final pullSyncCoordinator = TcBackendPullSyncCoordinator(
       changesApi: changesService,
@@ -310,6 +322,8 @@ class AppProviders {
       tcBackendSettingsService,
       syncOutboxRepository: syncOutboxRepository,
       retryFailed: syncCoordinator.retryFailed,
+      tokenStore: tcBackendAuthService,
+      authHeaders: tcBackendAuthHeaders,
     );
 
     final equipmentViewModel = EquipmentViewModel(equipmentRepository);
@@ -341,6 +355,11 @@ class AppProviders {
       Provider<GeocodingService>.value(value: geocodingService),
       Provider<ApiKeyService>.value(value: apiKeyService),
       Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
+      Provider<TcBackendAuthService>.value(value: tcBackendAuthService),
+      Provider<TcBackendAuthHeaders>.value(value: tcBackendAuthHeaders),
+      Provider<TcBackendMediaAuthService>.value(
+        value: tcBackendMediaAuthService,
+      ),
       Provider<GalleryRepository>.value(value: galleryRepository),
       Provider<TcBackendUploadService>.value(value: tcBackendUploadService),
       Provider<TcBackendRecordService>.value(value: tcBackendRecordService),

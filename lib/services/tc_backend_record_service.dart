@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../data/models/backend_upload_result.dart';
 import 'tc_backend_settings_service.dart';
+import 'tc_backend_auth_service.dart';
 
 abstract class TcBackendRecordMutations {
   Future<TcBackendRecordPatchResult> patchRecord(
@@ -62,11 +63,16 @@ class TcBackendRecordService implements TcBackendRecordMutations {
     required this.settingsService,
     http.Client? client,
     this.requestTimeout = const Duration(seconds: 20),
-  }) : _client = client ?? http.Client();
+    TcBackendAuthHeaders? authHeaders,
+  }) : _client = client ?? http.Client(),
+       _authHeaders =
+           authHeaders ??
+           TcBackendAuthHeaders(const EmptyTcBackendTokenStore());
 
   final TcBackendSettingsService settingsService;
   final http.Client _client;
   final Duration requestTimeout;
+  final TcBackendAuthHeaders _authHeaders;
 
   @override
   Future<TcBackendRecordPatchResult> patchRecord(
@@ -77,7 +83,7 @@ class TcBackendRecordService implements TcBackendRecordMutations {
     final baseUrl = await _configuredBaseUrl();
     final response = await _send(
       http.Request('PATCH', Uri.parse('$baseUrl/api/astro/records/$recordId'))
-        ..headers.addAll(_jsonHeaders)
+        ..headers.addAll(await _authHeaders.build(json: true))
         ..body = jsonEncode(<String, Object?>{
           'revision': revision,
           ...partialFields,
@@ -117,7 +123,7 @@ class TcBackendRecordService implements TcBackendRecordMutations {
     final baseUrl = await _configuredBaseUrl();
     final response = await _send(
       http.Request('DELETE', Uri.parse('$baseUrl/api/astro/records/$recordId'))
-        ..headers.addAll(_jsonHeaders),
+        ..headers.addAll(await _authHeaders.build(json: true)),
     );
     final body = _responseMap(response);
     final id = _string(body['record_id'] ?? body['id']);
@@ -177,6 +183,7 @@ class TcBackendRecordService implements TcBackendRecordMutations {
   Map<String, dynamic> _responseMap(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final type = switch (response.statusCode) {
+        401 => BackendUploadErrorType.unauthorized,
         409 => BackendUploadErrorType.http409,
         422 => BackendUploadErrorType.http422,
         >= 500 && <= 599 => BackendUploadErrorType.http5xx,
@@ -223,11 +230,6 @@ class TcBackendRecordService implements TcBackendRecordMutations {
       );
     }
   }
-
-  static const _jsonHeaders = <String, String>{
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  };
 }
 
 String? _string(Object? value) {

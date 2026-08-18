@@ -4,6 +4,7 @@ import '../../../data/models/tc_backend_models.dart';
 import '../../../services/tc_backend_service.dart';
 import '../../../services/tc_backend_settings_service.dart';
 import '../../../data/repositories/sync_outbox_repository.dart';
+import '../../../services/tc_backend_auth_service.dart';
 
 class TcBackendSyncCounts {
   const TcBackendSyncCounts({
@@ -22,13 +23,24 @@ class TcBackendViewModel extends ChangeNotifier {
     this.serviceFactory,
     SyncOutboxRepository? syncOutboxRepository,
     Future<void> Function()? retryFailed,
+    TcBackendTokenStore? tokenStore,
+    TcBackendAuthHeaders? authHeaders,
   }) : _syncOutboxRepository = syncOutboxRepository,
-       _retryFailed = retryFailed;
+       _retryFailed = retryFailed,
+       _tokenStore = tokenStore ?? const EmptyTcBackendTokenStore(),
+       _authHeaders =
+           authHeaders ??
+           TcBackendAuthHeaders(tokenStore ?? const EmptyTcBackendTokenStore());
 
   final TcBackendSettingsService _settingsService;
   final TcBackendService Function(String baseUrl)? serviceFactory;
   final SyncOutboxRepository? _syncOutboxRepository;
   final Future<void> Function()? _retryFailed;
+  final TcBackendTokenStore _tokenStore;
+  final TcBackendAuthHeaders _authHeaders;
+
+  bool _hasStoredToken = false;
+  bool get hasStoredToken => _hasStoredToken;
 
   TcBackendSettings _settings = const TcBackendSettings(
     baseUrl: '',
@@ -49,10 +61,25 @@ class TcBackendViewModel extends ChangeNotifier {
 
   Future<void> load() async {
     _settings = await _settingsService.load();
+    _hasStoredToken = await _tokenStore.readToken() != null;
     _status = _settings.enabled && _settings.isConfigured
         ? TcBackendConnectionStatus.notConfigured
         : TcBackendConnectionStatus.notConfigured;
     await refreshSyncStatus(notify: false);
+    notifyListeners();
+  }
+
+  Future<void> saveToken(String token) async {
+    await _tokenStore.saveToken(token);
+    _hasStoredToken = await _tokenStore.readToken() != null;
+    _result = null;
+    notifyListeners();
+  }
+
+  Future<void> deleteToken() async {
+    await _tokenStore.deleteToken();
+    _hasStoredToken = false;
+    _result = null;
     notifyListeners();
   }
 
@@ -112,7 +139,7 @@ class TcBackendViewModel extends ChangeNotifier {
     notifyListeners();
     final service =
         serviceFactory?.call(normalized) ??
-        TcBackendService(baseUrl: normalized);
+        TcBackendService(baseUrl: normalized, authHeaders: _authHeaders);
     _result = await service.checkCompatibility();
     _status = _result!.status;
     notifyListeners();

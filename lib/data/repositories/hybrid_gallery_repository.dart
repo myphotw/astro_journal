@@ -5,6 +5,7 @@ import '../datasources/gallery_cache_local_datasource.dart';
 import '../datasources/remote_gallery_datasource.dart';
 import '../models/gallery_item.dart';
 import 'gallery_repository.dart';
+import '../../services/tc_backend_auth_service.dart';
 
 typedef GalleryRemoteFactory = GalleryRemoteDataSource Function(String baseUrl);
 
@@ -16,10 +17,15 @@ class HybridGalleryRepository implements GalleryRepository {
     DateTime Function()? now,
     Duration listTtl = const Duration(minutes: 30),
     Duration detailTtl = const Duration(hours: 24),
+    TcBackendAuthHeaders? authHeaders,
   }) => HybridGalleryRepository._(
     settingsService,
     cache,
-    remoteFactory ?? ((baseUrl) => RemoteGalleryDataSource(baseUrl: baseUrl)),
+    remoteFactory ??
+        ((baseUrl) => RemoteGalleryDataSource(
+          baseUrl: baseUrl,
+          authHeaders: authHeaders,
+        )),
     now ?? DateTime.now,
     listTtl,
     detailTtl,

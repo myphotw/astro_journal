@@ -2,6 +2,9 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../services/tc_backend_auth_service.dart';
 
 /// 파일 이미지를 화면 크기에 맞게 디코드해 전환 버벅임을 줄인다.
 ///
@@ -91,10 +94,7 @@ class AppFileImage extends StatelessWidget {
     return ResizeImage(provider, width: maxPx);
   }
 
-  static Future<void> precacheForViewer(
-    BuildContext context,
-    String path,
-  ) {
+  static Future<void> precacheForViewer(BuildContext context, String path) {
     return precacheImage(viewerProvider(context, path), context);
   }
 
@@ -150,30 +150,66 @@ class AppFileImage extends StatelessWidget {
       );
     }
 
-    return RepaintBoundary(
-      child: _isNetworkPath(path)
-          ? Image.network(
-              path,
-              width: width,
-              height: height,
-              fit: fit,
-              cacheWidth: cw,
-              cacheHeight: ch,
-              filterQuality: filterQuality,
-              gaplessPlayback: gaplessPlayback,
-              errorBuilder: errorBuilder,
-            )
-          : Image.file(
-              File(path),
-              width: width,
-              height: height,
-              fit: fit,
-              cacheWidth: cw,
-              cacheHeight: ch,
-              filterQuality: filterQuality,
-              gaplessPlayback: gaplessPlayback,
-              errorBuilder: errorBuilder,
-            ),
-    );
+    if (_isNetworkPath(path) || path.startsWith('/api/')) {
+      final mediaAuth = context.read<TcBackendMediaAuthService?>();
+      if (mediaAuth == null) {
+        if (_isNetworkPath(path)) {
+          return RepaintBoundary(child: _networkImage(path, cw, ch));
+        }
+      } else {
+        return RepaintBoundary(
+          child: FutureBuilder<TcBackendMediaRequest>(
+            future: mediaAuth.requestFor(path),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return SizedBox(width: width, height: height);
+              }
+              final request = snapshot.data;
+              if (request == null || !_isNetworkPath(request.url)) {
+                return _fileImage(cw, ch);
+              }
+              return _networkImage(
+                request.url,
+                cw,
+                ch,
+                headers: request.headers,
+              );
+            },
+          ),
+        );
+      }
+    }
+
+    return RepaintBoundary(child: _fileImage(cw, ch));
   }
+
+  Widget _networkImage(
+    String url,
+    int? cacheWidth,
+    int? cacheHeight, {
+    Map<String, String>? headers,
+  }) => Image.network(
+    url,
+    headers: headers,
+    width: width,
+    height: height,
+    fit: fit,
+    cacheWidth: cacheWidth,
+    cacheHeight: cacheHeight,
+    filterQuality: filterQuality,
+    gaplessPlayback: gaplessPlayback,
+    errorBuilder: errorBuilder,
+  );
+
+  Widget _fileImage(int? cacheWidth, int? cacheHeight) => Image.file(
+    File(path),
+    width: width,
+    height: height,
+    fit: fit,
+    cacheWidth: cacheWidth,
+    cacheHeight: cacheHeight,
+    filterQuality: filterQuality,
+    gaplessPlayback: gaplessPlayback,
+    errorBuilder: errorBuilder,
+  );
 }

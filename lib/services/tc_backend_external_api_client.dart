@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'tc_backend_settings_service.dart';
+import 'tc_backend_auth_service.dart';
 
 enum TcBackendExternalApiErrorCode {
   apiKeyNotConfigured,
@@ -17,6 +18,7 @@ enum TcBackendExternalApiErrorCode {
   timeout,
   malformedResponse,
   unknown,
+  unauthorized,
 }
 
 class TcBackendExternalApiException implements Exception {
@@ -54,11 +56,16 @@ class TcBackendExternalApiClient {
     required this.settingsService,
     http.Client? client,
     this.timeout = const Duration(seconds: 15),
-  }) : _client = client ?? http.Client();
+    TcBackendAuthHeaders? authHeaders,
+  }) : _client = client ?? http.Client(),
+       _authHeaders =
+           authHeaders ??
+           TcBackendAuthHeaders(const EmptyTcBackendTokenStore());
 
   final TcBackendSettingsService settingsService;
   final http.Client _client;
   final Duration timeout;
+  final TcBackendAuthHeaders _authHeaders;
 
   Future<Map<String, dynamic>> getMap(
     String path, {
@@ -93,10 +100,9 @@ class TcBackendExternalApiClient {
 
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
     try {
-      final headers = <String, String>{'Accept': 'application/json'};
+      final headers = await _authHeaders.build(json: method == 'POST');
       late final http.Response response;
       if (method == 'POST') {
-        headers['Content-Type'] = 'application/json';
         response = await _client
             .post(uri, headers: headers, body: jsonEncode(body))
             .timeout(timeout);
@@ -168,21 +174,26 @@ class TcBackendExternalApiClient {
       detail = rawDetail is Map ? Map<String, dynamic>.from(rawDetail) : map;
     }
     final rawCode = detail['code']?.toString().toUpperCase();
-    final code = switch (rawCode) {
-      'API_KEY_NOT_CONFIGURED' =>
-        TcBackendExternalApiErrorCode.apiKeyNotConfigured,
-      'API_LIMIT_EXCEEDED' => TcBackendExternalApiErrorCode.apiLimitExceeded,
-      'PROVIDER_TIMEOUT' => TcBackendExternalApiErrorCode.providerTimeout,
-      'PROVIDER_ERROR' => TcBackendExternalApiErrorCode.providerError,
-      'INVALID_REQUEST' => TcBackendExternalApiErrorCode.invalidRequest,
-      _ when statusCode == 429 =>
-        TcBackendExternalApiErrorCode.apiLimitExceeded,
-      _ when statusCode == 504 => TcBackendExternalApiErrorCode.providerTimeout,
-      _ when statusCode >= 500 => TcBackendExternalApiErrorCode.providerError,
-      _ when statusCode >= 400 && statusCode < 500 =>
-        TcBackendExternalApiErrorCode.invalidRequest,
-      _ => TcBackendExternalApiErrorCode.unknown,
-    };
+    final code = statusCode == 401
+        ? TcBackendExternalApiErrorCode.unauthorized
+        : switch (rawCode) {
+            'API_KEY_NOT_CONFIGURED' =>
+              TcBackendExternalApiErrorCode.apiKeyNotConfigured,
+            'API_LIMIT_EXCEEDED' =>
+              TcBackendExternalApiErrorCode.apiLimitExceeded,
+            'PROVIDER_TIMEOUT' => TcBackendExternalApiErrorCode.providerTimeout,
+            'PROVIDER_ERROR' => TcBackendExternalApiErrorCode.providerError,
+            'INVALID_REQUEST' => TcBackendExternalApiErrorCode.invalidRequest,
+            _ when statusCode == 429 =>
+              TcBackendExternalApiErrorCode.apiLimitExceeded,
+            _ when statusCode == 504 =>
+              TcBackendExternalApiErrorCode.providerTimeout,
+            _ when statusCode >= 500 =>
+              TcBackendExternalApiErrorCode.providerError,
+            _ when statusCode >= 400 && statusCode < 500 =>
+              TcBackendExternalApiErrorCode.invalidRequest,
+            _ => TcBackendExternalApiErrorCode.unknown,
+          };
     final backendMessage = detail['message']?.toString().trim();
     return TcBackendExternalApiException(
       code: code,

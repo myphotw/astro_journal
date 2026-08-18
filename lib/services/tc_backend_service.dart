@@ -5,12 +5,20 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../data/models/tc_backend_models.dart';
+import 'tc_backend_auth_service.dart';
 
 class TcBackendException implements Exception {
-  const TcBackendException(this.message, {this.isUnreachable = false});
+  const TcBackendException(
+    this.message, {
+    this.isUnreachable = false,
+    this.isAuthenticationFailure = false,
+    this.statusCode,
+  });
 
   final String message;
   final bool isUnreachable;
+  final bool isAuthenticationFailure;
+  final int? statusCode;
 }
 
 class TcBackendService {
@@ -18,14 +26,19 @@ class TcBackendService {
     required this.baseUrl,
     http.Client? client,
     this.timeout = const Duration(seconds: 8),
-  }) : _client = client ?? http.Client();
+    TcBackendAuthHeaders? authHeaders,
+  }) : _client = client ?? http.Client(),
+       _authHeaders =
+           authHeaders ??
+           TcBackendAuthHeaders(const EmptyTcBackendTokenStore());
 
   final String baseUrl;
   final http.Client _client;
   final Duration timeout;
+  final TcBackendAuthHeaders _authHeaders;
 
   Future<TcBackendHealth> getHealth() async =>
-      TcBackendHealth.fromJson(await _get('/api/common/health'));
+      TcBackendHealth.fromJson(await _get('/health', authenticated: false));
 
   Future<TcBackendCapabilities> getCapabilities() async =>
       TcBackendCapabilities.fromJson(await _get('/api/common/capabilities'));
@@ -65,7 +78,9 @@ class TcBackendService {
       );
     } on TcBackendException catch (error) {
       return TcBackendCheckResult(
-        status: error.isUnreachable
+        status: error.isAuthenticationFailure
+            ? TcBackendConnectionStatus.authenticationFailed
+            : error.isUnreachable
             ? TcBackendConnectionStatus.unreachable
             : TcBackendConnectionStatus.degraded,
         message: error.message,
@@ -73,13 +88,28 @@ class TcBackendService {
     }
   }
 
-  Future<Map<String, dynamic>> _get(String path) async {
+  Future<Map<String, dynamic>> _get(
+    String path, {
+    bool authenticated = true,
+  }) async {
     final uri = Uri.parse('$baseUrl$path');
     try {
       final response = await _client
-          .get(uri, headers: const {'Accept': 'application/json'})
+          .get(
+            uri,
+            headers: authenticated
+                ? await _authHeaders.build()
+                : const {'Accept': 'application/json'},
+          )
           .timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (response.statusCode == 401) {
+          throw const TcBackendException(
+            'TC-Backend authentication failed. Check the client token.',
+            isAuthenticationFailure: true,
+            statusCode: 401,
+          );
+        }
         throw TcBackendException('서버 오류 (HTTP ${response.statusCode})');
       }
       if (response.body.isEmpty) {

@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../data/models/backend_upload_result.dart';
 import '../data/models/shooting_record.dart';
 import 'tc_backend_settings_service.dart';
+import 'tc_backend_auth_service.dart';
 
 /// Upload-only metadata used by tc-backend to choose the physical file path.
 /// ObservationRecord data remains a separate API concern.
@@ -73,14 +74,19 @@ class TcBackendUploadService implements TcBackendUploadStages {
     this.requestTimeout = const Duration(seconds: 20),
     this.maxPollDuration = const Duration(seconds: 45),
     Future<void> Function(Duration)? delay,
+    TcBackendAuthHeaders? authHeaders,
   }) : _client = client ?? http.Client(),
-       _delay = delay ?? Future<void>.delayed;
+       _delay = delay ?? Future<void>.delayed,
+       _authHeaders =
+           authHeaders ??
+           TcBackendAuthHeaders(const EmptyTcBackendTokenStore());
 
   final TcBackendSettingsService settingsService;
   final http.Client _client;
   final Duration requestTimeout;
   final Duration maxPollDuration;
   final Future<void> Function(Duration) _delay;
+  final TcBackendAuthHeaders _authHeaders;
   final Map<String, _HashCacheEntry> _hashCache = {};
 
   /// Coordinator stage API; A2 [uploadRecord] remains the compatibility API.
@@ -293,7 +299,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
   }) async {
     final request =
         http.MultipartRequest('POST', Uri.parse('$baseUrl/api/common/upload'))
-          ..headers['Accept'] = 'application/json'
+          ..headers.addAll(await _authHeaders.build())
           ..fields['service_name'] = 'AstroJournal'
           ..fields['client_file_id'] = clientFileId
           ..fields['client_content_sha256'] = sha256
@@ -403,10 +409,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
     );
     final request =
         http.Request('POST', Uri.parse('$baseUrl/api/astro/records'))
-          ..headers.addAll(const {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          })
+          ..headers.addAll(await _authHeaders.build(json: true))
           ..body = jsonEncode(payload);
     final response = await _send(request);
     final map = _responseMap(
@@ -472,7 +475,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
   Future<http.Response> _get(Uri uri) async {
     try {
       return await _client
-          .get(uri, headers: const {'Accept': 'application/json'})
+          .get(uri, headers: await _authHeaders.build())
           .timeout(requestTimeout);
     } on TimeoutException {
       throw const _UploadException(
@@ -499,6 +502,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       // Unlisted 4xx are treated as non-retryable bad requests.
       final type = switch (response.statusCode) {
+        401 => BackendUploadErrorType.unauthorized,
         400 => BackendUploadErrorType.http400,
         409 => BackendUploadErrorType.http409,
         422 => BackendUploadErrorType.http422,

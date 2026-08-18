@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../models/gallery_item.dart';
+import '../../services/tc_backend_auth_service.dart';
 
 class RemoteGalleryException implements Exception {
   const RemoteGalleryException(this.message, {this.statusCode});
@@ -26,11 +27,16 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     required this.baseUrl,
     http.Client? client,
     this.timeout = const Duration(seconds: 10),
-  }) : _client = client ?? http.Client();
+    TcBackendAuthHeaders? authHeaders,
+  }) : _client = client ?? http.Client(),
+       _authHeaders =
+           authHeaders ??
+           TcBackendAuthHeaders(const EmptyTcBackendTokenStore());
 
   final String baseUrl;
   final http.Client _client;
   final Duration timeout;
+  final TcBackendAuthHeaders _authHeaders;
 
   @override
   Future<List<GalleryItem>> getGallery({Map<String, String>? query}) async =>
@@ -48,7 +54,7 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
     try {
       final response = await _client
-          .get(uri, headers: const {'Accept': 'application/json'})
+          .get(uri, headers: await _authHeaders.build())
           .timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw RemoteGalleryException(

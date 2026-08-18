@@ -8,6 +8,7 @@ import '../data/datasources/remote_gallery_datasource.dart';
 import '../data/models/gallery_item.dart';
 import '../data/models/tc_backend_change.dart';
 import 'tc_backend_settings_service.dart';
+import 'tc_backend_auth_service.dart';
 
 abstract class TcBackendChangesApi {
   Future<TcBackendChangesPage> getChanges({String? cursor});
@@ -26,13 +27,18 @@ class TcBackendChangesService implements TcBackendChangesApi {
     required this.settingsService,
     http.Client? client,
     this.timeout = const Duration(seconds: 15),
-  }) : _client = client ?? http.Client();
+    TcBackendAuthHeaders? authHeaders,
+  }) : _client = client ?? http.Client(),
+       _authHeaders =
+           authHeaders ??
+           TcBackendAuthHeaders(const EmptyTcBackendTokenStore());
 
   static const serviceName = 'AstroJournal';
 
   final TcBackendSettingsService settingsService;
   final http.Client _client;
   final Duration timeout;
+  final TcBackendAuthHeaders _authHeaders;
 
   @override
   Future<TcBackendChangesPage> getChanges({String? cursor}) async {
@@ -85,6 +91,7 @@ class TcBackendChangesService implements TcBackendChangesApi {
         baseUrl: baseUrl,
         client: _client,
         timeout: timeout,
+        authHeaders: _authHeaders,
       ).getDetail(recordId);
     } on RemoteGalleryException catch (error) {
       throw TcBackendChangesException(
@@ -134,7 +141,7 @@ class TcBackendChangesService implements TcBackendChangesApi {
   Future<dynamic> _get(Uri uri) async {
     try {
       final response = await _client
-          .get(uri, headers: const {'Accept': 'application/json'})
+          .get(uri, headers: await _authHeaders.build())
           .timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw TcBackendChangesException(

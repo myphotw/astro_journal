@@ -7,6 +7,7 @@ import 'package:astro_journal/data/repositories/sync_outbox_repository.dart';
 import 'package:astro_journal/features/settings/viewmodel/tc_backend_view_model.dart';
 import 'package:astro_journal/features/settings/widgets/tc_backend_settings_section.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
+import 'package:astro_journal/services/tc_backend_auth_service.dart';
 
 void main() {
   Future<TcBackendViewModel> viewModel({
@@ -16,6 +17,7 @@ void main() {
     int processing = 0,
     int failed = 0,
     Future<void> Function()? retry,
+    TcBackendTokenStore? tokenStore,
   }) async {
     SharedPreferences.setMockInitialValues({});
     final settings = TcBackendSettingsService();
@@ -24,6 +26,7 @@ void main() {
       settings,
       syncOutboxRepository: _FakeOutbox(queued, processing, failed),
       retryFailed: retry,
+      tokenStore: tokenStore,
     );
   }
 
@@ -92,6 +95,57 @@ void main() {
     await pump(tester, unset);
     expect(find.byKey(const Key('sync_backend_disabled')), findsOneWidget);
   });
+
+  testWidgets('stores, replaces, and deletes an obscured backend token', (
+    tester,
+  ) async {
+    final store = _MemoryTokenStore();
+    final vm = await viewModel(
+      enabled: true,
+      baseUrl: 'https://backend.example',
+      tokenStore: store,
+    );
+    await pump(tester, vm);
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('tc_backend_token')),
+    );
+    expect(field.obscureText, isTrue);
+
+    await tester.enterText(
+      find.byKey(const Key('tc_backend_token')),
+      'client-token',
+    );
+    await tester.tap(find.byKey(const Key('tc_backend_save')));
+    await tester.pumpAndSettle();
+    expect(store.token, 'client-token');
+    expect(vm.hasStoredToken, isTrue);
+
+    await tester.enterText(
+      find.byKey(const Key('tc_backend_token')),
+      'replacement-token',
+    );
+    await tester.tap(find.byKey(const Key('tc_backend_save')));
+    await tester.pumpAndSettle();
+    expect(store.token, 'replacement-token');
+
+    await tester.tap(find.byKey(const Key('tc_backend_token_delete')));
+    await tester.pumpAndSettle();
+    expect(store.token, isNull);
+    expect(vm.hasStoredToken, isFalse);
+  });
+}
+
+class _MemoryTokenStore implements TcBackendTokenStore {
+  String? token;
+
+  @override
+  Future<String?> readToken() async => token;
+
+  @override
+  Future<void> saveToken(String value) async => token = value.trim();
+
+  @override
+  Future<void> deleteToken() async => token = null;
 }
 
 class _FakeOutbox implements SyncOutboxRepository {

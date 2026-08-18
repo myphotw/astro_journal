@@ -5,6 +5,7 @@ enum TcBackendConnectionStatus {
   degraded,
   incompatible,
   unreachable,
+  authenticationFailed,
 }
 
 class TcBackendHealth {

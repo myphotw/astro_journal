@@ -55,6 +55,7 @@ enum BackendUploadErrorType {
   timeout,
   incompatible,
   network,
+  unauthorized,
 }
 
 extension BackendUploadErrorRetryPolicy on BackendUploadErrorType {
