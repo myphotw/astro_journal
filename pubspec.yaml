@@ -49,6 +49,10 @@ dependencies:
   # 갤러리 사진 선택
   image_picker: ^1.1.2
   photo_manager: ^3.7.1
+  # 관측지 Horizon 자동 측정용 카메라 프리뷰 / 이미지 스트림
+  camera: ^0.12.0+2
+  # 현재 AGP 9 빌드와 호환되는 공식 Camera2 Android 구현
+  camera_android: ^0.10.11
 
   # EXIF 자동 추출
   native_exif: ^0.8.0

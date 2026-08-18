@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
@@ -17,11 +18,13 @@ class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val MAPS_CHANNEL = "com.example.astro_journal/maps"
         private const val SAF_CHANNEL = "com.example.astro_journal/saf_backup"
+        private const val ORIENTATION_CHANNEL = "com.example.astro_journal/device_orientation"
         private const val TAG = "SafBackup"
     }
 
     private var pendingTreePickResult: MethodChannel.Result? = null
     private var pendingDocPickResult: MethodChannel.Result? = null
+    private var orientationStreamHandler: DeviceOrientationStreamHandler? = null
 
     private val openTreeLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { activityResult ->
@@ -103,6 +106,11 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        val orientationHandler = DeviceOrientationStreamHandler(applicationContext)
+        orientationStreamHandler = orientationHandler
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, ORIENTATION_CHANNEL)
+            .setStreamHandler(orientationHandler)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MAPS_CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -193,6 +201,12 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        orientationStreamHandler?.dispose()
+        orientationStreamHandler = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     private fun pickPersistableDirectory(result: MethodChannel.Result) {

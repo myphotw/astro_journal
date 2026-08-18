@@ -15,6 +15,7 @@ import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/location_service.dart';
 import '../../../services/observation_site_validator.dart';
+import '../../horizon_scan/view/horizon_scan_screen.dart';
 
 class ObservationSiteEditScreen extends StatefulWidget {
   const ObservationSiteEditScreen({super.key, this.site});
@@ -145,6 +146,20 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     } catch (error) {
       if (mounted) _showError(error.toString().replaceFirst('Exception: ', ''));
     }
+  }
+
+  Future<void> _openHorizonScan() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => HorizonScanScreen(
+          observationSiteId: _siteId,
+          observationSiteName: _name.text.trim(),
+          latitude: _double(_latitude),
+          longitude: _double(_longitude),
+        ),
+      ),
+    );
   }
 
   Future<void> _searchAddress() async {
@@ -568,6 +583,19 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
             ),
             _textField(_memo, '메모', maxLines: 3),
             _sectionTitle('촬영 가능 범위'),
+            OutlinedButton.icon(
+              key: const Key('start-horizon-scan'),
+              onPressed: _openHorizonScan,
+              icon: const Icon(Icons.panorama_horizontal_select_outlined),
+              label: const Text('시야 자동 측정'),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 6, bottom: 12),
+              child: Text(
+                '카메라로 방향과 기울기를 기록합니다. 현재 Horizon 데이터는 변경하지 않습니다.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
             Text('관측 불가 방향', style: Theme.of(context).textTheme.titleSmall),
             ..._blockedRanges.map(
               (range) => ListTile(

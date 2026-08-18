@@ -32,6 +32,7 @@ import '../../features/photo_first/viewmodel/photo_first_registration_view_model
 import '../../features/home/viewmodel/home_view_model.dart';
 import '../../features/light_pollution_map/viewmodel/light_pollution_map_view_model.dart';
 import '../../features/main/viewmodel/main_back_navigation_view_model.dart';
+import '../../features/horizon_scan/services/device_orientation_service.dart';
 import '../../features/settings/viewmodel/equipment_view_model.dart';
 import '../../features/settings/viewmodel/settings_view_model.dart';
 import '../../features/settings/viewmodel/tc_backend_view_model.dart';
@@ -208,6 +209,7 @@ class AppProviders {
     final photoOverlayService = PhotoOverlayService(catalogRepository);
     final weatherCacheService = WeatherCacheService();
     final locationService = LocationService();
+    final deviceOrientationService = NativeDeviceOrientationService();
     final recommendationSettingsService = RecommendationSettingsService();
     final baseExposureSettingsService = BaseExposureSettingsService();
     final tonightShootingPlanService = TonightShootingPlanService();
@@ -390,6 +392,7 @@ class AppProviders {
       ),
       Provider<WeatherCacheService>.value(value: weatherCacheService),
       Provider<LocationService>.value(value: locationService),
+      Provider<DeviceOrientationService>.value(value: deviceOrientationService),
       Provider<RecommendationSettingsService>.value(
         value: recommendationSettingsService,
       ),

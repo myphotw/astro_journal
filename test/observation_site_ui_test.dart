@@ -137,6 +137,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('site-longitude')), '127.0');
     expect(find.byKey(const Key('add-blocked-range')), findsOneWidget);
     expect(find.byKey(const Key('add-horizon-point')), findsOneWidget);
+    expect(find.byKey(const Key('start-horizon-scan')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('add-blocked-range')));
     await tester.pumpAndSettle();

@@ -11,6 +11,10 @@
     <!-- GPS / Location (geolocator) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- ObservationSite Horizon camera scan -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
 
     <application
         android:label="astro_journal"
