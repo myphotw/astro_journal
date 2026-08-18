@@ -15,8 +15,8 @@ import '../../data/repositories/gallery_shooting_record_repository_adapter.dart'
 import '../../data/repositories/hybrid_gallery_repository.dart';
 import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/catalog_repository_impl.dart';
-import '../../data/repositories/observation_site_favorite_repository.dart';
-import '../../data/repositories/observation_site_favorite_repository_impl.dart';
+import '../../data/repositories/observation_site_repository.dart';
+import '../../data/repositories/observation_site_repository_impl.dart';
 import '../../data/repositories/photo_object_repository.dart';
 import '../../data/repositories/photo_object_repository_impl.dart';
 import '../../data/repositories/photo_repository.dart';
@@ -93,7 +93,7 @@ class AppProviders {
     final equipmentRepository = EquipmentRepositoryImpl();
     final shootingRecordRepository = ShootingRecordRepositoryImpl();
     final photoRepository = PhotoRepositoryImpl();
-    final favoriteRepository = ObservationSiteFavoriteRepositoryImpl();
+    final observationSiteRepository = ObservationSiteRepositoryImpl();
     final photoObjectRepository = PhotoObjectRepositoryImpl();
     final exifService = ExifService();
     final photoService = PhotoService(photoRepository, exifService);
@@ -296,7 +296,7 @@ class AppProviders {
       geocodingService,
       tilePreloadService,
       weatherService,
-      favoriteRepository,
+      observationSiteRepository,
       catalogRepository,
       equipmentRepository,
       observationEngine,
@@ -346,8 +346,8 @@ class AppProviders {
       Provider<EquipmentRepository>.value(value: equipmentRepository),
       Provider<ShootingRecordRepository>.value(value: shootingRecordRepository),
       Provider<PhotoRepository>.value(value: photoRepository),
-      Provider<ObservationSiteFavoriteRepository>.value(
-        value: favoriteRepository,
+      Provider<ObservationSiteRepository>.value(
+        value: observationSiteRepository,
       ),
       Provider<PhotoObjectRepository>.value(value: photoObjectRepository),
       Provider<PhotoService>.value(value: photoService),

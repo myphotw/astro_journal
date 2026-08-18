@@ -1,4 +1,4 @@
-import 'package:astro_journal/data/models/observation_site_favorite.dart';
+import 'package:astro_journal/data/models/observation_site.dart';
 import 'package:astro_journal/data/models/observation_status.dart';
 import 'package:astro_journal/features/light_pollution_map/models/favorite_location_summary.dart';
 import 'package:astro_journal/features/light_pollution_map/models/location_weather_info.dart';
@@ -7,13 +7,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('FavoriteLocationSummary', () {
-    final favorite = ObservationSiteFavorite(
+    final favorite = ObservationSite(
       id: 'fav-1',
       name: '지리산 정령치',
       latitude: 35.336,
       longitude: 127.730,
       bortle: 2,
       createdAt: DateTime(2026, 7, 7),
+      updatedAt: DateTime(2026, 7, 7),
     );
 
     test('formats labels for dropdown item', () {
@@ -42,12 +43,13 @@ void main() {
 
     test('uses fallback labels when data is missing', () {
       final summary = FavoriteLocationSummary(
-        favorite: ObservationSiteFavorite(
+        favorite: ObservationSite(
           id: 'fav-2',
           name: '집',
           latitude: 37.5,
           longitude: 127.0,
           createdAt: DateTime(2026, 7, 7),
+          updatedAt: DateTime(2026, 7, 7),
         ),
       );
 

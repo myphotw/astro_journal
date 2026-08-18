@@ -8,13 +8,13 @@ import '../../../data/models/bortle_metadata.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/observation_condition.dart';
-import '../../../data/models/observation_site_favorite.dart';
+import '../../../data/models/observation_site.dart';
 import '../../../data/models/tonight_observation_session.dart';
 import '../../../data/models/weather_data.dart';
 import '../../../data/models/weather_forecast_slot.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
-import '../../../data/repositories/observation_site_favorite_repository.dart';
+import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/app_logger.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/geocoding_service.dart';
@@ -31,13 +31,9 @@ import '../overlay/favorite_marker_icon_builder.dart';
 import '../overlay/light_pollution_tile_constants.dart';
 import '../overlay/light_pollution_tile_provider.dart';
 
-
-
 /// Default map center (Korea) when GPS is unavailable.
 
 const kDefaultMapCenter = LatLng(37.5, 127.0);
-
-
 
 const kLightPollutionTileOverlayId = TileOverlayId('light_pollution');
 
@@ -47,10 +43,7 @@ const _selectedLocationMarkerId = MarkerId('selected_location');
 
 const _favoriteCoordinateTolerance = 0.0005;
 
-
-
 class LightPollutionMapViewModel extends ChangeNotifier {
-
   LightPollutionMapViewModel(
     this._observationConditionService,
     this._geocodingService,
@@ -65,15 +58,11 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     this._recommendationSettingsService,
   );
 
-
-
   static const _tag = 'LIGHT POLLUTION MAP';
 
   static const _searchDebounceDuration = Duration(milliseconds: 300);
 
   static const _minQueryLength = 2;
-
-
 
   final ObservationConditionService _observationConditionService;
 
@@ -82,7 +71,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   final LightPollutionTilePreloadService _tilePreloadService;
 
   final WeatherService _weatherService;
-  final ObservationSiteFavoriteRepository _favoriteRepository;
+  final ObservationSiteRepository _favoriteRepository;
   final CatalogRepository _catalogRepository;
   final EquipmentRepository _equipmentRepository;
   final ObservationEngine _observationEngine;
@@ -90,13 +79,9 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   final EquipmentRecommendationService _equipmentRecommendationService;
   final RecommendationSettingsService _recommendationSettingsService;
 
-
-
   Timer? _searchDebounce;
 
   int _searchGeneration = 0;
-
-
 
   bool _isLoading = false;
 
@@ -134,20 +119,16 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
   String? _selectedWeatherErrorMessage;
 
-  List<ObservationSiteFavorite> _favorites = const [];
+  List<ObservationSite> _favorites = const [];
   bool _isFavoritesDropdownOpen = false;
   List<FavoriteLocationSummary> _favoriteSummaries = const [];
   bool _isLoadingFavoriteSummaries = false;
   final Map<String, BitmapDescriptor> _favoriteMarkerIcons = {};
   bool _isBuildingFavoriteMarkerIcons = false;
 
-
-
   BortleMetadata? _metadata;
 
   LightPollutionTileProvider? _tileProvider;
-
-
 
   bool get isLoading => _isLoading;
 
@@ -187,23 +168,18 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
   String? get selectedWeatherErrorMessage => _selectedWeatherErrorMessage;
 
-  List<ObservationSiteFavorite> get favorites => _favorites;
+  List<ObservationSite> get favorites => _favorites;
   bool get isFavoritesDropdownOpen => _isFavoritesDropdownOpen;
   List<FavoriteLocationSummary> get favoriteSummaries => _favoriteSummaries;
   bool get isLoadingFavoriteSummaries => _isLoadingFavoriteSummaries;
 
   BortleMetadata? get metadata => _metadata;
 
-
-
   /// Overlay opacity (0.0–1.0). UI slider will bind here later.
 
   double get overlayOpacity => LightPollutionTileConstants.overlayOpacity;
 
-
-
   set overlayOpacity(double value) {
-
     final clamped = value.clamp(0.0, 1.0);
 
     if (LightPollutionTileConstants.overlayOpacity == clamped) return;
@@ -213,62 +189,39 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     _tileProvider?.clearCache();
 
     notifyListeners();
-
   }
-
-
 
   LightPollutionTileProvider? get tileProvider => _tileProvider;
 
-
-
-  LatLng get mapCenter =>
-
-      _condition != null
-
-          ? LatLng(_condition!.latitude, _condition!.longitude)
-
-          : kDefaultMapCenter;
-
-
+  LatLng get mapCenter => _condition != null
+      ? LatLng(_condition!.latitude, _condition!.longitude)
+      : kDefaultMapCenter;
 
   Set<Marker> get markers {
-
     final markers = <Marker>{};
 
-
-
     if (_condition != null) {
-
       markers.add(
-
         Marker(
-
           markerId: _currentLocationMarkerId,
 
           position: LatLng(_condition!.latitude, _condition!.longitude),
 
           infoWindow: const InfoWindow(title: '현재 위치'),
-
         ),
-
       );
-
     }
 
-
-
     if (_selectedPosition != null) {
-
       markers.add(
-
         Marker(
-
           markerId: _selectedLocationMarkerId,
 
           position: _selectedPosition!,
 
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueAzure,
+          ),
 
           infoWindow: InfoWindow(
             title: _selectedAddressLabel?.trim().isNotEmpty == true
@@ -278,15 +231,13 @@ class LightPollutionMapViewModel extends ChangeNotifier {
                 ? null
                 : _selectedAddressLabel,
           ),
-
         ),
-
       );
-
     }
 
     for (final favorite in _favorites) {
-      final icon = _favoriteMarkerIcons[_favoriteIconKey(favorite)] ??
+      final icon =
+          _favoriteMarkerIcons[_favoriteIconKey(favorite)] ??
           BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
       markers.add(
         Marker(
@@ -301,23 +252,15 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     }
 
     return markers;
-
   }
 
-
-
   Set<TileOverlay> get tileOverlays {
-
     final provider = _tileProvider;
 
     if (provider == null) return {};
 
-
-
     return {
-
       TileOverlay(
-
         tileOverlayId: kLightPollutionTileOverlayId,
 
         tileProvider: provider,
@@ -329,26 +272,16 @@ class LightPollutionMapViewModel extends ChangeNotifier {
         fadeIn: false,
 
         tileSize: LightPollutionTileConstants.tileSize,
-
       ),
-
     };
-
   }
 
-
-
   @override
-
   void dispose() {
-
     _searchDebounce?.cancel();
 
     super.dispose();
-
   }
-
-
 
   bool _hasLoaded = false;
   bool get hasLoaded => _hasLoaded;
@@ -437,10 +370,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     }
   }
 
-
-
   Future<void> selectLocation(LatLng position, {String? addressLabel}) async {
-
     _selectedPosition = position;
 
     _selectedCondition = null;
@@ -459,30 +389,20 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
     notifyListeners();
 
-
-
     try {
-
       _selectedCondition = await _observationConditionService.getConditionAt(
-
         position.latitude,
 
         position.longitude,
-
       );
-
     } catch (error) {
-
       _selectedCondition = null;
 
       _selectionErrorMessage = error.toString().replaceFirst('Exception: ', '');
-
     } finally {
-
       _isLoadingSelection = false;
 
       notifyListeners();
-
     }
 
     unawaited(_loadSelectedWeather(position.latitude, position.longitude));
@@ -514,32 +434,24 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     }
   }
 
-
-
   /// 입력 변경 시 디바운스 후 자동완성 제안을 불러온다.
 
   void onSearchQueryChanged(String query) {
-
     _searchDebounce?.cancel();
 
     final trimmed = query.trim();
 
-
-
     if (trimmed.isEmpty) {
-
       _resetSearchState();
 
       notifyListeners();
 
       return;
-
     }
 
     closeFavoritesDropdown();
 
     if (trimmed.length < _minQueryLength) {
-
       _searchSuggestions = const [];
 
       _searchErrorMessage = null;
@@ -549,10 +461,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
       notifyListeners();
 
       return;
-
     }
-
-
 
     _isSearching = true;
 
@@ -560,32 +469,21 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
     notifyListeners();
 
-
-
     _searchDebounce = Timer(_searchDebounceDuration, () {
-
       unawaited(_fetchSuggestions(trimmed));
-
     });
-
   }
-
-
 
   /// Enter/검색 버튼 — 디바운스 없이 즉시 조회.
 
   Future<void> searchAddress(String query) async {
-
     _searchDebounce?.cancel();
 
     final trimmed = query.trim();
 
     if (trimmed.isEmpty) return;
 
-
-
     if (trimmed.length < _minQueryLength) {
-
       _searchSuggestions = const [];
 
       _searchErrorMessage = '두 글자 이상 입력해 주세요.';
@@ -595,19 +493,14 @@ class LightPollutionMapViewModel extends ChangeNotifier {
       notifyListeners();
 
       return;
-
     }
 
-
-
     await _fetchSuggestions(trimmed);
-
   }
 
-
-
-  Future<void> selectSearchSuggestion(LocationSearchSuggestion suggestion) async {
-
+  Future<void> selectSearchSuggestion(
+    LocationSearchSuggestion suggestion,
+  ) async {
     _searchSuggestions = const [];
 
     _searchErrorMessage = null;
@@ -616,10 +509,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
     notifyListeners();
 
-
-
     try {
-
       GeocodeForwardResult? result;
       if (suggestion.hasCoordinates) {
         result = GeocodeForwardResult(
@@ -629,108 +519,65 @@ class LightPollutionMapViewModel extends ChangeNotifier {
           placeName: suggestion.mainText,
         );
       } else if (suggestion.hasPlaceId) {
-        result = await _geocodingService.getPlaceDetails(
-          suggestion.placeId!,
-        );
+        result = await _geocodingService.getPlaceDetails(suggestion.placeId!);
       }
 
       if (result == null) {
-
         _searchErrorMessage = '장소 정보를 불러오지 못했습니다.';
 
         return;
-
       }
 
-
-
       await _applySearchResult(result);
-
     } catch (error) {
-
       _searchErrorMessage = error.toString().replaceFirst('Exception: ', '');
-
     } finally {
-
       _isSearching = false;
 
       notifyListeners();
-
     }
-
   }
 
-
-
   void clearSearchSuggestions() {
-
     _resetSearchState();
 
     notifyListeners();
-
   }
 
-
-
   Future<void> _fetchSuggestions(String query) async {
-
     final generation = ++_searchGeneration;
 
-
-
     try {
+      if (generation != _searchGeneration) return;
+      final suggestions = await _geocodingService.autocompleteLocations(query);
 
       if (generation != _searchGeneration) return;
-      final suggestions = await _geocodingService.autocompleteLocations(
-
-        query,
-
-      );
-
-      if (generation != _searchGeneration) return;
-
-
 
       if (suggestions.isEmpty) {
-
         _searchSuggestions = const [];
 
         _searchErrorMessage = '검색 결과가 없습니다.';
-
       } else {
-
         _searchSuggestions = suggestions;
 
         _searchErrorMessage = null;
-
       }
-
     } catch (error) {
-
       if (generation != _searchGeneration) return;
 
       _searchSuggestions = const [];
 
       _searchErrorMessage = error.toString().replaceFirst('Exception: ', '');
-
     } finally {
-
       if (generation == _searchGeneration) {
-
         _isSearching = false;
 
         notifyListeners();
-
       }
-
     }
-
   }
 
-
-
   void _resetSearchState() {
-
     _searchGeneration++;
 
     _searchSuggestions = const [];
@@ -738,41 +585,23 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     _searchErrorMessage = null;
 
     _isSearching = false;
-
   }
-
-
 
   Future<void> _applySearchResult(GeocodeForwardResult result) async {
-
     _cameraFocus = LatLng(result.latitude, result.longitude);
 
-    await selectLocation(
-
-      _cameraFocus!,
-
-      addressLabel: result.formattedAddress,
-
-    );
-
+    await selectLocation(_cameraFocus!, addressLabel: result.formattedAddress);
   }
 
-
-
   void clearCameraFocus() {
-
     if (_cameraFocus == null) return;
 
     _cameraFocus = null;
 
     notifyListeners();
-
   }
 
-
-
   void clearSelection() {
-
     _selectedPosition = null;
 
     _selectedCondition = null;
@@ -792,44 +621,27 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     _isLoadingSelectedWeather = false;
 
     notifyListeners();
-
   }
-
-
 
   void onCameraIdle() {}
 
-
-
   void _ensureTileProvider() {
-
     final metadata = _metadata;
 
     if (metadata == null) return;
 
-
-
     if (_tileProvider == null) {
-
       _tileProvider = LightPollutionTileProvider(
-
         observationConditionService: _observationConditionService,
 
         metadata: metadata,
-
       );
       // 잘못 생성된 이전 타일(다른 알고리즘/캐시 키) 제거.
       _tileProvider!.clearCache();
-
     } else {
-
       _tileProvider!.updateMetadata(metadata);
-
     }
-
   }
-
-
 
   Future<void> _loadCurrentWeather() async {
     final condition = _condition;
@@ -862,8 +674,10 @@ class LightPollutionMapViewModel extends ChangeNotifier {
       _selectedWeatherInfo = await _fetchWeatherInfo(latitude, longitude);
     } catch (error) {
       _selectedWeatherInfo = null;
-      _selectedWeatherErrorMessage =
-          error.toString().replaceFirst('Exception: ', '');
+      _selectedWeatherErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
     } finally {
       _isLoadingSelectedWeather = false;
       notifyListeners();
@@ -889,21 +703,19 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   }
 
   void _logConditionDebug(ObservationCondition condition) {
-
     if (!kDebugMode) return;
 
-
-
-    AppLogger.info(_tag, 'lat=${condition.latitude} lng=${condition.longitude}');
+    AppLogger.info(
+      _tag,
+      'lat=${condition.latitude} lng=${condition.longitude}',
+    );
 
     AppLogger.info(_tag, 'Brightness : ${condition.brightness}');
 
     AppLogger.info(
-
       _tag,
 
       'ObservationScore : ${condition.observationScore?.round()}',
-
     );
 
     AppLogger.info(_tag, 'Row        : ${condition.row}');
@@ -913,16 +725,17 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     AppLogger.info(_tag, 'SQM        : ${condition.sqm}');
 
     AppLogger.info(_tag, 'Bortle     : ${condition.bortle}');
-
   }
 
   Future<void> loadFavorites() async {
-    _favorites = await _favoriteRepository.getAll();
+    _favorites = (await _favoriteRepository.list())
+        .where((site) => site.isFavorite)
+        .toList();
     notifyListeners();
     unawaited(_ensureFavoriteMarkerIcons());
   }
 
-  String _favoriteIconKey(ObservationSiteFavorite favorite) =>
+  String _favoriteIconKey(ObservationSite favorite) =>
       '${favorite.id}::${favorite.name}';
 
   Future<void> _ensureFavoriteMarkerIcons() async {
@@ -951,7 +764,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   bool isFavorited(double latitude, double longitude) =>
       _findFavoriteAt(latitude, longitude) != null;
 
-  ObservationSiteFavorite? findFavoriteAt(double latitude, double longitude) =>
+  ObservationSite? findFavoriteAt(double latitude, double longitude) =>
       _findFavoriteAt(latitude, longitude);
 
   String defaultFavoriteName({required bool isCurrent}) {
@@ -972,7 +785,8 @@ class LightPollutionMapViewModel extends ChangeNotifier {
         ? BrightnessColorMapper.legendEntryFor(brightness)
         : null;
 
-    final favorite = ObservationSiteFavorite(
+    final now = DateTime.now();
+    final favorite = ObservationSite(
       id: const Uuid().v4(),
       name: name.trim().isEmpty ? '관측지' : name.trim(),
       latitude: latitude,
@@ -980,10 +794,11 @@ class LightPollutionMapViewModel extends ChangeNotifier {
       bortle: condition.bortle,
       sqm: condition.sqm,
       brightnessGrade: legendEntry?.label,
-      createdAt: DateTime.now(),
+      createdAt: now,
+      updatedAt: now,
     );
 
-    await _favoriteRepository.save(favorite);
+    await _favoriteRepository.create(favorite);
     await loadFavorites();
   }
 
@@ -1015,7 +830,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> selectFavorite(ObservationSiteFavorite favorite) async {
+  Future<void> selectFavorite(ObservationSite favorite) async {
     _isFavoritesDropdownOpen = false;
     _favoriteSummaries = const [];
     notifyListeners();
@@ -1069,7 +884,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   }
 
   Future<FavoriteLocationSummary> _buildFavoriteSummary(
-    ObservationSiteFavorite favorite, {
+    ObservationSite favorite, {
     required List<CatalogObject> catalog,
     required List<Equipment> equipment,
     required RecommendationSettings settings,
@@ -1155,12 +970,10 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     );
   }
 
-  ObservationSiteFavorite? _findFavoriteAt(
-    double latitude,
-    double longitude,
-  ) {
+  ObservationSite? _findFavoriteAt(double latitude, double longitude) {
     for (final favorite in _favorites) {
-      if ((favorite.latitude - latitude).abs() <= _favoriteCoordinateTolerance &&
+      if ((favorite.latitude - latitude).abs() <=
+              _favoriteCoordinateTolerance &&
           (favorite.longitude - longitude).abs() <=
               _favoriteCoordinateTolerance) {
         return favorite;
@@ -1191,5 +1004,4 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     final nightStart = sunset.add(const Duration(minutes: 80));
     return (nightStart: nightStart, nightEnd: sunrise);
   }
-
 }

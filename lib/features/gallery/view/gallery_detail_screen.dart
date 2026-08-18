@@ -9,10 +9,10 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/exif_info.dart';
-import '../../../data/models/observation_site_favorite.dart';
+import '../../../data/models/observation_site.dart';
 import '../../../data/models/plate_solve_result.dart';
 import '../../../data/models/shooting_record.dart';
-import '../../../data/repositories/observation_site_favorite_repository.dart';
+import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/api_key_service.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/metadata_field_trace.dart';
@@ -126,15 +126,14 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
     _capturedAt = _record.capturedAt;
     if (_controllersReady) {
       _equipmentCtrl.text = exif?.equipment ?? '';
-      _exposureCtrl.text =
-          MetadataFormat.minutesNumberFromDisplay(exif?.exposure ?? '');
+      _exposureCtrl.text = MetadataFormat.minutesNumberFromDisplay(
+        exif?.exposure ?? '',
+      );
       _memoCtrl.text = _record.memo;
       _locationNameCtrl.text = exif?.locationName ?? _record.location ?? '';
       _addressCtrl.text = exif?.address ?? '';
-      _latCtrl.text =
-          exif?.lat != null ? exif!.lat!.toStringAsFixed(6) : '';
-      _lngCtrl.text =
-          exif?.lng != null ? exif!.lng!.toStringAsFixed(6) : '';
+      _latCtrl.text = exif?.lat != null ? exif!.lat!.toStringAsFixed(6) : '';
+      _lngCtrl.text = exif?.lng != null ? exif!.lng!.toStringAsFixed(6) : '';
       return;
     }
 
@@ -187,9 +186,8 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
     final lat = double.tryParse(_latCtrl.text.trim());
     final lng = double.tryParse(_lngCtrl.text.trim());
     final capturedAt = _capturedAt ?? _record.capturedAt;
-    final exposure = MetadataFormat.formatMinutesInputToExposure(
-          _exposureCtrl.text,
-        ) ??
+    final exposure =
+        MetadataFormat.formatMinutesInputToExposure(_exposureCtrl.text) ??
         _exposureCtrl.text.trim();
 
     final existing = _record.exif;
@@ -249,9 +247,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
     final messenger = ScaffoldMessenger.of(context);
 
     if (lat == null || lng == null) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('위도/경도를 먼저 입력하세요.')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('위도/경도를 먼저 입력하세요.')));
       return;
     }
 
@@ -364,7 +360,10 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
                 const PopupMenuItem(
                   value: _Action.delete,
                   child: ListTile(
-                    leading: Icon(Icons.delete_outline, color: Colors.redAccent),
+                    leading: Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                    ),
                     title: Text(
                       '기록 삭제',
                       style: TextStyle(color: Colors.redAccent),
@@ -387,8 +386,9 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
               onPageChanged: _onPageChanged,
               itemBuilder: (context, index) {
                 final record = detailVm.records[index];
-                final recordObj =
-                    galleryVm.catalogObjectFor(record.celestialObjectId);
+                final recordObj = galleryVm.catalogObjectFor(
+                  record.celestialObjectId,
+                );
                 if (_editMode && index == detailVm.currentIndex) {
                   return _EditBody(
                     record: record,
@@ -529,8 +529,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
                         itemCount: filtered.length,
                         itemBuilder: (_, index) {
                           final obj = filtered[index];
-                          final isCurrent =
-                              obj.id == _record.celestialObjectId;
+                          final isCurrent = obj.id == _record.celestialObjectId;
                           return ListTile(
                             title: Text(obj.displayId),
                             subtitle: Text(
@@ -547,8 +546,8 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
                                 : null,
                             onTap: () async {
                               Navigator.of(sheetContext).pop();
-                              final detailVm =
-                                  context.read<GalleryDetailViewModel>();
+                              final detailVm = context
+                                  .read<GalleryDetailViewModel>();
                               await viewModel.updateTarget(_record, obj.id);
                               final updated = _record.copyWith(
                                 celestialObjectId: obj.id,
@@ -579,18 +578,14 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('기록 삭제'),
-        content: const Text(
-          '이 촬영 기록을 삭제하시겠습니까?\n사진 파일도 함께 삭제됩니다.',
-        ),
+        content: const Text('이 촬영 기록을 삭제하시겠습니까?\n사진 파일도 함께 삭제됩니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('취소'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () async {
               Navigator.of(dialogContext).pop();
               final deletedId = _record.id;
@@ -779,10 +774,7 @@ class _ViewBody extends StatelessWidget {
           record.photoUri!.isNotEmpty &&
           onRunPlateSolve != null) ...[
         const SizedBox(height: 12),
-        _PlateSolveSection(
-          record: record,
-          onRun: onRunPlateSolve!,
-        ),
+        _PlateSolveSection(record: record, onRun: onRunPlateSolve!),
       ],
       const SizedBox(height: 12),
       if (record.exif?.lat != null && record.exif?.lng != null)
@@ -889,7 +881,9 @@ class _PlateSolveSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (runState.isRunning)
-            _PlateSolveProgressRow(message: runState.message ?? 'Plate Solving...')
+            _PlateSolveProgressRow(
+              message: runState.message ?? 'Plate Solving...',
+            )
           else if (solved != null && solved.success)
             _PlateSolveSuccessBody(
               result: solved,
@@ -979,7 +973,7 @@ class _PlateSolveSuccessBody extends StatelessWidget {
           label: 'FOV',
           value: (result.fovWidth != null && result.fovHeight != null)
               ? '${result.fovWidth!.toStringAsFixed(2)}° × '
-                  '${result.fovHeight!.toStringAsFixed(2)}°'
+                    '${result.fovHeight!.toStringAsFixed(2)}°'
               : '-',
         ).build(context),
         _FieldRow(label: 'Solver', value: result.solver ?? '-').build(context),
@@ -1181,26 +1175,16 @@ class _EditBody extends StatelessWidget {
         const SizedBox(height: 16),
 
         // 총 적분시간
-        IntegrationMinutesField(
-          controller: exposureCtrl,
-          hintText: '30',
-        ),
+        IntegrationMinutesField(controller: exposureCtrl, hintText: '30'),
 
         // 메모
         _EditSection(title: '메모'),
-        _EditField(
-          controller: memoCtrl,
-          hint: '메모를 입력하세요',
-          maxLines: 3,
-        ),
+        _EditField(controller: memoCtrl, hint: '메모를 입력하세요', maxLines: 3),
         const SizedBox(height: 16),
 
         // 촬영지명
         _EditSection(title: '촬영지명'),
-        _EditField(
-          controller: locationNameCtrl,
-          hint: '예: 탄도항, 안반데기',
-        ),
+        _EditField(controller: locationNameCtrl, hint: '예: 탄도항, 안반데기'),
         const SizedBox(height: 16),
 
         // 주소 검색 + 광해지도 즐겨찾기
@@ -1328,7 +1312,7 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
   var _isSearching = false;
   String? _searchError;
   List<LocationSearchSuggestion> _suggestions = const [];
-  List<ObservationSiteFavorite> _favorites = const [];
+  List<ObservationSite> _favorites = const [];
   var _favoritesLoading = true;
   String? _selectedFavoriteId;
   var _favoritesMenuOpen = false;
@@ -1349,8 +1333,9 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
 
   Future<void> _loadFavorites() async {
     try {
-      final list =
-          await context.read<ObservationSiteFavoriteRepository>().getAll();
+      final list = (await context.read<ObservationSiteRepository>().list())
+          .where((site) => site.isFavorite)
+          .toList();
       if (!mounted) return;
       setState(() {
         _favorites = list;
@@ -1443,8 +1428,8 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
         );
       } else if (suggestion.hasPlaceId) {
         result = await context.read<GeocodingService>().getPlaceDetails(
-              suggestion.placeId!,
-            );
+          suggestion.placeId!,
+        );
       }
 
       if (!mounted) return;
@@ -1460,13 +1445,14 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
       final cleaned = GeocodingService.cleanDisplayAddress(
         result.formattedAddress,
       );
-      widget.addressCtrl.text =
-          cleaned.isNotEmpty ? cleaned : result.formattedAddress;
+      widget.addressCtrl.text = cleaned.isNotEmpty
+          ? cleaned
+          : result.formattedAddress;
       if (widget.locationNameCtrl.text.trim().isEmpty) {
         widget.locationNameCtrl.text =
             result.placeName?.trim().isNotEmpty == true
-                ? result.placeName!.trim()
-                : label;
+            ? result.placeName!.trim()
+            : label;
       }
       widget.latCtrl.text = result.latitude.toStringAsFixed(6);
       widget.lngCtrl.text = result.longitude.toStringAsFixed(6);
@@ -1483,7 +1469,7 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
     }
   }
 
-  void _applyFavorite(ObservationSiteFavorite favorite) {
+  void _applyFavorite(ObservationSite favorite) {
     _searchFocus.unfocus();
     setState(() {
       _suggestions = const [];
@@ -1514,14 +1500,17 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
   @override
   Widget build(BuildContext context) {
     final query = _searchCtrl.text.trim();
-    final showSuggestions = !_favoritesMenuOpen &&
+    final showSuggestions =
+        !_favoritesMenuOpen &&
         query.length >= 2 &&
         (_isSearching || _suggestions.isNotEmpty || _searchError != null);
     final selectedFavorite = _selectedFavoriteId == null
         ? null
         : _favorites.where((f) => f.id == _selectedFavoriteId).firstOrNull;
-    final menuMaxHeight =
-        math.min(220.0, MediaQuery.sizeOf(context).height * 0.28);
+    final menuMaxHeight = math.min(
+      220.0,
+      MediaQuery.sizeOf(context).height * 0.28,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1549,8 +1538,10 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
                   size: 22,
                 ),
                 border: const OutlineInputBorder(),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
               child: Text(
                 selectedFavorite?.name ?? '자주 가는 촬영지 선택',
@@ -1669,24 +1660,26 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
                     ),
                   )
                 : (_searchCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _suppressSearch = true;
-                          _searchCtrl.clear();
-                          _suppressSearch = false;
-                          setState(() {
-                            _suggestions = const [];
-                            _searchError = null;
-                            _isSearching = false;
-                          });
-                          _searchFocus.requestFocus();
-                        },
-                      )
-                    : null),
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _suppressSearch = true;
+                            _searchCtrl.clear();
+                            _suppressSearch = false;
+                            setState(() {
+                              _suggestions = const [];
+                              _searchError = null;
+                              _isSearching = false;
+                            });
+                            _searchFocus.requestFocus();
+                          },
+                        )
+                      : null),
             border: const OutlineInputBorder(),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
           ),
           onChanged: (value) {
             // 직접 입력한 검색어를 주소 필드로도 유지
@@ -1847,9 +1840,7 @@ class _MapEditSectionState extends State<_MapEditSection> {
       if (_markerPosition != newPos) {
         setState(() => _markerPosition = newPos);
         if (_mapReady) {
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLng(newPos),
-          );
+          _mapController?.animateCamera(CameraUpdate.newLatLng(newPos));
         }
       }
     }
@@ -1889,10 +1880,7 @@ class _MapEditSectionState extends State<_MapEditSection> {
             Expanded(
               child: Text(
                 '위도/경도를 입력하면 지도에서 위치를 확인하고 수정할 수 있습니다.',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
             ),
           ],
@@ -1907,10 +1895,7 @@ class _MapEditSectionState extends State<_MapEditSection> {
         const SizedBox(height: 4),
         const Text(
           '지도를 탭하거나 핀을 드래그하여 위치를 수정하세요. 확대·축소로 넓은 범위도 확인할 수 있습니다.',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
         ),
         const SizedBox(height: 8),
         ClipRRect(
@@ -2006,8 +1991,10 @@ class _EditField extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }
@@ -2100,10 +2087,7 @@ class _PhotoSection extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Positioned.fill(
-            child: InteractiveViewer(
-              maxScale: 6,
-              child: Center(child: image),
-            ),
+            child: InteractiveViewer(maxScale: 6, child: Center(child: image)),
           ),
           if (_hasOverlayControls)
             Positioned(
@@ -2186,7 +2170,8 @@ class _OverlayControlButton extends StatelessWidget {
 
   void _openOverlayPopup(BuildContext context) {
     final button = context.findRenderObject() as RenderBox?;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (button == null || overlay == null) return;
 
     final buttonTopLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
@@ -2444,8 +2429,11 @@ class _LocationMapCardState extends State<_LocationMapCard> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
             child: Row(
               children: [
-                const Icon(Icons.place_outlined,
-                    size: 14, color: AppColors.textSecondary),
+                const Icon(
+                  Icons.place_outlined,
+                  size: 14,
+                  color: AppColors.textSecondary,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   '촬영 위치',
@@ -2462,8 +2450,9 @@ class _LocationMapCardState extends State<_LocationMapCard> {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 2),
               child: Text(
                 widget.locationName!,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           if (widget.address != null && widget.address!.isNotEmpty)
@@ -2471,23 +2460,18 @@ class _LocationMapCardState extends State<_LocationMapCard> {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
               child: Text(
                 widget.address!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: AppColors.textSecondary),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Row(
               children: [
-                _CoordChip(
-                  label: '위도',
-                  value: widget.lat.toStringAsFixed(5),
-                ),
+                _CoordChip(label: '위도', value: widget.lat.toStringAsFixed(5)),
                 const SizedBox(width: 8),
-                _CoordChip(
-                  label: '경도',
-                  value: widget.lng.toStringAsFixed(5),
-                ),
+                _CoordChip(label: '경도', value: widget.lng.toStringAsFixed(5)),
               ],
             ),
           ),
@@ -2513,8 +2497,9 @@ class _LocationMapCardState extends State<_LocationMapCard> {
               child: Center(
                 child: Text(
                   'Google Maps API Key를 설정하면 지도가 표시됩니다.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: AppColors.textSecondary),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -2529,9 +2514,7 @@ class _LocationMapCardState extends State<_LocationMapCard> {
                 height: 220,
                 width: double.infinity,
                 child: GoogleMap(
-                  key: ValueKey(
-                    'gallery_view_map_${widget.lat}_${widget.lng}',
-                  ),
+                  key: ValueKey('gallery_view_map_${widget.lat}_${widget.lng}'),
                   initialCameraPosition: CameraPosition(
                     target: target,
                     zoom: 11,
@@ -2595,8 +2578,11 @@ class _NoLocationCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.place_outlined,
-                  size: 14, color: AppColors.textSecondary),
+              const Icon(
+                Icons.place_outlined,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 6),
               Text(
                 '촬영 위치',
@@ -2612,20 +2598,23 @@ class _NoLocationCard extends StatelessWidget {
             if (locationName != null && locationName!.isNotEmpty)
               Text(
                 locationName!,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             if (address != null && address!.isNotEmpty)
               Text(
                 address!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: AppColors.textSecondary),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
           ] else
             Text(
               '위치 정보 없음',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: AppColors.textSecondary),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
         ],
       ),
@@ -2648,9 +2637,7 @@ class _CoordChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: AppColors.textSecondary.withAlpha(60),
-        ),
+        border: Border.all(color: AppColors.textSecondary.withAlpha(60)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

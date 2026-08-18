@@ -6,7 +6,7 @@ import '../../../core/constants/google_map_dark_style.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/observation_condition.dart';
-import '../../../data/models/observation_site_favorite.dart';
+import '../../../data/models/observation_site.dart';
 import '../../../shared/widgets/google_map_gate.dart';
 import '../viewmodel/light_pollution_map_view_model.dart';
 import '../widgets/light_pollution_legend.dart';
@@ -26,6 +26,7 @@ class LightPollutionMapScreen extends StatefulWidget {
 class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
   GoogleMapController? _mapController;
   bool _didInitialCameraMove = false;
+
   /// 광해 타일 기본 ON (필터 레이어 표시).
   bool _showTileOverlay = true;
   LatLng? _lastCameraFocus;
@@ -158,7 +159,7 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
 
   Future<void> _goToFavoriteLocation(
     LightPollutionMapViewModel vm,
-    ObservationSiteFavorite favorite,
+    ObservationSite favorite,
   ) async {
     final position = LatLng(favorite.latitude, favorite.longitude);
 
@@ -184,9 +185,7 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: '관측지 이름',
-            ),
+            decoration: const InputDecoration(hintText: '관측지 이름'),
             onSubmitted: (value) => Navigator.pop(dialogContext, value),
           ),
           actions: [
@@ -271,10 +270,7 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
           ? const Center(
               child: Text(
                 '지도를 불러오는 중…',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
             )
           : GoogleMapGate(
@@ -311,7 +307,8 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
                     Positioned(
                       left: AppTheme.spacingMd,
                       right: AppTheme.spacingMd,
-                      top: MediaQuery.paddingOf(context).top +
+                      top:
+                          MediaQuery.paddingOf(context).top +
                           AppTheme.spacingSm,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,7 +328,8 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
                     ),
                     Positioned(
                       left: AppTheme.spacingMd,
-                      bottom: MediaQuery.paddingOf(context).bottom +
+                      bottom:
+                          MediaQuery.paddingOf(context).bottom +
                           AppTheme.spacingMd,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,23 +347,23 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
                               isLoadingWeather: vm.isLoadingSelectedWeather,
                               weatherErrorMessage:
                                   vm.selectedWeatherErrorMessage,
-                              isFavorited: vm.selectedPosition != null &&
+                              isFavorited:
+                                  vm.selectedPosition != null &&
                                   vm.selectedCondition != null &&
                                   vm.isFavorited(
                                     vm.selectedPosition!.latitude,
                                     vm.selectedPosition!.longitude,
                                   ),
-                              onFavoriteTap: vm.selectedPosition != null &&
+                              onFavoriteTap:
+                                  vm.selectedPosition != null &&
                                       vm.selectedCondition != null
                                   ? () => _handleFavoriteTap(
-                                        vm: vm,
-                                        latitude:
-                                            vm.selectedPosition!.latitude,
-                                        longitude:
-                                            vm.selectedPosition!.longitude,
-                                        condition: vm.selectedCondition,
-                                        isCurrent: false,
-                                      )
+                                      vm: vm,
+                                      latitude: vm.selectedPosition!.latitude,
+                                      longitude: vm.selectedPosition!.longitude,
+                                      condition: vm.selectedCondition,
+                                      isCurrent: false,
+                                    )
                                   : null,
                               onClose: vm.clearSelection,
                             ),
@@ -380,19 +378,20 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
                             weatherInfo: vm.weatherInfo,
                             isLoadingWeather: vm.isLoadingWeather,
                             weatherErrorMessage: vm.weatherErrorMessage,
-                            isFavorited: vm.condition != null &&
+                            isFavorited:
+                                vm.condition != null &&
                                 vm.isFavorited(
                                   vm.condition!.latitude,
                                   vm.condition!.longitude,
                                 ),
                             onFavoriteTap: vm.condition != null
                                 ? () => _handleFavoriteTap(
-                                      vm: vm,
-                                      latitude: vm.condition!.latitude,
-                                      longitude: vm.condition!.longitude,
-                                      condition: vm.condition,
-                                      isCurrent: true,
-                                    )
+                                    vm: vm,
+                                    latitude: vm.condition!.latitude,
+                                    longitude: vm.condition!.longitude,
+                                    condition: vm.condition,
+                                    isCurrent: true,
+                                  )
                                 : null,
                           ),
                         ],
@@ -400,7 +399,8 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
                     ),
                     Positioned(
                       right: AppTheme.spacingMd,
-                      bottom: MediaQuery.paddingOf(context).bottom +
+                      bottom:
+                          MediaQuery.paddingOf(context).bottom +
                           AppTheme.spacingMd,
                       child: const LightPollutionLegend(),
                     ),
@@ -419,10 +419,7 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
 }
 
 class _MapMyLocationButton extends StatelessWidget {
-  const _MapMyLocationButton({
-    required this.enabled,
-    required this.onPressed,
-  });
+  const _MapMyLocationButton({required this.enabled, required this.onPressed});
 
   final bool enabled;
   final VoidCallback onPressed;

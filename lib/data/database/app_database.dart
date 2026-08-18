@@ -120,6 +120,7 @@ class AppDatabase {
     await _createPhotoObjectsTable(db);
     await _createEquipmentTables(db);
     await _createObservationSiteFavoritesTable(db);
+    await _createObservationSiteTables(db);
     await _createSyncOutboxTable(db);
     await _createGalleryCacheTable(db);
     await _createIndexes(db);
@@ -422,7 +423,124 @@ class AppDatabase {
     if (oldVersion < 31) {
       await _createGalleryCacheTable(db);
     }
+    if (oldVersion < 32) {
+      await _migrateToV32ObservationSites(db);
+    }
   }
+
+  static Future<void> _createObservationSiteTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableObservationSites} (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        address TEXT,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        bortle INTEGER,
+        sqm REAL,
+        brightness_grade TEXT,
+        is_favorite INTEGER NOT NULL DEFAULT 1,
+        tracking_mode TEXT NOT NULL DEFAULT 'altAz',
+        default_equipment_id TEXT,
+        default_min_altitude REAL NOT NULL DEFAULT 20,
+        default_max_altitude REAL,
+        preferred_start TEXT,
+        preferred_end TEXT,
+        memo TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_used_at TEXT,
+        deleted_at TEXT,
+        FOREIGN KEY (default_equipment_id)
+          REFERENCES ${DatabaseConstants.tableEquipment} (${DatabaseConstants.colId})
+          ON DELETE SET NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableObservationSiteHorizonPoints} (
+        id TEXT PRIMARY KEY,
+        observation_site_id TEXT NOT NULL,
+        azimuth REAL NOT NULL CHECK (azimuth >= 0 AND azimuth < 360),
+        min_altitude REAL NOT NULL CHECK (min_altitude >= -90 AND min_altitude <= 90),
+        max_altitude REAL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'manual',
+        CHECK (max_altitude IS NULL OR
+          (max_altitude >= min_altitude AND max_altitude <= 90)),
+        FOREIGN KEY (observation_site_id)
+          REFERENCES ${DatabaseConstants.tableObservationSites} (id)
+          ON DELETE CASCADE,
+        UNIQUE (observation_site_id, azimuth)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableObservationSiteBlockedAzimuthRanges} (
+        id TEXT PRIMARY KEY,
+        observation_site_id TEXT NOT NULL,
+        start_azimuth REAL NOT NULL CHECK (start_azimuth >= 0 AND start_azimuth < 360),
+        end_azimuth REAL NOT NULL CHECK (end_azimuth >= 0 AND end_azimuth < 360),
+        reason TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        FOREIGN KEY (observation_site_id)
+          REFERENCES ${DatabaseConstants.tableObservationSites} (id)
+          ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_observation_sites_active_favorite
+      ON ${DatabaseConstants.tableObservationSites}
+        (deleted_at, is_favorite, last_used_at, name)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_observation_site_horizon_site
+      ON ${DatabaseConstants.tableObservationSiteHorizonPoints}
+        (observation_site_id, azimuth)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_observation_site_blocked_site
+      ON ${DatabaseConstants.tableObservationSiteBlockedAzimuthRanges}
+        (observation_site_id)
+    ''');
+  }
+
+  static Future<void> _migrateToV32ObservationSites(Database db) async {
+    await _createObservationSiteTables(db);
+    final legacyExists =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+            [DatabaseConstants.tableObservationSiteFavorites],
+          ),
+        ) ==
+        1;
+    if (!legacyExists) return;
+
+    // Preserve legacy UUIDs and rows. The old table remains deprecated for
+    // rollback safety, but all v32 runtime reads/writes use observation_sites.
+    await db.execute('''
+      INSERT OR IGNORE INTO ${DatabaseConstants.tableObservationSites} (
+        id, name, latitude, longitude, bortle, sqm, brightness_grade,
+        is_favorite, tracking_mode, default_min_altitude,
+        created_at, updated_at, memo
+      )
+      SELECT
+        id, name, latitude, longitude, bortle, sqm, brightness_grade,
+        1, 'altAz', 20, created_at, created_at, ''
+      FROM ${DatabaseConstants.tableObservationSiteFavorites}
+    ''');
+  }
+
+  /// Test hook for exercising the production migration without opening the
+  /// application singleton database.
+  static Future<void> migrateForTest(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) => _onUpgrade(db, oldVersion, newVersion);
+
+  /// Test hook for validating the production fresh-install schema.
+  static Future<void> createForTest(Database db, int version) =>
+      _onCreate(db, version);
 
   static Future<void> _createGalleryCacheTable(Database db) async {
     await db.execute('''

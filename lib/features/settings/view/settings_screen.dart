@@ -24,6 +24,7 @@ import 'api_settings_screen.dart';
 import 'equipment_list_screen.dart';
 import 'exif_debug_screen.dart';
 import 'metadata_debug_screen.dart';
+import 'observation_site_list_screen.dart';
 import 'recommendation_settings_screen.dart';
 import 'base_exposure_settings_screen.dart';
 
@@ -55,61 +56,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
         foregroundColor: AppColors.textPrimary,
       ),
       body: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (viewModel.isLoading)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: LinearProgressIndicator(minHeight: 2),
-                  ),
-                _SectionHeader(
-                  title: '추천 대상 설정',
-                  icon: Icons.stars_outlined,
-                ),
-                _RecommendationSection(),
-                const SizedBox(height: 24),
-                _SectionHeader(
-                  title: '기본 촬영환경 설정',
-                  icon: Icons.wb_twilight_outlined,
-                ),
-                _BaseExposureSection(),
-                const SizedBox(height: 24),
-                _SectionHeader(
-                  title: '장비 관리',
-                  icon: Icons.camera_alt_outlined,
-                ),
-                _EquipmentSection(),
-                const SizedBox(height: 24),
-                _SectionHeader(title: 'API 관리', icon: Icons.key_outlined),
-                _ApiSection(),
-                const SizedBox(height: 12),
-                _ApiTestSection(),
-                const SizedBox(height: 24),
-                _SectionHeader(
-                  title: 'TC-Backend',
-                  icon: Icons.cloud_outlined,
-                ),
-                const TcBackendSettingsSection(),
-                const SizedBox(height: 24),
-                _SectionHeader(
-                  title: '백업 / 가져오기',
-                  icon: Icons.backup_outlined,
-                ),
-                _BackupSection(),
-                const SizedBox(height: 24),
-                _SectionHeader(
-                  title: '초기화',
-                  icon: Icons.delete_sweep_outlined,
-                ),
-                _ResetSection(),
-                const SizedBox(height: 24),
-                _SectionHeader(
-                  title: '개발자 옵션',
-                  icon: Icons.bug_report_outlined,
-                ),
-                _DeveloperSection(),
-              ],
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (viewModel.isLoading)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(minHeight: 2),
             ),
+          _SectionHeader(title: '추천 대상 설정', icon: Icons.stars_outlined),
+          _RecommendationSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: '기본 촬영환경 설정', icon: Icons.wb_twilight_outlined),
+          _BaseExposureSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: '관측지 관리', icon: Icons.location_on_outlined),
+          _ObservationSiteSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: '장비 관리', icon: Icons.camera_alt_outlined),
+          _EquipmentSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: 'API 관리', icon: Icons.key_outlined),
+          _ApiSection(),
+          const SizedBox(height: 12),
+          _ApiTestSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: 'TC-Backend', icon: Icons.cloud_outlined),
+          const TcBackendSettingsSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: '백업 / 가져오기', icon: Icons.backup_outlined),
+          _BackupSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: '초기화', icon: Icons.delete_sweep_outlined),
+          _ResetSection(),
+          const SizedBox(height: 24),
+          _SectionHeader(title: '개발자 옵션', icon: Icons.bug_report_outlined),
+          _DeveloperSection(),
+        ],
+      ),
     );
   }
 }
@@ -190,6 +173,39 @@ class _EquipmentSection extends StatelessWidget {
   }
 }
 
+class _ObservationSiteSection extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      child: ListTile(
+        key: const Key('observation-site-settings-entry'),
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(
+          Icons.location_on_outlined,
+          color: AppColors.textSecondary,
+        ),
+        title: const Text(
+          '관측지 등록·관리',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        subtitle: const Text(
+          '위치, 장비, 추적 방식, 촬영 가능 범위',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
+        trailing: const Icon(
+          Icons.chevron_right,
+          color: AppColors.textSecondary,
+        ),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const ObservationSiteListScreen(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ──────────────────────────────────────────────
 // Recommendation Section
 // ──────────────────────────────────────────────
@@ -200,7 +216,10 @@ class _RecommendationSection extends StatelessWidget {
     return _SettingsCard(
       child: ListTile(
         contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.tune_outlined, color: AppColors.textSecondary),
+        leading: const Icon(
+          Icons.tune_outlined,
+          color: AppColors.textSecondary,
+        ),
         title: const Text(
           '추천 필터 설정',
           style: TextStyle(color: AppColors.textPrimary),
@@ -324,7 +343,10 @@ class _ApiTestSection extends StatelessWidget {
     return _SettingsCard(
       child: ListTile(
         contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.science_outlined, color: AppColors.textSecondary),
+        leading: const Icon(
+          Icons.science_outlined,
+          color: AppColors.textSecondary,
+        ),
         title: const Text(
           'API 테스트',
           style: TextStyle(color: AppColors.textPrimary),
@@ -333,7 +355,10 @@ class _ApiTestSection extends StatelessWidget {
           'GPS · Astronomy · Weather · Map · Secure Storage',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+        trailing: const Icon(
+          Icons.chevron_right,
+          color: AppColors.textSecondary,
+        ),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => MultiProvider(
@@ -423,15 +448,10 @@ class _BackupSection extends StatelessWidget {
     SettingsViewModel viewModel,
   ) async {
     final progress = ValueNotifier(
-      const BackupExportProgress(
-        stage: 'preparing',
-        message: '백업 준비 중…',
-      ),
+      const BackupExportProgress(stage: 'preparing', message: '백업 준비 중…'),
     );
     // packing → choose: 같은 다이얼로그 안에서 전환 (닫았다 다시 열지 않음)
-    final phase = ValueNotifier<_BackupDialogPhase>(
-      _BackupDialogPhase.packing,
-    );
+    final phase = ValueNotifier<_BackupDialogPhase>(_BackupDialogPhase.packing);
     final saveChoice = Completer<_BackupSaveAction>();
 
     // SettingsScreen context — 탭 context가 dispose돼도 루트 오버레이는 유지
@@ -519,9 +539,9 @@ class _BackupSection extends StatelessWidget {
       progress.dispose();
       phase.dispose();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('백업 실패: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('백업 실패: $e')));
       }
       return;
     }
@@ -625,10 +645,7 @@ class _BackupSection extends StatelessWidget {
           result.isContentUri
               ? '선택한 폴더에 백업 ZIP을 저장했습니다.\n\n${result.location}'
               : result.location,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 13,
-          ),
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
         actions: [
           if (result.canOpenViaSaf)
@@ -638,9 +655,9 @@ class _BackupSection extends StatelessWidget {
                   await viewModel.openSavedBackup(result);
                 } catch (e) {
                   if (ctx.mounted) {
-                    ScaffoldMessenger.of(host).showSnackBar(
-                      SnackBar(content: Text('열기 실패: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      host,
+                    ).showSnackBar(SnackBar(content: Text('열기 실패: $e')));
                   }
                 }
               },
@@ -663,15 +680,15 @@ class _BackupSection extends StatelessWidget {
     try {
       await viewModel.shareBackupFile(tempZipPath);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('공유 시트로 백업을 내보냈습니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('공유 시트로 백업을 내보냈습니다.')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('공유 실패: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('공유 실패: $e')));
       }
     }
   }
@@ -685,9 +702,9 @@ class _BackupSection extends StatelessWidget {
       zipPath = await viewModel.pickBackupZipForImport();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('파일 선택 실패: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('파일 선택 실패: $e')));
       }
       return;
     }
@@ -729,10 +746,7 @@ class _BackupSection extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     final progress = ValueNotifier(
-      const BackupExportProgress(
-        stage: 'preparing',
-        message: '백업 파일 읽는 중…',
-      ),
+      const BackupExportProgress(stage: 'preparing', message: '백업 파일 읽는 중…'),
     );
 
     showDialog<void>(
@@ -753,7 +767,10 @@ class _BackupSection extends StatelessWidget {
     );
 
     try {
-      await viewModel.importBackup(zipPath, onProgress: (p) => progress.value = p);
+      await viewModel.importBackup(
+        zipPath,
+        onProgress: (p) => progress.value = p,
+      );
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -763,9 +780,9 @@ class _BackupSection extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('가져오기 실패: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('가져오기 실패: $e')));
       }
     } finally {
       progress.dispose();
@@ -860,10 +877,7 @@ class _ResetSection extends StatelessWidget {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Icon(
-                Icons.chevron_right,
-                color: AppColors.textSecondary,
-              ),
+            : const Icon(Icons.chevron_right, color: AppColors.textSecondary),
         enabled: !isLoading,
         onTap: isLoading ? null : () => _confirmDeleteAll(context, viewModel),
       ),
@@ -896,10 +910,7 @@ class _ResetSection extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(
-              '초기화',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: const Text('초기화', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -947,8 +958,10 @@ class _DeveloperSection extends StatelessWidget {
         children: [
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.data_object_outlined,
-                color: AppColors.textSecondary),
+            leading: const Icon(
+              Icons.data_object_outlined,
+              color: AppColors.textSecondary,
+            ),
             title: const Text(
               '메타데이터 보기',
               style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
@@ -957,8 +970,10 @@ class _DeveloperSection extends StatelessWidget {
               '사진의 EXIF, OwnerName JSON, 파일명 분석 결과를 확인합니다.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
-            trailing:
-                const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: AppColors.textSecondary,
+            ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const MetadataDebugScreen(),
@@ -968,8 +983,10 @@ class _DeveloperSection extends StatelessWidget {
           const Divider(color: AppColors.textSecondary, height: 1),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.photo_camera_outlined,
-                color: AppColors.textSecondary),
+            leading: const Icon(
+              Icons.photo_camera_outlined,
+              color: AppColors.textSecondary,
+            ),
             title: const Text(
               'EXIF 디버그',
               style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
@@ -978,12 +995,12 @@ class _DeveloperSection extends StatelessWidget {
               '원본 EXIF, dump, MakerNote, copy 비교, Pipeline 단계별 확인',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
-            trailing:
-                const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: AppColors.textSecondary,
+            ),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const ExifDebugScreen(),
-              ),
+              MaterialPageRoute<void>(builder: (_) => const ExifDebugScreen()),
             ),
           ),
         ],

@@ -1,4 +1,4 @@
-import '../../../data/models/observation_site_favorite.dart';
+import '../../../data/models/observation_site.dart';
 import 'location_weather_info.dart';
 
 class FavoriteLocationSummary {
@@ -10,7 +10,7 @@ class FavoriteLocationSummary {
     this.recommendedTargetNames = const [],
   });
 
-  final ObservationSiteFavorite favorite;
+  final ObservationSite favorite;
   final LocationWeatherInfo? weatherInfo;
   final bool isLoading;
   final String? recommendedEquipmentName;

@@ -12,10 +12,10 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
-import '../../../data/models/observation_site_favorite.dart';
+import '../../../data/models/observation_site.dart';
 import '../../../data/models/plate_solve_result.dart';
 import '../../../data/repositories/equipment_repository.dart';
-import '../../../data/repositories/observation_site_favorite_repository.dart';
+import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/plate_solve_service.dart';
 import '../../../shared/widgets/app_file_image.dart';
@@ -131,8 +131,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   void _rebuildSteps() {
-    final previous =
-        _steps.isEmpty ? null : _steps[_stepIndex.clamp(0, _steps.length - 1)];
+    final previous = _steps.isEmpty
+        ? null
+        : _steps[_stepIndex.clamp(0, _steps.length - 1)];
     final hadTargetStep = _steps.contains(RegistrationWizardStep.target);
     _steps = [
       if (_shouldShowTargetStep) RegistrationWizardStep.target,
@@ -142,9 +143,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     ];
     final hasTargetStep = _steps.contains(RegistrationWizardStep.target);
     // 메타 해석 실패로 대상검색이 다시 생기면 해당 단계로 이동
-    if (!hadTargetStep &&
-        hasTargetStep &&
-        session.selectedObject == null) {
+    if (!hadTargetStep && hasTargetStep && session.selectedObject == null) {
       _stepIndex = _steps.indexOf(RegistrationWizardStep.target);
       return;
     }
@@ -278,11 +277,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool get _isLastStep => _stepIndex >= _steps.length - 1;
 
   String get _appBarTitle => switch (_currentStep) {
-        RegistrationWizardStep.target => '대상 선택',
-        RegistrationWizardStep.shooting => '촬영 정보',
-        RegistrationWizardStep.location => '위치',
-        RegistrationWizardStep.memo => '메모 · 확인',
-      };
+    RegistrationWizardStep.target => '대상 선택',
+    RegistrationWizardStep.shooting => '촬영 정보',
+    RegistrationWizardStep.location => '위치',
+    RegistrationWizardStep.memo => '메모 · 확인',
+  };
 
   String get _primaryButtonLabel {
     if (!_isLastStep) return '다음';
@@ -323,13 +322,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
     if (_photoIndex > 0) {
       _syncCurrentStepToSession();
-      unawaited(_advanceToPhoto(_photoIndex - 1).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _goingForward = false;
-          _stepIndex = _steps.length - 1;
-        });
-      }));
+      unawaited(
+        _advanceToPhoto(_photoIndex - 1).then((_) {
+          if (!mounted) return;
+          setState(() {
+            _goingForward = false;
+            _stepIndex = _steps.length - 1;
+          });
+        }),
+      );
       return;
     }
     Navigator.of(context).pop<List<RegistrationOutcome>>(null);
@@ -359,8 +360,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Future<void> _onSaveOrAdvance() async {
     if (session.selectedObject == null) return;
 
-    final targetName = session.targetNameOverride?.trim() ??
-        session.selectedObject!.displayId;
+    final targetName =
+        session.targetNameOverride?.trim() ?? session.selectedObject!.displayId;
     if (targetName.isNotEmpty && _isMismatch(targetName)) {
       final proceed = await _showMismatchDialog(targetName);
       if (!proceed || !mounted) return;
@@ -376,9 +377,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
 
     if (!mounted) return;
-    Navigator.of(context).pop<List<RegistrationOutcome>>(
-      List<RegistrationOutcome>.from(_outcomes),
-    );
+    Navigator.of(
+      context,
+    ).pop<List<RegistrationOutcome>>(List<RegistrationOutcome>.from(_outcomes));
   }
 
   bool _isMismatch(String targetName) {
@@ -456,11 +457,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final service = context.read<PlateSolveService>();
       Equipment? imaging;
       try {
-        final list =
-            await context.read<EquipmentRepository>().getAll(activeOnly: true);
-        final candidates = list
-            .where((e) => e.isImaging && e.hasFov)
-            .toList()
+        final list = await context.read<EquipmentRepository>().getAll(
+          activeOnly: true,
+        );
+        final candidates = list.where((e) => e.isImaging && e.hasFov).toList()
           ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
         imaging = candidates.isEmpty ? null : candidates.first;
       } catch (_) {}
@@ -493,8 +493,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Widget build(BuildContext context) {
     final accent =
         session.selectedObject?.catalog.accentColor ?? AppColors.solar;
-    final progressLabel =
-        _photoTotal > 1 ? '${_photoIndex + 1} / $_photoTotal' : null;
+    final progressLabel = _photoTotal > 1
+        ? '${_photoIndex + 1} / $_photoTotal'
+        : null;
 
     return PopScope(
       canPop: false,
@@ -586,21 +587,18 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 layoutBuilder: (currentChild, previousChildren) {
                   return Stack(
                     alignment: Alignment.topCenter,
-                    children: [
-                      ...previousChildren,
-                      ?currentChild,
-                    ],
+                    children: [...previousChildren, ?currentChild],
                   );
                 },
                 transitionBuilder: (child, animation) {
-                  final offsetBegin =
-                      Offset(_goingForward ? 0.06 : -0.06, 0);
-                  final slide = Tween<Offset>(
-                    begin: offsetBegin,
-                    end: Offset.zero,
-                  ).animate(
-                    CurvedAnimation(parent: animation, curve: _animCurve),
-                  );
+                  final offsetBegin = Offset(_goingForward ? 0.06 : -0.06, 0);
+                  final slide =
+                      Tween<Offset>(
+                        begin: offsetBegin,
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(parent: animation, curve: _animCurve),
+                      );
                   return FadeTransition(
                     opacity: animation,
                     child: SlideTransition(position: slide, child: child),
@@ -646,42 +644,42 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Widget _buildStepBody() {
     return switch (_currentStep) {
       RegistrationWizardStep.target => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-          child: RegistrationTargetSearchPanel(
-            allObjects: widget.allObjects,
-            selected: session.selectedObject,
-            onSelected: (obj) {
-              setState(() => session.selectTarget(obj));
-            },
-          ),
+        padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+        child: RegistrationTargetSearchPanel(
+          allObjects: widget.allObjects,
+          selected: session.selectedObject,
+          onSelected: (obj) {
+            setState(() => session.selectTarget(obj));
+          },
         ),
+      ),
       RegistrationWizardStep.shooting => _ShootingStep(
-          session: session,
-          equipmentList: _equipmentList,
-          stackCtrl: _stackCtrl,
-          singleExpCtrl: _singleExpCtrl,
-          totalExpCtrl: _totalExpCtrl,
-          filterCtrl: _filterCtrl,
-          isoCtrl: _isoCtrl,
-          fstopCtrl: _fstopCtrl,
-          focalCtrl: _focalCtrl,
-          onCapturedAtChanged: (v) => setState(() => session.capturedAt = v),
-          onEquipmentChanged: (v) => setState(() => session.equipment = v),
-        ),
+        session: session,
+        equipmentList: _equipmentList,
+        stackCtrl: _stackCtrl,
+        singleExpCtrl: _singleExpCtrl,
+        totalExpCtrl: _totalExpCtrl,
+        filterCtrl: _filterCtrl,
+        isoCtrl: _isoCtrl,
+        fstopCtrl: _fstopCtrl,
+        focalCtrl: _focalCtrl,
+        onCapturedAtChanged: (v) => setState(() => session.capturedAt = v),
+        onEquipmentChanged: (v) => setState(() => session.equipment = v),
+      ),
       RegistrationWizardStep.location => _LocationStep(
-          locationNameCtrl: _locationNameCtrl,
-          latCtrl: _latCtrl,
-          lngCtrl: _lngCtrl,
-          isGeocoding: _isGeocoding,
-          geocodedLocation: _geocodedLocation,
-          showMap: _showMap,
-          onOpenMaps: _openGoogleMaps,
-        ),
+        locationNameCtrl: _locationNameCtrl,
+        latCtrl: _latCtrl,
+        lngCtrl: _lngCtrl,
+        isGeocoding: _isGeocoding,
+        geocodedLocation: _geocodedLocation,
+        showMap: _showMap,
+        onOpenMaps: _openGoogleMaps,
+      ),
       RegistrationWizardStep.memo => _MemoStep(
-          session: session,
-          memoCtrl: _memoCtrl,
-          onPlateSolve: _runPlateSolve,
-        ),
+        session: session,
+        memoCtrl: _memoCtrl,
+        onPlateSolve: _runPlateSolve,
+      ),
     };
   }
 }
@@ -728,8 +726,9 @@ class _StepProgressBar extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight:
-                          i == current ? FontWeight.w700 : FontWeight.w400,
+                      fontWeight: i == current
+                          ? FontWeight.w700
+                          : FontWeight.w400,
                       color: i <= current
                           ? AppColors.solar
                           : AppColors.textSecondary.withValues(alpha: 0.5),
@@ -777,8 +776,7 @@ class _ShootingStep extends StatelessWidget {
     final names = <String>{
       for (final e in equipmentList) e.name,
       ?session.equipment,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
 
     return ListView(
       padding: const EdgeInsets.all(AppTheme.spacingLg),
@@ -794,8 +792,8 @@ class _ShootingStep extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String?>(
-          initialValue: session.equipment != null &&
-                  names.contains(session.equipment)
+          initialValue:
+              session.equipment != null && names.contains(session.equipment)
               ? session.equipment
               : null,
           decoration: const InputDecoration(
@@ -805,15 +803,10 @@ class _ShootingStep extends StatelessWidget {
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
           items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('선택 안 함'),
-            ),
+            const DropdownMenuItem<String?>(value: null, child: Text('선택 안 함')),
             ...names.map(
-              (name) => DropdownMenuItem<String?>(
-                value: name,
-                child: Text(name),
-              ),
+              (name) =>
+                  DropdownMenuItem<String?>(value: name, child: Text(name)),
             ),
           ],
           onChanged: onEquipmentChanged,
@@ -892,7 +885,7 @@ class _LocationStepState extends State<_LocationStep> {
   var _isSearching = false;
   String? _searchError;
   List<LocationSearchSuggestion> _suggestions = const [];
-  List<ObservationSiteFavorite> _favorites = const [];
+  List<ObservationSite> _favorites = const [];
   var _favoritesLoading = true;
   String? _selectedFavoriteId;
   var _favoritesMenuOpen = false;
@@ -906,8 +899,9 @@ class _LocationStepState extends State<_LocationStep> {
 
   Future<void> _loadFavorites() async {
     try {
-      final list =
-          await context.read<ObservationSiteFavoriteRepository>().getAll();
+      final list = (await context.read<ObservationSiteRepository>().list())
+          .where((site) => site.isFavorite)
+          .toList();
       if (!mounted) return;
       setState(() {
         _favorites = list;
@@ -999,8 +993,8 @@ class _LocationStepState extends State<_LocationStep> {
         );
       } else if (suggestion.hasPlaceId) {
         result = await context.read<GeocodingService>().getPlaceDetails(
-              suggestion.placeId!,
-            );
+          suggestion.placeId!,
+        );
       }
 
       if (!mounted) return;
@@ -1030,7 +1024,7 @@ class _LocationStepState extends State<_LocationStep> {
     }
   }
 
-  void _applyFavorite(ObservationSiteFavorite favorite) {
+  void _applyFavorite(ObservationSite favorite) {
     _searchFocus.unfocus();
     setState(() {
       _suggestions = const [];
@@ -1058,14 +1052,17 @@ class _LocationStepState extends State<_LocationStep> {
   @override
   Widget build(BuildContext context) {
     final query = _searchCtrl.text.trim();
-    final showSuggestions = !_favoritesMenuOpen &&
+    final showSuggestions =
+        !_favoritesMenuOpen &&
         query.length >= 2 &&
         (_isSearching || _suggestions.isNotEmpty || _searchError != null);
     final selectedFavorite = _selectedFavoriteId == null
         ? null
         : _favorites.where((f) => f.id == _selectedFavoriteId).firstOrNull;
-    final menuMaxHeight =
-        math.min(220.0, MediaQuery.sizeOf(context).height * 0.28);
+    final menuMaxHeight = math.min(
+      220.0,
+      MediaQuery.sizeOf(context).height * 0.28,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(AppTheme.spacingLg),
@@ -1092,8 +1089,10 @@ class _LocationStepState extends State<_LocationStep> {
                   size: 22,
                 ),
                 border: const OutlineInputBorder(),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
               child: Text(
                 selectedFavorite?.name ?? '자주 가는 촬영지 선택',
@@ -1207,24 +1206,26 @@ class _LocationStepState extends State<_LocationStep> {
                     ),
                   )
                 : (_searchCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _suppressSearch = true;
-                          _searchCtrl.clear();
-                          _suppressSearch = false;
-                          setState(() {
-                            _suggestions = const [];
-                            _searchError = null;
-                            _isSearching = false;
-                          });
-                          _searchFocus.requestFocus();
-                        },
-                      )
-                    : null),
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _suppressSearch = true;
+                            _searchCtrl.clear();
+                            _suppressSearch = false;
+                            setState(() {
+                              _suggestions = const [];
+                              _searchError = null;
+                              _isSearching = false;
+                            });
+                            _searchFocus.requestFocus();
+                          },
+                        )
+                      : null),
             border: const OutlineInputBorder(),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
           ),
         ),
         if (showSuggestions) ...[
@@ -1250,7 +1251,10 @@ class _LocationStepState extends State<_LocationStep> {
                     (s) => ListTile(
                       dense: true,
                       leading: const Icon(Icons.place_outlined, size: 20),
-                      title: Text(s.mainText, style: const TextStyle(fontSize: 14)),
+                      title: Text(
+                        s.mainText,
+                        style: const TextStyle(fontSize: 14),
+                      ),
                       subtitle: s.secondaryText == null
                           ? null
                           : Text(
@@ -1375,9 +1379,9 @@ class _MemoStep extends StatelessWidget {
 
     final targetLabel = object != null
         ? (object.displayCommonName.trim().isNotEmpty &&
-                object.displayCommonName != object.displayName)
-            ? '${object.displayName} · ${object.displayCommonName}'
-            : object.displayName
+                  object.displayCommonName != object.displayName)
+              ? '${object.displayName} · ${object.displayCommonName}'
+              : object.displayName
         : _dash(session.targetNameOverride);
 
     final locationLabel = () {
@@ -1408,7 +1412,10 @@ class _MemoStep extends StatelessWidget {
           ),
           Text(
             object.displayCommonName,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: AppTheme.spacingMd),
         ],
@@ -1494,14 +1501,8 @@ class _MemoStep extends StatelessWidget {
                 label: 'Stack',
                 value: session.stackNum?.toString() ?? '-',
               ),
-              _SummaryRow(
-                label: '노출',
-                value: _dash(confirmed.singleExpSec),
-              ),
-              _SummaryRow(
-                label: '적분',
-                value: _dash(confirmed.totalExpSec),
-              ),
+              _SummaryRow(label: '노출', value: _dash(confirmed.singleExpSec)),
+              _SummaryRow(label: '적분', value: _dash(confirmed.totalExpSec)),
               _SummaryRow(label: '필터', value: _dash(confirmed.filter)),
               _SummaryRow(label: 'ISO', value: _dash(confirmed.iso)),
               _SummaryRow(label: '조리개', value: _dash(confirmed.fstop)),
@@ -1521,9 +1522,7 @@ class _MemoStep extends StatelessWidget {
                 const _SummarySectionTitle('Plate Solve'),
                 _SummaryRow(
                   label: '결과',
-                  value: plate.success
-                      ? '성공'
-                      : (plate.errorMessage ?? '실패'),
+                  value: plate.success ? '성공' : (plate.errorMessage ?? '실패'),
                 ),
                 if (plate.success) ...[
                   _SummaryRow(
@@ -1556,10 +1555,7 @@ class _MemoStep extends StatelessWidget {
                         ? '${plate.rotation!.toStringAsFixed(2)}°'
                         : '-',
                   ),
-                  _SummaryRow(
-                    label: '솔버',
-                    value: _dash(plate.solver),
-                  ),
+                  _SummaryRow(label: '솔버', value: _dash(plate.solver)),
                 ],
               ],
             ],
@@ -1624,8 +1620,10 @@ class _Field extends StatelessWidget {
           suffixText: suffix,
           prefixText: prefix,
           border: const OutlineInputBorder(),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
         ),
       ),
     );
@@ -1748,9 +1746,7 @@ class _StableGpsMapState extends State<_StableGpsMap>
         position: pos,
       );
     });
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(pos, 12),
-    );
+    _mapController?.animateCamera(CameraUpdate.newLatLngZoom(pos, 12));
   }
 
   @override
@@ -1775,8 +1771,7 @@ class _StableGpsMapState extends State<_StableGpsMap>
         }
 
         final hasPin = _lat != null && _lng != null;
-        final position =
-            hasPin ? LatLng(_lat!, _lng!) : _defaultCenter;
+        final position = hasPin ? LatLng(_lat!, _lng!) : _defaultCenter;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1810,9 +1805,7 @@ class _StableGpsMapState extends State<_StableGpsMap>
                       target: position,
                       zoom: hasPin ? 12 : 6.5,
                     ),
-                    markers: {
-                      if (_marker != null) _marker!,
-                    },
+                    markers: {if (_marker != null) _marker!},
                     onMapCreated: (c) => _mapController = c,
                     zoomControlsEnabled: false,
                     scrollGesturesEnabled: false,

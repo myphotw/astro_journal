@@ -3,26 +3,23 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../data/models/observation_site_favorite.dart';
+import '../../../data/models/observation_site.dart';
 import '../../../services/geocoding_service.dart';
 import '../viewmodel/light_pollution_map_view_model.dart';
 import 'light_pollution_favorites_dropdown.dart';
 
 class LightPollutionMapSearchBar extends StatefulWidget {
-  const LightPollutionMapSearchBar({
-    super.key,
-    this.onFavoriteSelected,
-  });
+  const LightPollutionMapSearchBar({super.key, this.onFavoriteSelected});
 
-  final Future<void> Function(ObservationSiteFavorite favorite)?
-      onFavoriteSelected;
+  final Future<void> Function(ObservationSite favorite)? onFavoriteSelected;
 
   @override
   State<LightPollutionMapSearchBar> createState() =>
       _LightPollutionMapSearchBarState();
 }
 
-class _LightPollutionMapSearchBarState extends State<LightPollutionMapSearchBar> {
+class _LightPollutionMapSearchBarState
+    extends State<LightPollutionMapSearchBar> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   bool _suppressSearch = false;
@@ -97,7 +94,8 @@ class _LightPollutionMapSearchBarState extends State<LightPollutionMapSearchBar>
     final vm = context.watch<LightPollutionMapViewModel>();
     final surface = Theme.of(context).colorScheme.surface;
     final query = _controller.text.trim();
-    final showSuggestions = !vm.isFavoritesDropdownOpen &&
+    final showSuggestions =
+        !vm.isFavoritesDropdownOpen &&
         query.length >= 2 &&
         (vm.isSearching ||
             vm.searchSuggestions.isNotEmpty ||
@@ -259,10 +257,7 @@ class _LightPollutionMapSearchBarState extends State<LightPollutionMapSearchBar>
 }
 
 class _SearchSuggestionTile extends StatelessWidget {
-  const _SearchSuggestionTile({
-    required this.suggestion,
-    required this.onTap,
-  });
+  const _SearchSuggestionTile({required this.suggestion, required this.onTap});
 
   final LocationSearchSuggestion suggestion;
   final VoidCallback onTap;
