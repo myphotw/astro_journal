@@ -141,12 +141,15 @@ class _RegistrationTargetSearchPanelState
                   trailing: isSelected
                       ? Icon(Icons.check_circle, color: obj.catalog.accentColor)
                       : null,
-                  onTap: () => widget.onSelected(
-                    CatalogSearchService.resolvePrimaryFromList(
-                      obj,
-                      widget.allObjects,
-                    ),
-                  ),
+                  onTap: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    widget.onSelected(
+                      CatalogSearchService.resolvePrimaryFromList(
+                        obj,
+                        widget.allObjects,
+                      ),
+                    );
+                  },
                 );
               },
             ),
