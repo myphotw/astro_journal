@@ -21,10 +21,9 @@ class WeatherData {
     final clouds = json['clouds'] as Map<String, dynamic>? ?? {};
     final sys = json['sys'] as Map<String, dynamic>? ?? {};
     final weatherList = json['weather'] as List<dynamic>?;
-    final weather =
-        weatherList?.isNotEmpty == true
-            ? weatherList!.first as Map<String, dynamic>
-            : null;
+    final weather = weatherList?.isNotEmpty == true
+        ? weatherList!.first as Map<String, dynamic>
+        : null;
 
     return WeatherData(
       temperature: (main['temp'] as num).toDouble(),
@@ -43,6 +42,23 @@ class WeatherData {
       ),
       description: weather?['description'] as String? ?? '',
       cityName: json['name'] as String? ?? '',
+    );
+  }
+
+  factory WeatherData.fromCacheJson(Map<String, dynamic> json) {
+    return WeatherData(
+      temperature: (json['temperature'] as num).toDouble(),
+      feelsLike: (json['feelsLike'] as num).toDouble(),
+      humidity: (json['humidity'] as num).toInt(),
+      windSpeed: (json['windSpeed'] as num).toDouble(),
+      windDegree: (json['windDegree'] as num).toInt(),
+      pressure: (json['pressure'] as num).toInt(),
+      cloudCoverage: (json['cloudCoverage'] as num).toInt(),
+      visibility: (json['visibility'] as num).toInt(),
+      sunrise: DateTime.parse(json['sunrise'] as String),
+      sunset: DateTime.parse(json['sunset'] as String),
+      description: json['description'] as String? ?? '',
+      cityName: json['cityName'] as String? ?? '',
     );
   }
 

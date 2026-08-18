@@ -19,10 +19,9 @@ class WeatherForecastSlot {
     final clouds = json['clouds'] as Map<String, dynamic>? ?? {};
     final rain = json['rain'] as Map<String, dynamic>?;
     final weatherList = json['weather'] as List<dynamic>?;
-    final weather =
-        weatherList?.isNotEmpty == true
-            ? weatherList!.first as Map<String, dynamic>
-            : null;
+    final weather = weatherList?.isNotEmpty == true
+        ? weatherList!.first as Map<String, dynamic>
+        : null;
 
     double? rainVolumeMm;
     if (rain != null) {
@@ -46,6 +45,21 @@ class WeatherForecastSlot {
       description: weather?['description'] as String? ?? '',
       icon: weather?['icon'] as String? ?? '',
       rainVolumeMm: rainVolumeMm,
+    );
+  }
+
+  factory WeatherForecastSlot.fromCacheJson(Map<String, dynamic> json) {
+    return WeatherForecastSlot(
+      time: DateTime.parse(json['time'] as String),
+      temperature: (json['temperature'] as num).toDouble(),
+      humidity: (json['humidity'] as num).toInt(),
+      windSpeed: (json['windSpeed'] as num).toDouble(),
+      cloudCoverage: (json['cloudCoverage'] as num).toInt(),
+      visibility: (json['visibility'] as num).toInt(),
+      pop: (json['pop'] as num).toDouble(),
+      description: json['description'] as String? ?? '',
+      icon: json['icon'] as String? ?? '',
+      rainVolumeMm: (json['rainVolumeMm'] as num?)?.toDouble(),
     );
   }
 

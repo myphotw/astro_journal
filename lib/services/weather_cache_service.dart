@@ -27,10 +27,7 @@ class WeatherCacheService {
     await prefs.setString(_cacheKey, jsonEncode(payload));
   }
 
-  Future<WeatherCacheEntry?> load({
-    double? latitude,
-    double? longitude,
-  }) async {
+  Future<WeatherCacheEntry?> load({double? latitude, double? longitude}) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_cacheKey);
     if (raw == null || raw.isEmpty) return null;
@@ -55,10 +52,12 @@ class WeatherCacheService {
         latitude: cachedLat,
         longitude: cachedLng,
         cachedAt: cachedAt,
-        weather: WeatherData.fromJson(map['weather'] as Map<String, dynamic>),
+        weather: WeatherData.fromCacheJson(
+          map['weather'] as Map<String, dynamic>,
+        ),
         forecasts: forecastsRaw
             .map(
-              (item) => WeatherForecastSlot.fromJson(
+              (item) => WeatherForecastSlot.fromCacheJson(
                 item as Map<String, dynamic>,
               ),
             )

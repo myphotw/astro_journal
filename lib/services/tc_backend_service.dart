@@ -30,10 +30,14 @@ class TcBackendService {
   Future<TcBackendCapabilities> getCapabilities() async =>
       TcBackendCapabilities.fromJson(await _get('/api/common/capabilities'));
 
+  Future<TcBackendReadiness> getReadiness() async =>
+      TcBackendReadiness.fromJson(await _get('/api/common/readiness'));
+
   Future<TcBackendCheckResult> checkCompatibility() async {
     try {
       final health = await getHealth();
       final capabilities = await getCapabilities();
+      final readiness = await getReadiness();
       final hasAstroJournal = capabilities.supportedServices.any(
         (item) => item.toLowerCase() == 'astrojournal',
       );
@@ -46,6 +50,7 @@ class TcBackendService {
           status: TcBackendConnectionStatus.incompatible,
           health: health,
           capabilities: capabilities,
+          readiness: readiness,
           message: 'AstroJournal 업로드 계약을 지원하지 않는 서버입니다.',
         );
       }
@@ -55,6 +60,7 @@ class TcBackendService {
             : TcBackendConnectionStatus.connected,
         health: health,
         capabilities: capabilities,
+        readiness: readiness,
         message: health.isDegraded ? '연결됨 (일부 기능 제한)' : '연결됨',
       );
     } on TcBackendException catch (error) {

@@ -7,6 +7,7 @@ import '../../data/repositories/bortle_repository_impl.dart';
 import '../../data/repositories/equipment_repository.dart';
 import '../../data/repositories/equipment_repository_impl.dart';
 import '../../data/datasources/gallery_cache_local_datasource.dart';
+import '../../data/datasources/common_file_link_datasource.dart';
 import '../../data/datasources/gallery_record_link_datasource.dart';
 import '../../data/datasources/sync_checkpoint_datasource.dart';
 import '../../data/repositories/gallery_repository.dart';
@@ -76,6 +77,8 @@ import '../../services/tc_backend_record_service.dart';
 import '../../services/tc_backend_sync_coordinator.dart';
 import '../../services/tc_backend_startup_resume_service.dart';
 import '../../services/tc_backend_changes_service.dart';
+import '../../services/tc_backend_external_api_client.dart';
+import '../../services/tc_backend_plate_solve_service.dart';
 import '../../services/tc_backend_pull_sync_coordinator.dart';
 import '../../services/tc_backend_sync_gate.dart';
 import '../navigation/app_navigation_notifier.dart';
@@ -93,11 +96,15 @@ class AppProviders {
     final photoObjectRepository = PhotoObjectRepositoryImpl();
     final exifService = ExifService();
     final photoService = PhotoService(photoRepository, exifService);
-    final geocodingService = GeocodingService();
     final apiKeyService = ApiKeyService();
     final tcBackendSettingsService = TcBackendSettingsService();
+    final externalApiClient = TcBackendExternalApiClient(
+      settingsService: tcBackendSettingsService,
+    );
+    final geocodingService = GeocodingService(backendClient: externalApiClient);
     final galleryCache = GalleryCacheLocalDataSource();
     final galleryRecordLinks = SyncOutboxGalleryRecordLinkDataSource();
+    final commonFileLinks = SyncOutboxCommonFileLinkDataSource();
     final galleryRepository = HybridGalleryRepository(
       settingsService: tcBackendSettingsService,
       cache: galleryCache,
@@ -168,12 +175,20 @@ class AppProviders {
     );
     final backupService = BackupService();
     final astronomyService = AstronomyService(apiKeyService);
-    final weatherService = WeatherService(apiKeyService);
+    final weatherService = WeatherService(
+      apiKeyService,
+      backendClient: externalApiClient,
+    );
     final plateSolveSettingsService = PlateSolveSettingsService();
     final astrometryNetProvider = AstrometryNetProvider(apiKeyService);
-    final plateSolveService = PlateSolveService(<PlateSolveProvider>[
-      astrometryNetProvider,
-    ], plateSolveSettingsService);
+    final backendPlateSolveService = TcBackendPlateSolveService(
+      client: externalApiClient,
+    );
+    final plateSolveService = PlateSolveService(
+      <PlateSolveProvider>[astrometryNetProvider],
+      plateSolveSettingsService,
+      backendService: backendPlateSolveService,
+    );
     final celestialObjectSearchService = CelestialObjectSearchService(
       catalogRepository,
       photoObjectRepository,
@@ -253,6 +268,7 @@ class AppProviders {
       celestialObjectSearchService,
       catalogRepository,
       equipmentRepository,
+      commonFileLinks: commonFileLinks,
     );
 
     final statsAnalyticsService = StatsAnalyticsService();
@@ -266,7 +282,6 @@ class AppProviders {
     final lightPollutionMapViewModel = LightPollutionMapViewModel(
       observationConditionService,
       geocodingService,
-      apiKeyService,
       tilePreloadService,
       weatherService,
       favoriteRepository,
@@ -351,6 +366,9 @@ class AppProviders {
       ),
       Provider<AstrometryNetProvider>.value(value: astrometryNetProvider),
       Provider<PlateSolveService>.value(value: plateSolveService),
+      Provider<TcBackendPlateSolveService>.value(
+        value: backendPlateSolveService,
+      ),
       Provider<WeatherCacheService>.value(value: weatherCacheService),
       Provider<LocationService>.value(value: locationService),
       Provider<RecommendationSettingsService>.value(

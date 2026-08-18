@@ -255,23 +255,12 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
       return;
     }
 
-    final apiKeyService = context.read<ApiKeyService>();
     final geocodingService = context.read<GeocodingService>();
-    final apiKey = await apiKeyService.get(ApiKeyType.googleMaps);
-
-    if (!mounted) return;
-
-    if (apiKey == null || apiKey.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Google Maps API 키를 먼저 설정하세요.')),
-      );
-      return;
-    }
 
     setState(() => _isGeocoding = true);
 
     try {
-      final result = await geocodingService.getLocationInfo(lat, lng, apiKey);
+      final result = await geocodingService.getLocationInfo(lat, lng);
       if (!mounted) return;
       if (result != null) {
         _locationNameCtrl.text = result.locationName;
@@ -1412,20 +1401,9 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
       _searchError = null;
     });
     try {
-      final apiKey =
-          await context.read<ApiKeyService>().get(ApiKeyType.googleMaps) ?? '';
-      if (apiKey.isEmpty) {
-        if (!mounted || _searchCtrl.text.trim() != query) return;
-        setState(() {
-          _isSearching = false;
-          _suggestions = const [];
-          _searchError = 'Google Maps API 키가 필요합니다.';
-        });
-        return;
-      }
       final results = await context
           .read<GeocodingService>()
-          .autocompleteLocations(query, apiKey);
+          .autocompleteLocations(query);
       if (!mounted || _searchCtrl.text.trim() != query) return;
       setState(() {
         _isSearching = false;
@@ -1455,17 +1433,6 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
     });
 
     try {
-      final apiKey =
-          await context.read<ApiKeyService>().get(ApiKeyType.googleMaps) ?? '';
-      if (apiKey.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _isSearching = false;
-          _searchError = 'Google Maps API 키가 필요합니다.';
-        });
-        return;
-      }
-
       GeocodeForwardResult? result;
       if (suggestion.hasCoordinates) {
         result = GeocodeForwardResult(
@@ -1477,7 +1444,6 @@ class _EditAddressSearchSectionState extends State<_EditAddressSearchSection> {
       } else if (suggestion.hasPlaceId) {
         result = await context.read<GeocodingService>().getPlaceDetails(
               suggestion.placeId!,
-              apiKey,
             );
       }
 

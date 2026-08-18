@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/analysis_status.dart';
 import '../../../data/models/catalog_object.dart';
+import '../../../data/datasources/common_file_link_datasource.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/plate_solve_result.dart';
 import '../../../data/models/shooting_record.dart';
@@ -42,8 +43,9 @@ class PlateSolveViewModel extends ChangeNotifier {
     this._galleryViewModel,
     this._searchService,
     this._catalogRepository,
-    this._equipmentRepository,
-  );
+    this._equipmentRepository, {
+    this._commonFileLinks,
+  });
 
   final PlateSolveService _plateSolveService;
   final PlateSolveSettingsService _settingsService;
@@ -51,6 +53,7 @@ class PlateSolveViewModel extends ChangeNotifier {
   final CelestialObjectSearchService _searchService;
   final CatalogRepository _catalogRepository;
   final EquipmentRepository _equipmentRepository;
+  final CommonFileLinkDataSource? _commonFileLinks;
 
   static const _tag = 'PlateSolveViewModel';
 
@@ -77,6 +80,16 @@ class PlateSolveViewModel extends ChangeNotifier {
     if (!settings.astrometryEnabled) {
       final failure = PlateSolveResult.failure(
         errorMessage: 'Astrometry.net이 비활성화되어 있습니다. 설정에서 활성화해주세요.',
+      );
+      _setState(record.id, PlateSolveRunState(result: failure));
+      return failure;
+    }
+
+    final commonFileId = await _commonFileLinks?.getCommonFileId(record.id);
+    if (_commonFileLinks != null && commonFileId == null) {
+      final failure = PlateSolveResult.failure(
+        errorMessage: 'Backend 업로드가 완료된 사진에서만 Plate Solve를 실행할 수 있습니다.',
+        solver: 'tc_backend',
       );
       _setState(record.id, PlateSolveRunState(result: failure));
       return failure;
@@ -130,6 +143,7 @@ class PlateSolveViewModel extends ChangeNotifier {
       imageHeight: record.exif?.imageHeight,
       target: target,
       imagingEquipment: equipment,
+      commonFileId: commonFileId,
       onProgress: (progress) {
         _setState(
           record.id,
@@ -146,8 +160,9 @@ class PlateSolveViewModel extends ChangeNotifier {
 
     final solved = record.copyWith(
       plateSolve: result,
-      analysisStatus:
-          result.success ? AnalysisStatus.completed : AnalysisStatus.failed,
+      analysisStatus: result.success
+          ? AnalysisStatus.completed
+          : AnalysisStatus.failed,
     );
     try {
       await _galleryViewModel.updateRecord(solved);
@@ -165,9 +180,7 @@ class PlateSolveViewModel extends ChangeNotifier {
   Future<Equipment?> _resolveImagingEquipment() async {
     try {
       final list = await _equipmentRepository.getAll(activeOnly: true);
-      final imaging = list
-          .where((e) => e.isImaging && e.hasFov)
-          .toList()
+      final imaging = list.where((e) => e.isImaging && e.hasFov).toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
       return imaging.isEmpty ? null : imaging.first;
     } catch (e, s) {
@@ -182,8 +195,7 @@ class PlateSolveViewModel extends ChangeNotifier {
     try {
       final object = await _catalogRepository.getById(celestialObjectId);
       if (object == null) return null;
-      final coords =
-          _plateSolveService.planner.resolveInputCoords(object);
+      final coords = _plateSolveService.planner.resolveInputCoords(object);
       return coords == null ? null : object;
     } catch (e, s) {
       AppLogger.error(_tag, e, s);

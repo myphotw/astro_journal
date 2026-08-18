@@ -83,17 +83,47 @@ class TcBackendCheckResult {
     required this.status,
     this.health,
     this.capabilities,
+    this.readiness,
     this.message,
   });
 
   final TcBackendConnectionStatus status;
   final TcBackendHealth? health;
   final TcBackendCapabilities? capabilities;
+  final TcBackendReadiness? readiness;
   final String? message;
 
   bool get isCompatible =>
       status == TcBackendConnectionStatus.connected ||
       status == TcBackendConnectionStatus.degraded;
+}
+
+class TcBackendReadiness {
+  const TcBackendReadiness({this.services = const {}, this.vision});
+
+  final Map<String, bool> services;
+  final bool? vision;
+
+  bool? configured(String service) => services[service.toLowerCase()];
+
+  factory TcBackendReadiness.fromJson(Map<String, dynamic> json) {
+    final rawServices = json['services'];
+    final services = <String, bool>{};
+    if (rawServices is Map) {
+      for (final entry in rawServices.entries) {
+        final value = entry.value;
+        if (value is Map && value['configured'] is bool) {
+          services[entry.key.toString().toLowerCase()] =
+              value['configured'] as bool;
+        }
+      }
+    }
+    final rawVision = json['vision'];
+    final vision = rawVision is Map
+        ? rawVision['credential_available'] as bool?
+        : null;
+    return TcBackendReadiness(services: services, vision: vision);
+  }
 }
 
 String? _asString(Object? value) => value?.toString();

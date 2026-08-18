@@ -15,7 +15,6 @@ import '../../../data/models/weather_forecast_slot.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_favorite_repository.dart';
-import '../../../services/api_key_service.dart';
 import '../../../services/app_logger.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/geocoding_service.dart';
@@ -55,7 +54,6 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   LightPollutionMapViewModel(
     this._observationConditionService,
     this._geocodingService,
-    this._apiKeyService,
     this._tilePreloadService,
     this._weatherService,
     this._favoriteRepository,
@@ -80,8 +78,6 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   final ObservationConditionService _observationConditionService;
 
   final GeocodingService _geocodingService;
-
-  final ApiKeyService _apiKeyService;
 
   final LightPollutionTilePreloadService _tilePreloadService;
 
@@ -500,10 +496,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
   Future<void> _resolveSelectedRegionName(double lat, double lng) async {
     try {
-      final apiKey = await _apiKeyService.get(ApiKeyType.googleMaps);
-      if (apiKey == null || apiKey.isEmpty) return;
-
-      final result = await _geocodingService.getLocationInfo(lat, lng, apiKey);
+      final result = await _geocodingService.getLocationInfo(lat, lng);
       final label = result?.regionName.trim();
       if (label == null || label.isEmpty) return;
 
@@ -627,18 +620,6 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
     try {
 
-      final apiKey = await _apiKeyService.get(ApiKeyType.googleMaps);
-
-      if (apiKey == null || apiKey.isEmpty) {
-
-        _searchErrorMessage = 'Google Maps API 키가 필요합니다.';
-
-        return;
-
-      }
-
-
-
       GeocodeForwardResult? result;
       if (suggestion.hasCoordinates) {
         result = GeocodeForwardResult(
@@ -650,7 +631,6 @@ class LightPollutionMapViewModel extends ChangeNotifier {
       } else if (suggestion.hasPlaceId) {
         result = await _geocodingService.getPlaceDetails(
           suggestion.placeId!,
-          apiKey,
         );
       }
 
@@ -700,29 +680,10 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
     try {
 
-      final apiKey = await _apiKeyService.get(ApiKeyType.googleMaps);
-
       if (generation != _searchGeneration) return;
-
-
-
-      if (apiKey == null || apiKey.isEmpty) {
-
-        _searchSuggestions = const [];
-
-        _searchErrorMessage = 'Google Maps API 키가 필요합니다.';
-
-        return;
-
-      }
-
-
-
       final suggestions = await _geocodingService.autocompleteLocations(
 
         query,
-
-        apiKey,
 
       );
 
@@ -1232,5 +1193,3 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   }
 
 }
-
-

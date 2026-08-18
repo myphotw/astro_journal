@@ -16,7 +16,6 @@ import '../../../data/models/observation_site_favorite.dart';
 import '../../../data/models/plate_solve_result.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_favorite_repository.dart';
-import '../../../services/api_key_service.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/plate_solve_service.dart';
 import '../../../shared/widgets/app_file_image.dart';
@@ -233,10 +232,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
     _isGeocoding.value = true;
     try {
-      final apiKeyService = context.read<ApiKeyService>();
       final geocodingService = context.read<GeocodingService>();
-      final mapsKey = await apiKeyService.get(ApiKeyType.googleMaps) ?? '';
-      final result = await geocodingService.getLocationInfo(lat, lng, mapsKey);
+      final result = await geocodingService.getLocationInfo(lat, lng);
       if (!mounted) return;
       if (result != null) {
         final label = result.address.trim().isNotEmpty
@@ -961,20 +958,9 @@ class _LocationStepState extends State<_LocationStep> {
       _searchError = null;
     });
     try {
-      final apiKey =
-          await context.read<ApiKeyService>().get(ApiKeyType.googleMaps) ?? '';
-      if (apiKey.isEmpty) {
-        if (!mounted || _searchCtrl.text.trim() != query) return;
-        setState(() {
-          _isSearching = false;
-          _suggestions = const [];
-          _searchError = 'Google Maps API 키가 필요합니다.';
-        });
-        return;
-      }
       final results = await context
           .read<GeocodingService>()
-          .autocompleteLocations(query, apiKey);
+          .autocompleteLocations(query);
       if (!mounted || _searchCtrl.text.trim() != query) return;
       setState(() {
         _isSearching = false;
@@ -1003,17 +989,6 @@ class _LocationStepState extends State<_LocationStep> {
     });
 
     try {
-      final apiKey =
-          await context.read<ApiKeyService>().get(ApiKeyType.googleMaps) ?? '';
-      if (apiKey.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _isSearching = false;
-          _searchError = 'Google Maps API 키가 필요합니다.';
-        });
-        return;
-      }
-
       GeocodeForwardResult? result;
       if (suggestion.hasCoordinates) {
         result = GeocodeForwardResult(
@@ -1025,7 +1000,6 @@ class _LocationStepState extends State<_LocationStep> {
       } else if (suggestion.hasPlaceId) {
         result = await context.read<GeocodingService>().getPlaceDetails(
               suggestion.placeId!,
-              apiKey,
             );
       }
 

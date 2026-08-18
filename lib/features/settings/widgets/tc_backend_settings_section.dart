@@ -199,6 +199,7 @@ class _ResultPanel extends StatelessWidget {
     final color = healthy ? Colors.greenAccent : AppColors.textSecondary;
     final health = result.health;
     final capabilities = result.capabilities;
+    final readiness = result.readiness;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -232,6 +233,18 @@ class _ResultPanel extends StatelessWidget {
               ),
               Text(
                 'Upload 계약: service_name ${_yesNo(capabilities.supportsServiceName)} · client_file_id ${_yesNo(capabilities.supportsClientFileId)}',
+              ),
+            ],
+            if (readiness != null && readiness.services.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Geocoding ${_yesNo(readiness.configured('google_geocoding'))} · '
+                'Places ${_yesNo(readiness.configured('google_places'))}',
+              ),
+              Text(
+                'Weather ${_yesNo(readiness.configured('weather'))} · '
+                'Astrometry ${_yesNo(readiness.configured('astrometry'))} · '
+                'Vision ${_yesNo(readiness.vision)}',
               ),
             ],
           ],

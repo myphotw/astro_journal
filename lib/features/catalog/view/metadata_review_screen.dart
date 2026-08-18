@@ -10,7 +10,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/exif_info.dart';
 import '../../../data/repositories/equipment_repository.dart';
-import '../../../services/api_key_service.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/metadata_field_trace.dart';
 import '../../../services/metadata_format.dart';
@@ -145,10 +144,8 @@ class _MetadataReviewScreenState extends State<MetadataReviewScreen> {
     _isGeocoding.value = true;
 
     try {
-      final apiKeyService = context.read<ApiKeyService>();
       final geocodingService = context.read<GeocodingService>();
-      final mapsKey = await apiKeyService.get(ApiKeyType.googleMaps) ?? '';
-      final result = await geocodingService.getLocationInfo(lat, lng, mapsKey);
+      final result = await geocodingService.getLocationInfo(lat, lng);
       if (!mounted) return;
       if (result != null) {
         _geocodedLocation.value = result.locationName;

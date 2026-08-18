@@ -7,6 +7,8 @@ import 'base_api_service.dart';
 import 'plate_solve/plate_solve_provider.dart';
 import 'plate_solve/targeted_solve_planner.dart';
 import 'plate_solve_settings_service.dart';
+import 'tc_backend_external_api_client.dart';
+import 'tc_backend_plate_solve_service.dart';
 
 /// Plate Solve 기능의 단일 진입점 (UI 로직 미포함).
 ///
@@ -17,11 +19,13 @@ class PlateSolveService {
     this._providers,
     this._settingsService, {
     TargetedSolvePlanner? planner,
+    this._backendService,
   }) : _planner = planner ?? TargetedSolvePlanner();
 
   final List<PlateSolveProvider> _providers;
   final PlateSolveSettingsService _settingsService;
   final TargetedSolvePlanner _planner;
+  final TcBackendPlateSolveService? _backendService;
 
   static const _tag = 'PlateSolveService';
 
@@ -41,6 +45,7 @@ class PlateSolveService {
     double? searchRadiusDeg,
     double? scaleLower,
     double? scaleUpper,
+    int? commonFileId,
     void Function(PlateSolveProgress progress)? onProgress,
   }) async {
     final provider = activeProvider;
@@ -91,9 +96,7 @@ class PlateSolveService {
           ),
         ];
       } else {
-        attempts = _planner.buildAttempts(
-          imagingEquipment: imagingEquipment,
-        );
+        attempts = _planner.buildAttempts(imagingEquipment: imagingEquipment);
       }
 
       final targetName = _planner.targetObjectName(target);
@@ -102,6 +105,27 @@ class PlateSolveService {
           (centerRa != null && centerDec != null
               ? (ra: centerRa, dec: centerDec)
               : null);
+
+      if (commonFileId != null) {
+        final backend = _backendService;
+        if (backend == null) {
+          return PlateSolveResult.failure(
+            errorMessage: 'Backend Plate Solve 서비스가 준비되지 않았습니다.',
+            solver: 'tc_backend',
+            solveTimeMs: sw.elapsedMilliseconds,
+          );
+        }
+        final result = await backend.solve(
+          commonFileId: commonFileId,
+          onProgress: onProgress,
+        );
+        return result.copyWith(
+          targetObject: targetName,
+          inputRa: inputCoords?.ra,
+          inputDec: inputCoords?.dec,
+          solveTimeMs: sw.elapsedMilliseconds,
+        );
+      }
 
       AppLogger.info(
         _tag,
@@ -165,10 +189,7 @@ class PlateSolveService {
         );
       }
 
-      AppLogger.info(
-        _tag,
-        'Plate Solve 최종 실패 (${sw.elapsedMilliseconds}ms)',
-      );
+      AppLogger.info(_tag, 'Plate Solve 최종 실패 (${sw.elapsedMilliseconds}ms)');
       return lastFailure ??
           PlateSolveResult.failure(
             errorMessage: 'Plate Solve에 실패했습니다.',
@@ -180,6 +201,13 @@ class PlateSolveService {
       return PlateSolveResult.failure(
         errorMessage: e.message,
         solver: provider.id,
+        solveTimeMs: sw.elapsedMilliseconds,
+      );
+    } on TcBackendExternalApiException catch (e) {
+      AppLogger.error(_tag, e);
+      return PlateSolveResult.failure(
+        errorMessage: e.message,
+        solver: 'tc_backend',
         solveTimeMs: sw.elapsedMilliseconds,
       );
     } catch (e, s) {

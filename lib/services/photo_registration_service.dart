@@ -53,7 +53,7 @@ class PhotoRegistrationService {
 
     required this.geocodingService,
 
-    required this.apiKeyService,
+    required ApiKeyService apiKeyService,
 
     required this.exifService,
 
@@ -74,8 +74,6 @@ class PhotoRegistrationService {
   final PhotoService photoService;
 
   final GeocodingService geocodingService;
-
-  final ApiKeyService apiKeyService;
 
   final ExifService exifService;
 
@@ -469,14 +467,10 @@ class PhotoRegistrationService {
 
     if (finalLat != null && finalLng != null) {
       try {
-        final mapsKey = await apiKeyService.get(ApiKeyType.googleMaps) ?? '';
-
         final geoResult = await geocodingService.getLocationInfo(
           finalLat,
 
           finalLng,
-
-          mapsKey,
         );
 
         if (geoResult != null) {
