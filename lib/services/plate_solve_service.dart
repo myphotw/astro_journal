@@ -17,13 +17,12 @@ import 'tc_backend_plate_solve_service.dart';
 class PlateSolveService {
   PlateSolveService(
     this._providers,
-    this._settingsService, {
+    PlateSolveSettingsService settingsService, {
     TargetedSolvePlanner? planner,
     this._backendService,
   }) : _planner = planner ?? TargetedSolvePlanner();
 
   final List<PlateSolveProvider> _providers;
-  final PlateSolveSettingsService _settingsService;
   final TargetedSolvePlanner _planner;
   final TcBackendPlateSolveService? _backendService;
 
@@ -52,19 +51,6 @@ class PlateSolveService {
     final sw = Stopwatch()..start();
 
     try {
-      final settings = await _settingsService.load();
-      if (!settings.astrometryEnabled) {
-        AppLogger.info(
-          _tag,
-          '${provider.displayName} 비활성화 상태 — Plate Solve 생략',
-        );
-        return PlateSolveResult.failure(
-          errorMessage: '${provider.displayName} API가 비활성화되어 있습니다.',
-          solver: provider.id,
-          solveTimeMs: sw.elapsedMilliseconds,
-        );
-      }
-
       // Catalog 대상이 있으면 Targeted 폴백 체인.
       // 대상 없이 좌표만 있으면 단일 Targeted 시도 (하위 호환).
       // 둘 다 없으면 Blind.

@@ -33,25 +33,23 @@ class AppStartupViewModel extends ChangeNotifier {
     required SkyMapViewModel skyMapViewModel,
     required LightPollutionMapViewModel lightPollutionMapViewModel,
     SplashImageService? splashImageService,
-  })  : _apiKeyService = apiKeyService,
-        _settingsViewModel = settingsViewModel,
-        _equipmentViewModel = equipmentViewModel,
-        _recommendationSettingsService = recommendationSettingsService,
-        _baseExposureSettingsService = baseExposureSettingsService,
-        _homeViewModel = homeViewModel,
-        _catalogViewModel = catalogViewModel,
-        _galleryViewModel = galleryViewModel,
-        _statsViewModel = statsViewModel,
-        _skyMapViewModel = skyMapViewModel,
-        _lightPollutionMapViewModel = lightPollutionMapViewModel,
-        _splashImageService = splashImageService ?? SplashImageService();
+  }) : _apiKeyService = apiKeyService,
+       _equipmentViewModel = equipmentViewModel,
+       _recommendationSettingsService = recommendationSettingsService,
+       _baseExposureSettingsService = baseExposureSettingsService,
+       _homeViewModel = homeViewModel,
+       _catalogViewModel = catalogViewModel,
+       _galleryViewModel = galleryViewModel,
+       _statsViewModel = statsViewModel,
+       _skyMapViewModel = skyMapViewModel,
+       _lightPollutionMapViewModel = lightPollutionMapViewModel,
+       _splashImageService = splashImageService ?? SplashImageService();
 
   /// 브랜드 Splash 최소 표시 시간 — 홈 무거운 작업이 끝난 뒤에도
   /// 너무 짧게 깜빡이지 않도록 여유를 둔다.
   static const minDisplayDuration = Duration(milliseconds: 3200);
 
   final ApiKeyService _apiKeyService;
-  final SettingsViewModel _settingsViewModel;
   final EquipmentViewModel _equipmentViewModel;
   final RecommendationSettingsService _recommendationSettingsService;
   final BaseExposureSettingsService _baseExposureSettingsService;
@@ -96,8 +94,9 @@ class AppStartupViewModel extends ChangeNotifier {
         id: 'api',
         tagline: '관측 환경을 준비하는 중...',
         action: () async {
-          await _apiKeyService.ensureGoogleMapsKeyFromNative();
-          await _settingsViewModel.loadApiKeys();
+          // Maps and backend credentials are supplied by the application build.
+          // Startup must not depend on values left in device SecureStorage.
+          await _apiKeyService.clearLegacyCredentials();
         },
       );
 

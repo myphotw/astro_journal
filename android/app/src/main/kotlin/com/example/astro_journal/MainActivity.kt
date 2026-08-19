@@ -100,7 +100,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        GoogleMapsApiKeyHolder.applyFromPreferences(applicationContext)
+        GoogleMapsApiKeyHolder.applyBuildConfiguredKey(applicationContext)
         super.onCreate(savedInstanceState)
     }
 
@@ -115,19 +115,8 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MAPS_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "syncGoogleMapsApiKey" -> {
-                        val args = call.arguments as? Map<*, *>
-                        val apiKey = args?.get("apiKey") as? String
-                        GoogleMapsApiKeyHolder.sync(applicationContext, apiKey)
-                        result.success(null)
-                    }
                     "getMapsApiKeyStatus" -> {
                         result.success(GoogleMapsApiKeyHolder.readStatus(applicationContext))
-                    }
-                    "getManifestMapsApiKey" -> {
-                        result.success(
-                            GoogleMapsApiKeyHolder.readManifestApiKey(applicationContext),
-                        )
                     }
                     else -> result.notImplemented()
                 }

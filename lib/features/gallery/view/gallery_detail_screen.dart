@@ -13,7 +13,7 @@ import '../../../data/models/observation_site.dart';
 import '../../../data/models/plate_solve_result.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../data/repositories/observation_site_repository.dart';
-import '../../../services/api_key_service.dart';
+import '../../../services/google_maps_key_readiness.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/metadata_field_trace.dart';
 import '../../../services/metadata_format.dart';
@@ -2389,7 +2389,7 @@ class _LocationMapCard extends StatefulWidget {
 }
 
 class _LocationMapCardState extends State<_LocationMapCard> {
-  String? _apiKey;
+  var _mapsReady = false;
   bool _keyLoaded = false;
   GoogleMapController? _mapController;
 
@@ -2398,8 +2398,8 @@ class _LocationMapCardState extends State<_LocationMapCard> {
     super.didChangeDependencies();
     if (!_keyLoaded) {
       _keyLoaded = true;
-      context.read<ApiKeyService>().get(ApiKeyType.googleMaps).then((key) {
-        if (mounted) setState(() => _apiKey = key);
+      GoogleMapsKeyReadiness.isReady().then((ready) {
+        if (mounted) setState(() => _mapsReady = ready);
       });
     }
   }
@@ -2413,7 +2413,6 @@ class _LocationMapCardState extends State<_LocationMapCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasKey = _apiKey != null && _apiKey!.isNotEmpty;
     final target = LatLng(widget.lat, widget.lng);
 
     return Container(
@@ -2490,13 +2489,13 @@ class _LocationMapCardState extends State<_LocationMapCard> {
               height: 200,
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             )
-          else if (!hasKey)
+          else if (!_mapsReady)
             Container(
               height: 80,
               padding: const EdgeInsets.all(12),
               child: Center(
                 child: Text(
-                  'Google Maps API Key를 설정하면 지도가 표시됩니다.',
+                  '지도 구성을 사용할 수 없습니다. 앱 빌드 상태를 확인해 주세요.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: AppColors.textSecondary,
                   ),

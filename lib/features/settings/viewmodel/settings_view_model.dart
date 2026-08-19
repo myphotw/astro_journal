@@ -15,24 +15,17 @@ class SettingsViewModel extends ChangeNotifier {
   SettingsViewModel(
     this._photoRepository,
     this._shootingRecordRepository,
-    this._apiKeyService,
+    ApiKeyService apiKeyService,
     this._backupService, {
     this.onDataChanged,
   });
 
   final PhotoRepository _photoRepository;
   final ShootingRecordRepository _shootingRecordRepository;
-  final ApiKeyService _apiKeyService;
   final BackupService _backupService;
 
   /// 삭제 완료 후 다른 ViewModel의 데이터를 갱신하기 위한 콜백.
   final Future<void> Function()? onDataChanged;
-
-  /// Exposed so that navigation code can pass it to child ViewModels.
-  ApiKeyService get apiKeyService => _apiKeyService;
-
-  Map<ApiKeyType, String?> _apiKeys = {};
-  Map<ApiKeyType, String?> get apiKeys => Map.unmodifiable(_apiKeys);
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -45,23 +38,6 @@ class SettingsViewModel extends ChangeNotifier {
   int _lastDeleteRecordCount = 0;
   int get lastDeletePhotoCount => _lastDeletePhotoCount;
   int get lastDeleteRecordCount => _lastDeleteRecordCount;
-
-  Future<void> loadApiKeys() async {
-    _apiKeys = await _apiKeyService.getAll();
-    notifyListeners();
-  }
-
-  Future<void> saveApiKey(ApiKeyType type, String value) async {
-    await _apiKeyService.save(type, value);
-    _apiKeys = await _apiKeyService.getAll();
-    notifyListeners();
-  }
-
-  Future<void> deleteApiKey(ApiKeyType type) async {
-    await _apiKeyService.delete(type);
-    _apiKeys = await _apiKeyService.getAll();
-    notifyListeners();
-  }
 
   /// 모든 사진 및 촬영기록을 한 번에 삭제하고 카탈로그 상태를 초기화한다.
   ///
@@ -101,13 +77,10 @@ class SettingsViewModel extends ChangeNotifier {
 
       // ── 카탈로그 captured 상태 초기화 ───────────────────────
       final db = await AppDatabase.instance;
-      await db.update(
-        DatabaseConstants.tableCelestialObjects,
-        {
-          DatabaseConstants.colCaptured: 0,
-          DatabaseConstants.colCapturedDate: null,
-        },
-      );
+      await db.update(DatabaseConstants.tableCelestialObjects, {
+        DatabaseConstants.colCaptured: 0,
+        DatabaseConstants.colCapturedDate: null,
+      });
 
       _lastDeletePhotoCount = photos.length;
       _lastDeleteRecordCount = records.length;

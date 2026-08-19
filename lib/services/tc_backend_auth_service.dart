@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/services.dart';
 
 import 'tc_backend_settings_service.dart';
+import '../core/config/app_build_config.dart';
 
 abstract class TcBackendTokenStore {
   Future<String?> readToken();
@@ -67,6 +68,28 @@ class EmptyTcBackendTokenStore implements TcBackendTokenStore {
 
   @override
   Future<String?> readToken() async => null;
+
+  @override
+  Future<void> saveToken(String token) async {}
+
+  @override
+  Future<void> deleteToken() async {}
+}
+
+/// Production token source. It does not depend on device storage, so a fresh
+/// install authenticates immediately with the credential embedded at build.
+class BuildConfiguredTcBackendTokenStore implements TcBackendTokenStore {
+  const BuildConfiguredTcBackendTokenStore({
+    this.token = AppBuildConfig.backendAuthToken,
+  });
+
+  final String token;
+
+  @override
+  Future<String?> readToken() async {
+    final value = token.trim();
+    return value.isEmpty ? null : value;
+  }
 
   @override
   Future<void> saveToken(String token) async {}

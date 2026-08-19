@@ -39,7 +39,7 @@ class PlateSolveRunState {
 class PlateSolveViewModel extends ChangeNotifier {
   PlateSolveViewModel(
     this._plateSolveService,
-    this._settingsService,
+    PlateSolveSettingsService settingsService,
     this._galleryViewModel,
     this._searchService,
     this._catalogRepository,
@@ -48,7 +48,6 @@ class PlateSolveViewModel extends ChangeNotifier {
   });
 
   final PlateSolveService _plateSolveService;
-  final PlateSolveSettingsService _settingsService;
   final GalleryViewModel _galleryViewModel;
   final CelestialObjectSearchService _searchService;
   final CatalogRepository _catalogRepository;
@@ -71,15 +70,6 @@ class PlateSolveViewModel extends ChangeNotifier {
     if (photoUri == null || photoUri.isEmpty) {
       final failure = PlateSolveResult.failure(
         errorMessage: '사진 파일이 없어 Plate Solve를 수행할 수 없습니다.',
-      );
-      _setState(record.id, PlateSolveRunState(result: failure));
-      return failure;
-    }
-
-    final settings = await _settingsService.load();
-    if (!settings.astrometryEnabled) {
-      final failure = PlateSolveResult.failure(
-        errorMessage: 'Astrometry.net이 비활성화되어 있습니다. 설정에서 활성화해주세요.',
       );
       _setState(record.id, PlateSolveRunState(result: failure));
       return failure;

@@ -56,6 +56,7 @@ migrate_working_dir/
 /_gradle_probe/
 
 # Credentials and local configuration (never commit)
+/config/local.env
 .env
 .env.*
 !.env.example

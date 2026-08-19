@@ -1283,7 +1283,7 @@ class HomeViewModel extends ChangeNotifier {
   static String _friendlyWeatherError(Object e) {
     final msg = e.toString();
     if (msg.contains('API Key') || msg.contains('appid')) {
-      return '날씨 API 키가 설정되지 않았습니다';
+      return '날씨 서비스를 사용할 수 없습니다';
     }
     if (msg.contains('위치') ||
         msg.contains('permission') ||

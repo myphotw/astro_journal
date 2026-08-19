@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../data/models/tc_backend_models.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/tc_backend_models.dart';
 import '../viewmodel/tc_backend_view_model.dart';
 
+/// Read-only connection/readiness panel. Credentials and endpoints are part of
+/// the application build and are intentionally not editable by end users.
 class TcBackendSettingsSection extends StatefulWidget {
   const TcBackendSettingsSection({super.key});
 
@@ -14,9 +16,6 @@ class TcBackendSettingsSection extends StatefulWidget {
 }
 
 class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
-  final _controller = TextEditingController();
-  final _tokenController = TextEditingController();
-  var _enabled = false;
   var _loaded = false;
 
   @override
@@ -25,178 +24,127 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
     if (_loaded) return;
     _loaded = true;
     final viewModel = context.read<TcBackendViewModel>();
-    viewModel.load().then((_) {
-      if (!mounted) return;
-      setState(() {
-        _controller.text = viewModel.settings.baseUrl;
-        _enabled = viewModel.settings.enabled;
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _tokenController.dispose();
-    super.dispose();
+    viewModel.load().then((_) => viewModel.refreshStatus());
   }
 
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<TcBackendViewModel>();
     final checking = viewModel.status == TcBackendConnectionStatus.checking;
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            value: _enabled,
-            onChanged: checking
-                ? null
-                : (value) => setState(() => _enabled = value),
-            title: const Text(
-              'TC-Backend',
-              style: TextStyle(color: AppColors.textPrimary),
+    return Card(
+      color: AppColors.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.cloud_done_outlined),
+              title: Text('서비스 연결 상태'),
+              subtitle: Text('서버와 자격 증명은 앱 설치 시 자동 구성됩니다.'),
             ),
-            subtitle: const Text(
-              '연결 상태 확인 전용입니다. 업로드와 갤러리는 아직 사용하지 않습니다.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _controller,
-            enabled: !checking,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            decoration: const InputDecoration(
-              labelText: '서버 주소',
-              hintText: 'http://host:8000',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '실제 기기에서는 localhost 대신 Backend가 실행 중인 PC/NAS에 접근 가능한 주소를 입력하세요.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('tc_backend_token'),
-            controller: _tokenController,
-            enabled: !checking,
-            obscureText: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            decoration: InputDecoration(
-              labelText: 'Client token',
-              hintText: viewModel.hasStoredToken
-                  ? 'Stored securely (enter to replace)'
-                  : 'Optional for legacy tokenless servers',
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                viewModel.hasStoredToken
-                    ? 'Token stored securely'
-                    : 'No token stored',
-                key: const Key('tc_backend_token_status'),
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                key: const Key('tc_backend_token_delete'),
-                onPressed: !checking && viewModel.hasStoredToken
-                    ? () => _deleteToken(context, viewModel)
-                    : null,
-                child: const Text('Delete token'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              OutlinedButton(
-                key: const Key('tc_backend_save'),
-                onPressed: checking ? null : () => _save(context, viewModel),
-                child: const Text('저장'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: checking ? null : () => _test(context, viewModel),
-                icon: checking
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.health_and_safety_outlined),
-                label: Text(checking ? '확인 중' : '연결 테스트'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (!viewModel.isBackendSyncAvailable)
-            const Text(
-              'Backend가 비활성화되어 있습니다.',
-              key: Key('sync_backend_disabled'),
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            )
-          else
-            _SyncStatusPanel(viewModel: viewModel),
-          if (viewModel.result != null) ...[
+            _ReadinessPanel(viewModel: viewModel),
             const SizedBox(height: 12),
-            _ResultPanel(result: viewModel.result!),
+            _SyncStatusPanel(viewModel: viewModel),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('backend_status_refresh'),
+                  onPressed: checking ? null : viewModel.refreshStatus,
+                  icon: checking
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                  label: const Text('상태 새로고침'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  key: const Key('sync_retry'),
+                  onPressed: viewModel.syncCounts.failed > 0
+                      ? viewModel.retryFailedSync
+                      : null,
+                  child: const Text('동기화 다시 시도'),
+                ),
+              ],
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReadinessPanel extends StatelessWidget {
+  const _ReadinessPanel({required this.viewModel});
+
+  final TcBackendViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final result = viewModel.result;
+    final readiness = result?.readiness;
+    final connected = result?.isCompatible == true;
+    return Container(
+      key: const Key('backend_readiness'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          _StatusRow(label: 'NAS 서버', ready: connected),
+          _StatusRow(label: 'Google 지도', text: '앱에 구성됨', ready: true),
+          _StatusRow(
+            label: '날씨',
+            ready: readiness?.configured('weather') == true,
+          ),
+          _StatusRow(
+            label: '위치 검색',
+            ready:
+                readiness?.configured('google_geocoding') == true &&
+                readiness?.configured('google_places') == true,
+          ),
+          _StatusRow(
+            label: 'Plate Solve',
+            ready: readiness?.configured('astrometry') == true,
+          ),
+          _StatusRow(label: 'Vision', ready: readiness?.vision == true),
         ],
       ),
     );
   }
+}
 
-  Future<void> _save(BuildContext context, TcBackendViewModel viewModel) async {
-    try {
-      await viewModel.save(baseUrl: _controller.text, enabled: _enabled);
-      if (_tokenController.text.trim().isNotEmpty) {
-        await viewModel.saveToken(_tokenController.text);
-        _tokenController.clear();
-      }
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('TC-Backend 설정을 저장했습니다.')));
-    } on FormatException catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    }
-  }
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({required this.label, required this.ready, this.text});
 
-  Future<void> _deleteToken(
-    BuildContext context,
-    TcBackendViewModel viewModel,
-  ) async {
-    await viewModel.deleteToken();
-    _tokenController.clear();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('TC-Backend token deleted.')));
-  }
+  final String label;
+  final bool ready;
+  final String? text;
 
-  Future<void> _test(BuildContext context, TcBackendViewModel viewModel) async {
-    await viewModel.testConnection(
-      baseUrl: _controller.text,
-      enabled: _enabled,
-    );
-  }
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        Text(
+          text ?? (ready ? '정상' : '서버 연결 필요'),
+          style: TextStyle(
+            color: ready ? Colors.greenAccent : AppColors.textSecondary,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SyncStatusPanel extends StatelessWidget {
@@ -218,120 +166,13 @@ class _SyncStatusPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('동기화', style: TextStyle(color: AppColors.textPrimary)),
+          const Text('동기화', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Text('대기중 ${counts.queued}건'),
           Text('처리중 ${counts.processing}건'),
           Text('실패 ${counts.failed}건'),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                key: const Key('sync_refresh'),
-                onPressed: viewModel.refreshSyncStatus,
-                icon: const Icon(Icons.refresh),
-                label: const Text('새로고침'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                key: const Key('sync_retry'),
-                onPressed: counts.failed > 0 ? viewModel.retryFailedSync : null,
-                child: const Text('동기화 재시도'),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
-}
-
-class _ResultPanel extends StatelessWidget {
-  const _ResultPanel({required this.result});
-
-  final TcBackendCheckResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final healthy = result.isCompatible;
-    final color = healthy ? Colors.greenAccent : AppColors.textSecondary;
-    final health = result.health;
-    final capabilities = result.capabilities;
-    final readiness = result.readiness;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
-      ),
-      child: DefaultTextStyle(
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              result.message ?? _label(result.status),
-              style: TextStyle(color: color, fontWeight: FontWeight.w700),
-            ),
-            if (health != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Database: ${health.database ?? '-'} · Storage: ${health.storage ?? '-'}',
-              ),
-              Text('Vision: ${health.vision ?? '-'}'),
-            ],
-            if (capabilities != null) ...[
-              Text(
-                'API ${capabilities.apiVersion ?? '-'} · ${capabilities.serviceVersion ?? '-'}',
-              ),
-              Text(
-                'AstroJournal 지원: ${_yesNo(capabilities.supportedServices.any((item) => item.toLowerCase() == 'astrojournal'))}',
-              ),
-              Text(
-                'Upload 계약: service_name ${_yesNo(capabilities.supportsServiceName)} · client_file_id ${_yesNo(capabilities.supportsClientFileId)}',
-              ),
-            ],
-            if (readiness != null && readiness.services.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Geocoding ${_yesNo(readiness.configured('google_geocoding'))} · '
-                'Places ${_yesNo(readiness.configured('google_places'))}',
-              ),
-              Text(
-                'Weather ${_yesNo(readiness.configured('weather'))} · '
-                'Astrometry ${_yesNo(readiness.configured('astrometry'))} · '
-                'Vision ${_yesNo(readiness.vision)}',
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _yesNo(bool? value) => value == true ? '예' : '아니오';
-
-  String _label(TcBackendConnectionStatus status) => switch (status) {
-    TcBackendConnectionStatus.notConfigured => '설정되지 않음',
-    TcBackendConnectionStatus.checking => '확인 중',
-    TcBackendConnectionStatus.connected => '연결됨',
-    TcBackendConnectionStatus.degraded => '연결됨 (일부 기능 제한)',
-    TcBackendConnectionStatus.incompatible => '호환되지 않음',
-    TcBackendConnectionStatus.unreachable => '연결 실패',
-    TcBackendConnectionStatus.authenticationFailed => '인증 실패',
-  };
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    color: AppColors.surface,
-    child: Padding(padding: const EdgeInsets.all(16), child: child),
-  );
 }

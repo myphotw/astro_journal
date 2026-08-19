@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/config/app_build_config.dart';
+
 class TcBackendSettings {
   const TcBackendSettings({required this.baseUrl, required this.enabled});
 
@@ -34,10 +36,30 @@ class TcBackendSettings {
 }
 
 class TcBackendSettingsService {
+  TcBackendSettingsService({
+    this.useBuildConfiguration = false,
+    this.buildBaseUrl = AppBuildConfig.backendUrl,
+  });
+
+  /// Production factory. Runtime preferences are deliberately ignored so a
+  /// reinstall or a stale V1 preference cannot redirect the application.
+  factory TcBackendSettingsService.autoConfigured() =>
+      TcBackendSettingsService(useBuildConfiguration: true);
+
   static const _baseUrlKey = 'tc_backend_base_url';
   static const _enabledKey = 'tc_backend_enabled';
 
+  final bool useBuildConfiguration;
+  final String buildBaseUrl;
+
   Future<TcBackendSettings> load() async {
+    if (useBuildConfiguration) {
+      final normalized = TcBackendSettings.normalizeBaseUrl(buildBaseUrl);
+      return TcBackendSettings(
+        baseUrl: normalized ?? AppBuildConfig.defaultBackendUrl,
+        enabled: true,
+      );
+    }
     final prefs = await SharedPreferences.getInstance();
     return TcBackendSettings(
       baseUrl: prefs.getString(_baseUrlKey) ?? '',
@@ -46,6 +68,7 @@ class TcBackendSettingsService {
   }
 
   Future<void> save(TcBackendSettings settings) async {
+    if (useBuildConfiguration) return;
     final normalized = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     if (settings.enabled && normalized == null) {
       throw const FormatException('유효한 TC-Backend 주소를 입력하세요.');

@@ -14,14 +14,23 @@ import org.gradle.workers.WorkAction
 import org.gradle.workers.WorkParameters
 import org.gradle.workers.WorkerExecutor
 
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.inputStream().use { localProperties.load(it) }
+val localBuildConfig = Properties()
+val localBuildConfigFile = rootProject.projectDir.parentFile.resolve("config/local.env")
+if (localBuildConfigFile.exists()) {
+    localBuildConfigFile.inputStream().use { localBuildConfig.load(it) }
 }
 
-// Fallback manifest key at build time. Runtime Settings key overrides via GoogleMapsApiKeyHolder.
-val googleMapsApiKey: String = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
+val googleMapsApiKey: String =
+    System.getenv("GOOGLE_MAPS_API_KEY")
+        ?: localBuildConfig.getProperty("GOOGLE_MAPS_API_KEY")
+        ?: ""
+val backendAuthTokenConfigured =
+    (System.getenv("TC_BACKEND_AUTH_TOKEN")
+        ?: localBuildConfig.getProperty("TC_BACKEND_AUTH_TOKEN")
+        ?: "").isNotBlank()
+val releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
 
 android {
     namespace = "com.example.astro_journal"
@@ -113,6 +122,21 @@ abstract class RenameApksTask : DefaultTask() {
 }
 
 androidComponents {
+    beforeVariants(selector().withBuildType("release")) {
+        if (!releaseBuildRequested) return@beforeVariants
+        if (googleMapsApiKey.isBlank()) {
+            throw GradleException(
+                "Release configuration is missing GOOGLE_MAPS_API_KEY. " +
+                    "Use scripts/build_release.ps1.",
+            )
+        }
+        if (!backendAuthTokenConfigured) {
+            throw GradleException(
+                "Release configuration is missing TC_BACKEND_AUTH_TOKEN. " +
+                    "Use scripts/build_release.ps1.",
+            )
+        }
+    }
     onVariants { variant ->
         val newFileName = "AstroJournal-${variant.buildType}-${flutter.versionName}.apk"
         val renameApksTask = tasks.register(

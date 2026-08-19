@@ -1,32 +1,35 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:astro_journal/data/repositories/sync_outbox_repository.dart';
 import 'package:astro_journal/features/settings/viewmodel/tc_backend_view_model.dart';
 import 'package:astro_journal/features/settings/widgets/tc_backend_settings_section.dart';
+import 'package:astro_journal/services/tc_backend_service.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
-import 'package:astro_journal/services/tc_backend_auth_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   Future<TcBackendViewModel> viewModel({
-    required bool enabled,
-    required String baseUrl,
     int queued = 0,
     int processing = 0,
     int failed = 0,
     Future<void> Function()? retry,
-    TcBackendTokenStore? tokenStore,
   }) async {
     SharedPreferences.setMockInitialValues({});
     final settings = TcBackendSettingsService();
-    await settings.save(TcBackendSettings(baseUrl: baseUrl, enabled: enabled));
+    await settings.save(
+      const TcBackendSettings(
+        baseUrl: 'https://backend.example',
+        enabled: true,
+      ),
+    );
     return TcBackendViewModel(
       settings,
       syncOutboxRepository: _FakeOutbox(queued, processing, failed),
       retryFailed: retry,
-      tokenStore: tokenStore,
+      serviceFactory: (_) => _healthyService(),
     );
   }
 
@@ -42,123 +45,78 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('displays outbox counts and enables retry for failures', (
+  testWidgets('shows readiness and outbox counts without credential fields', (
     tester,
   ) async {
-    final vm = await viewModel(
-      enabled: true,
-      baseUrl: 'https://backend.example',
-      queued: 3,
-      processing: 2,
-      failed: 1,
-    );
+    final vm = await viewModel(queued: 3, processing: 2, failed: 1);
     await pump(tester, vm);
+
+    expect(find.byKey(const Key('backend_readiness')), findsOneWidget);
+    expect(find.text('NAS 서버'), findsOneWidget);
+    expect(find.text('날씨'), findsOneWidget);
+    expect(find.text('위치 검색'), findsOneWidget);
+    expect(find.text('Plate Solve'), findsOneWidget);
+    expect(find.text('Vision'), findsOneWidget);
     expect(find.text('대기중 3건'), findsOneWidget);
     expect(find.text('처리중 2건'), findsOneWidget);
     expect(find.text('실패 1건'), findsOneWidget);
-    expect(
-      tester
-          .widget<FilledButton>(find.byKey(const Key('sync_retry')))
-          .onPressed,
-      isNotNull,
-    );
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
   });
 
-  testWidgets('retry button invokes retry and refreshes counts', (
-    tester,
-  ) async {
+  testWidgets('retry button invokes retry', (tester) async {
     var retries = 0;
-    final vm = await viewModel(
-      enabled: true,
-      baseUrl: 'https://backend.example',
-      failed: 1,
-      retry: () async {
-        retries++;
-      },
-    );
+    final vm = await viewModel(failed: 1, retry: () async => retries++);
     await pump(tester, vm);
     await tester.tap(find.byKey(const Key('sync_retry')));
     await tester.pumpAndSettle();
     expect(retries, 1);
   });
 
-  testWidgets('shows disabled message for backend off or missing URL', (
-    tester,
-  ) async {
-    final off = await viewModel(
-      enabled: false,
-      baseUrl: 'https://backend.example',
-    );
-    await pump(tester, off);
-    expect(find.byKey(const Key('sync_backend_disabled')), findsOneWidget);
-    final unset = await viewModel(enabled: false, baseUrl: '');
-    await pump(tester, unset);
-    expect(find.byKey(const Key('sync_backend_disabled')), findsOneWidget);
-  });
-
-  testWidgets('stores, replaces, and deletes an obscured backend token', (
-    tester,
-  ) async {
-    final store = _MemoryTokenStore();
-    final vm = await viewModel(
-      enabled: true,
-      baseUrl: 'https://backend.example',
-      tokenStore: store,
-    );
+  testWidgets('refresh reloads readiness and sync counts', (tester) async {
+    final vm = await viewModel();
     await pump(tester, vm);
-    final field = tester.widget<TextField>(
-      find.byKey(const Key('tc_backend_token')),
-    );
-    expect(field.obscureText, isTrue);
-
-    await tester.enterText(
-      find.byKey(const Key('tc_backend_token')),
-      'client-token',
-    );
-    await tester.tap(find.byKey(const Key('tc_backend_save')));
+    await tester.tap(find.byKey(const Key('backend_status_refresh')));
     await tester.pumpAndSettle();
-    expect(store.token, 'client-token');
-    expect(vm.hasStoredToken, isTrue);
-
-    await tester.enterText(
-      find.byKey(const Key('tc_backend_token')),
-      'replacement-token',
-    );
-    await tester.tap(find.byKey(const Key('tc_backend_save')));
-    await tester.pumpAndSettle();
-    expect(store.token, 'replacement-token');
-
-    await tester.tap(find.byKey(const Key('tc_backend_token_delete')));
-    await tester.pumpAndSettle();
-    expect(store.token, isNull);
-    expect(vm.hasStoredToken, isFalse);
+    expect(vm.result?.isCompatible, isTrue);
   });
 }
 
-class _MemoryTokenStore implements TcBackendTokenStore {
-  String? token;
-
-  @override
-  Future<String?> readToken() async => token;
-
-  @override
-  Future<void> saveToken(String value) async => token = value.trim();
-
-  @override
-  Future<void> deleteToken() async => token = null;
-}
+TcBackendService _healthyService() => TcBackendService(
+  baseUrl: 'https://backend.example',
+  client: MockClient((request) async {
+    if (request.url.path.endsWith('/health')) {
+      return http.Response('{"status":"ok"}', 200);
+    }
+    if (request.url.path.endsWith('/capabilities')) {
+      return http.Response(
+        '{"supported_services":["AstroJournal"],"upload_contract":{"supports_service_name":true,"supports_client_file_id":true}}',
+        200,
+      );
+    }
+    return http.Response(
+      '{"services":{"weather":{"configured":true},"google_geocoding":{"configured":true},"google_places":{"configured":true},"astrometry":{"configured":true}},"vision":true}',
+      200,
+    );
+  }),
+);
 
 class _FakeOutbox implements SyncOutboxRepository {
   _FakeOutbox(this.queued, this.processing, this.failed);
+
   final int queued;
   final int processing;
   final int failed;
+
   @override
   Future<int> countQueued() async => queued;
+
   @override
   Future<int> countProcessing() async => processing;
+
   @override
   Future<int> countFailed() async => failed;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

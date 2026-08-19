@@ -10,12 +10,5 @@ void main() {
       expect(status.configured, isFalse);
       expect(status.keyLength, 0);
     });
-
-    test('syncKey does not throw when channel is unavailable', () async {
-      await expectLater(
-        GoogleMapsNativeKeyService.syncKey('test-key', force: true),
-        completes,
-      );
-    });
   });
 }

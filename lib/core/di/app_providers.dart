@@ -41,7 +41,6 @@ import '../../services/stats_analytics_service.dart';
 import '../../features/sky_map/viewmodel/sky_map_view_model.dart';
 import '../../features/stats/viewmodel/stats_view_model.dart';
 import '../../services/api_key_service.dart';
-import '../../services/astronomy_service.dart';
 import '../../services/backup_service.dart';
 import '../../services/celestial_object_search_service.dart';
 import '../../services/celestial_position_service.dart';
@@ -60,7 +59,7 @@ import '../../services/observation_condition_service.dart';
 import '../../services/observation_engine.dart';
 import '../../services/object_imaging_profile_provider.dart';
 import '../../services/light_pollution_tile_preload_service.dart';
-import '../../services/plate_solve/astrometry_net_provider.dart';
+import '../../services/plate_solve/backend_only_plate_solve_provider.dart';
 import '../../services/plate_solve/plate_solve_provider.dart';
 import '../../services/plate_solve_service.dart';
 import '../../services/plate_solve_settings_service.dart';
@@ -101,9 +100,9 @@ class AppProviders {
     final exifService = ExifService();
     final photoService = PhotoService(photoRepository, exifService);
     final apiKeyService = ApiKeyService();
-    final tcBackendSettingsService = TcBackendSettingsService();
-    final tcBackendAuthService = TcBackendAuthService();
-    final tcBackendAuthHeaders = TcBackendAuthHeaders(tcBackendAuthService);
+    final tcBackendSettingsService = TcBackendSettingsService.autoConfigured();
+    const tcBackendTokenStore = BuildConfiguredTcBackendTokenStore();
+    final tcBackendAuthHeaders = TcBackendAuthHeaders(tcBackendTokenStore);
     final tcBackendMediaAuthService = TcBackendMediaAuthService(
       tcBackendSettingsService,
       tcBackendAuthHeaders,
@@ -203,18 +202,17 @@ class AppProviders {
       catalogCaptureProjection: catalogCaptureProjection,
     );
     final backupService = BackupService();
-    final astronomyService = AstronomyService(apiKeyService);
     final weatherService = WeatherService(
       apiKeyService,
       backendClient: externalApiClient,
     );
     final plateSolveSettingsService = PlateSolveSettingsService();
-    final astrometryNetProvider = AstrometryNetProvider(apiKeyService);
+    const backendOnlyPlateSolveProvider = BackendOnlyPlateSolveProvider();
     final backendPlateSolveService = TcBackendPlateSolveService(
       client: externalApiClient,
     );
     final plateSolveService = PlateSolveService(
-      <PlateSolveProvider>[astrometryNetProvider],
+      <PlateSolveProvider>[backendOnlyPlateSolveProvider],
       plateSolveSettingsService,
       backendService: backendPlateSolveService,
     );
@@ -345,7 +343,7 @@ class AppProviders {
       tcBackendSettingsService,
       syncOutboxRepository: syncOutboxRepository,
       retryFailed: syncCoordinator.retryFailed,
-      tokenStore: tcBackendAuthService,
+      tokenStore: tcBackendTokenStore,
       authHeaders: tcBackendAuthHeaders,
     );
 
@@ -378,7 +376,7 @@ class AppProviders {
       Provider<GeocodingService>.value(value: geocodingService),
       Provider<ApiKeyService>.value(value: apiKeyService),
       Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
-      Provider<TcBackendAuthService>.value(value: tcBackendAuthService),
+      Provider<TcBackendTokenStore>.value(value: tcBackendTokenStore),
       Provider<TcBackendAuthHeaders>.value(value: tcBackendAuthHeaders),
       Provider<TcBackendMediaAuthService>.value(
         value: tcBackendMediaAuthService,
@@ -404,12 +402,10 @@ class AppProviders {
       Provider<PhotoRegistrationService>.value(value: registrationService),
       Provider<PhotoOverlayService>.value(value: photoOverlayService),
       Provider<BackupService>.value(value: backupService),
-      Provider<AstronomyService>.value(value: astronomyService),
       Provider<WeatherService>.value(value: weatherService),
       Provider<PlateSolveSettingsService>.value(
         value: plateSolveSettingsService,
       ),
-      Provider<AstrometryNetProvider>.value(value: astrometryNetProvider),
       Provider<PlateSolveService>.value(value: plateSolveService),
       Provider<TcBackendPlateSolveService>.value(
         value: backendPlateSolveService,

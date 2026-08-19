@@ -20,7 +20,7 @@ class MainApplication : Application() {
 
         if (base != null) {
 
-            GoogleMapsApiKeyHolder.applyFromPreferences(base)
+            GoogleMapsApiKeyHolder.applyBuildConfiguredKey(base)
 
         }
 
@@ -30,7 +30,7 @@ class MainApplication : Application() {
 
     override fun onCreate() {
 
-        GoogleMapsApiKeyHolder.applyFromPreferences(this)
+        GoogleMapsApiKeyHolder.applyBuildConfiguredKey(this)
 
         try {
 

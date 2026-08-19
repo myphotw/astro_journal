@@ -5,22 +5,13 @@ import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../features/api_test/view/api_test_screen.dart';
-import '../../../features/api_test/viewmodel/api_test_view_model.dart';
 import '../../../features/home/viewmodel/home_view_model.dart';
-import '../../../services/astronomy_service.dart';
 import '../../../services/backup_service.dart';
-import '../../../services/geocoding_service.dart';
-import '../../../services/location_service.dart';
-import '../../../services/plate_solve/astrometry_net_provider.dart';
-import '../../../services/plate_solve_settings_service.dart';
 import '../../../services/recommendation_settings_service.dart';
 import '../../../services/base_exposure_settings_service.dart';
-import '../../../services/weather_service.dart';
 import '../viewmodel/equipment_view_model.dart';
 import '../viewmodel/settings_view_model.dart';
 import '../widgets/tc_backend_settings_section.dart';
-import 'api_settings_screen.dart';
 import 'equipment_list_screen.dart';
 import 'exif_debug_screen.dart';
 import 'metadata_debug_screen.dart';
@@ -39,9 +30,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SettingsViewModel>().loadApiKeys();
-    });
   }
 
   @override
@@ -75,12 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SectionHeader(title: '장비 관리', icon: Icons.camera_alt_outlined),
           _EquipmentSection(),
           const SizedBox(height: 24),
-          _SectionHeader(title: 'API 관리', icon: Icons.key_outlined),
-          _ApiSection(),
-          const SizedBox(height: 12),
-          _ApiTestSection(),
-          const SizedBox(height: 24),
-          _SectionHeader(title: 'TC-Backend', icon: Icons.cloud_outlined),
+          _SectionHeader(title: '서비스 연결', icon: Icons.cloud_outlined),
           const TcBackendSettingsSection(),
           const SizedBox(height: 24),
           _SectionHeader(title: '백업 / 가져오기', icon: Icons.backup_outlined),
@@ -289,106 +272,6 @@ class _BaseExposureSection extends StatelessWidget {
 
 // ──────────────────────────────────────────────
 // API Section
-// ──────────────────────────────────────────────
-
-class _ApiSection extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return _SettingsCard(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.api, color: AppColors.textSecondary),
-        title: const Text(
-          'API Key 설정',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        subtitle: const Text(
-          'Google Maps · Weather · Astronomy · Astrometry.net',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: AppColors.textSecondary,
-        ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => MultiProvider(
-              providers: [
-                ChangeNotifierProvider.value(
-                  value: context.read<SettingsViewModel>(),
-                ),
-                Provider.value(value: context.read<AstronomyService>()),
-                Provider.value(value: context.read<WeatherService>()),
-                Provider.value(value: context.read<AstrometryNetProvider>()),
-                Provider.value(
-                  value: context.read<PlateSolveSettingsService>(),
-                ),
-              ],
-              child: const ApiSettingsScreen(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ──────────────────────────────────────────────
-// API Test Section
-// ──────────────────────────────────────────────
-
-class _ApiTestSection extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return _SettingsCard(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(
-          Icons.science_outlined,
-          color: AppColors.textSecondary,
-        ),
-        title: const Text(
-          'API 테스트',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        subtitle: const Text(
-          'GPS · Astronomy · Weather · Map · Secure Storage',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: AppColors.textSecondary,
-        ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => MultiProvider(
-              providers: [
-                ChangeNotifierProvider.value(
-                  value: context.read<SettingsViewModel>(),
-                ),
-                ChangeNotifierProvider(
-                  create: (_) => ApiTestViewModel(
-                    context.read<LocationService>(),
-                    context.read<AstronomyService>(),
-                    context.read<WeatherService>(),
-                    context.read<SettingsViewModel>().apiKeyService,
-                    context.read<GeocodingService>(),
-                  ),
-                ),
-              ],
-              child: const ApiTestScreen(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ──────────────────────────────────────────────
-// Backup Section
-// ──────────────────────────────────────────────
-
 class _BackupSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

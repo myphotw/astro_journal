@@ -119,12 +119,16 @@ class TcBackendViewModel extends ChangeNotifier {
     await refreshSyncStatus();
   }
 
-  Future<void> testConnection({
-    required String baseUrl,
-    required bool enabled,
-  }) async {
-    final normalized = TcBackendSettings.normalizeBaseUrl(baseUrl);
-    if (!enabled || normalized == null) {
+  Future<void> refreshStatus() async {
+    await testConnection();
+    await refreshSyncStatus();
+  }
+
+  Future<void> testConnection({String? baseUrl, bool? enabled}) async {
+    final effectiveBaseUrl = baseUrl ?? _settings.baseUrl;
+    final effectiveEnabled = enabled ?? _settings.enabled;
+    final normalized = TcBackendSettings.normalizeBaseUrl(effectiveBaseUrl);
+    if (!effectiveEnabled || normalized == null) {
       _status = TcBackendConnectionStatus.notConfigured;
       _result = const TcBackendCheckResult(
         status: TcBackendConnectionStatus.notConfigured,

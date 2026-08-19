@@ -30,8 +30,6 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(mapsChannel, (call) async {
       switch (call.method) {
-        case 'syncGoogleMapsApiKey':
-          return null;
         case 'getMapsApiKeyStatus':
           return {'configured': true, 'keyLength': 39};
         default:
