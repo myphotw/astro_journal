@@ -23,6 +23,7 @@ import '../../../services/app_logger.dart';
 
 import '../../../services/base_exposure_settings_service.dart';
 import '../../../services/catalog_exposure_guidance_builder.dart';
+import '../../../services/catalog_capture_projection_service.dart';
 
 import '../../../services/exposure_policy.dart';
 
@@ -35,33 +36,60 @@ import '../../../services/object_imaging_profile_provider.dart';
 import '../../../services/photo_registration_service.dart';
 
 class CatalogDetailViewModel extends ChangeNotifier {
-  CatalogDetailViewModel(
+  factory CatalogDetailViewModel(
     CatalogObject object,
 
-    this._shootingRecordRepository,
+    ShootingRecordRepository shootingRecordRepository,
 
-    this._catalogRepository,
+    CatalogRepository catalogRepository,
 
-    this._registrationService,
+    PhotoRegistrationService registrationService,
 
-    this._metadataService,
+    MetadataService metadataService,
 
-    this._equipmentRepository,
+    EquipmentRepository equipmentRepository,
 
-    this._equipmentRecommendationService,
+    EquipmentRecommendationService equipmentRecommendationService,
 
-    this._baseExposureSettingsService,
+    BaseExposureSettingsService baseExposureSettingsService,
 
-    this._profileProvider,
+    ObjectImagingProfileProvider profileProvider,
 
-    this._exposurePolicy, {
+    ExposurePolicy exposurePolicy, {
     CatalogExposureGuidanceBuilder? exposureGuidanceBuilder,
     List<CatalogObject>? navigationObjects,
-  }) : _exposureGuidanceBuilder =
-           exposureGuidanceBuilder ?? const CatalogExposureGuidanceBuilder(),
-       _objects = List<CatalogObject>.from(navigationObjects ?? [object]),
+    CatalogCaptureProjectionService? captureProjection,
+  }) => CatalogDetailViewModel._(
+    shootingRecordRepository,
+    catalogRepository,
+    registrationService,
+    metadataService,
+    equipmentRepository,
+    equipmentRecommendationService,
+    baseExposureSettingsService,
+    profileProvider,
+    exposurePolicy,
+    exposureGuidanceBuilder ?? const CatalogExposureGuidanceBuilder(),
+    captureProjection,
+    List<CatalogObject>.from(navigationObjects ?? [object]),
+    _resolveInitialIndex(object, navigationObjects),
+  );
 
-       _currentIndex = _resolveInitialIndex(object, navigationObjects);
+  CatalogDetailViewModel._(
+    this._shootingRecordRepository,
+    this._catalogRepository,
+    this._registrationService,
+    this._metadataService,
+    this._equipmentRepository,
+    this._equipmentRecommendationService,
+    this._baseExposureSettingsService,
+    this._profileProvider,
+    this._exposurePolicy,
+    this._exposureGuidanceBuilder,
+    this._captureProjection,
+    this._objects,
+    this._currentIndex,
+  );
 
   final ShootingRecordRepository _shootingRecordRepository;
 
@@ -82,6 +110,8 @@ class CatalogDetailViewModel extends ChangeNotifier {
   final ExposurePolicy _exposurePolicy;
 
   final CatalogExposureGuidanceBuilder _exposureGuidanceBuilder;
+
+  final CatalogCaptureProjectionService? _captureProjection;
 
   final List<CatalogObject> _objects;
 
@@ -235,15 +265,17 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
       _records = fetched;
 
-      _captureCount = fetched.length;
-
-      _lastCapturedAt = fetched.isNotEmpty ? fetched.first.capturedAt : null;
-
-      if (_captureCount == 0 && isCaptured) {
+      final projection = await _tryReconcileCapture();
+      _captureCount = projection?.photoCount ?? fetched.length;
+      _lastCapturedAt =
+          projection?.latestCapturedAt ??
+          (fetched.isNotEmpty ? fetched.first.capturedAt : null);
+      if (projection != null) {
+        _capturedState = projection.captured;
+      } else if (_captureCount == 0 && isCaptured) {
+        // Compatibility behavior for callers that do not inject projection.
         await _catalogRepository.updateCaptured(object.id, captured: false);
-
         _capturedState = false;
-
         _dataChanged = true;
       }
 
@@ -455,24 +487,24 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
       await _shootingRecordRepository.save(record);
 
-      final dateStr =
-          '${capturedAt.year}-${capturedAt.month.toString().padLeft(2, '0')}-${capturedAt.day.toString().padLeft(2, '0')}';
-
-      await _catalogRepository.updateCaptured(
-        object.id,
-
-        captured: true,
-
-        capturedDate: dateStr,
-      );
-
-      _captureCount++;
-
-      _capturedState = true;
-
-      if (_lastCapturedAt == null || capturedAt.isAfter(_lastCapturedAt!)) {
-        _lastCapturedAt = capturedAt;
+      final projection = await _tryReconcileCapture();
+      if (projection == null && _captureProjection == null) {
+        final dateStr =
+            '${capturedAt.year}-${capturedAt.month.toString().padLeft(2, '0')}-${capturedAt.day.toString().padLeft(2, '0')}';
+        await _catalogRepository.updateCaptured(
+          object.id,
+          captured: true,
+          capturedDate: dateStr,
+        );
       }
+
+      _captureCount = projection?.photoCount ?? (_captureCount + 1);
+      _capturedState = projection?.captured ?? true;
+      _lastCapturedAt =
+          projection?.latestCapturedAt ??
+          ((_lastCapturedAt == null || capturedAt.isAfter(_lastCapturedAt!))
+              ? capturedAt
+              : _lastCapturedAt);
 
       final insertIndex = _records.indexWhere(
         (r) => r.capturedAt.isBefore(capturedAt),
@@ -489,6 +521,17 @@ class CatalogDetailViewModel extends ChangeNotifier {
       _errorMessage = error.toString();
     } finally {
       notifyListeners();
+    }
+  }
+
+  Future<CatalogCaptureProjection?> _tryReconcileCapture() async {
+    final projection = _captureProjection;
+    if (projection == null) return null;
+    try {
+      return await projection.reconcileObject(object.id);
+    } catch (error, stackTrace) {
+      AppLogger.error('CatalogDetail.CaptureProjection', error, stackTrace);
+      return null;
     }
   }
 

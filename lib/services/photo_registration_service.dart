@@ -30,6 +30,7 @@ import '../data/repositories/sync_outbox_repository.dart';
 import 'api_key_service.dart';
 
 import 'app_logger.dart';
+import 'catalog_capture_projection_service.dart';
 
 import 'geocoding_service.dart';
 
@@ -48,23 +49,48 @@ import 'tc_backend_sync_coordinator.dart';
 /// 사진 등록 파이프라인 전체를 담당하는 서비스.
 
 class PhotoRegistrationService {
-  PhotoRegistrationService({
-    required this.photoService,
+  factory PhotoRegistrationService({
+    required PhotoService photoService,
 
-    required this.geocodingService,
+    required GeocodingService geocodingService,
 
     required ApiKeyService apiKeyService,
 
-    required this.exifService,
+    required ExifService exifService,
 
-    required this.shootingRecordRepository,
+    required ShootingRecordRepository shootingRecordRepository,
 
-    required this.catalogRepository,
+    required CatalogRepository catalogRepository,
 
     PhotoMetadataPipeline? metadataPipeline,
     TcBackendUploadService? tcBackendUploadService,
     SyncOutboxRepository? syncOutboxRepository,
     TcBackendSyncCoordinator? syncCoordinator,
+    CatalogCaptureProjectionService? catalogCaptureProjection,
+  }) => PhotoRegistrationService._(
+    photoService: photoService,
+    geocodingService: geocodingService,
+    exifService: exifService,
+    shootingRecordRepository: shootingRecordRepository,
+    catalogRepository: catalogRepository,
+    metadataPipeline: metadataPipeline,
+    tcBackendUploadService: tcBackendUploadService,
+    syncOutboxRepository: syncOutboxRepository,
+    syncCoordinator: syncCoordinator,
+    catalogCaptureProjection: catalogCaptureProjection,
+  );
+
+  PhotoRegistrationService._({
+    required this.photoService,
+    required this.geocodingService,
+    required this.exifService,
+    required this.shootingRecordRepository,
+    required this.catalogRepository,
+    PhotoMetadataPipeline? metadataPipeline,
+    TcBackendUploadService? tcBackendUploadService,
+    SyncOutboxRepository? syncOutboxRepository,
+    TcBackendSyncCoordinator? syncCoordinator,
+    this._catalogCaptureProjection,
   }) : _metadataPipeline =
            metadataPipeline ?? PhotoMetadataPipeline(exifService: exifService),
        _tcBackendUploadService = tcBackendUploadService,
@@ -85,6 +111,7 @@ class PhotoRegistrationService {
   final TcBackendUploadService? _tcBackendUploadService;
   final SyncOutboxRepository? _syncOutboxRepository;
   final TcBackendSyncCoordinator? _syncCoordinator;
+  final CatalogCaptureProjectionService? _catalogCaptureProjection;
   BackendUploadResult? _lastBackendUploadResult;
 
   /// A2 runtime-only result. A durable sync state is deferred to A3.
@@ -343,11 +370,31 @@ class PhotoRegistrationService {
     final dateStr =
         '${capturedAt.year}-${capturedAt.month.toString().padLeft(2, '0')}-${capturedAt.day.toString().padLeft(2, '0')}';
 
-    await catalogRepository.updateCaptured(
-      celestialObjectId,
-      captured: true,
-      capturedDate: dateStr,
-    );
+    final projection = _catalogCaptureProjection;
+    if (projection == null) {
+      // Compatibility path for isolated V1 callers/tests. Production injects
+      // CatalogCaptureProjectionService as the single capture-state writer.
+      await catalogRepository.updateCaptured(
+        celestialObjectId,
+        captured: true,
+        capturedDate: dateStr,
+      );
+    } else {
+      try {
+        await projection.reconcileObject(
+          celestialObjectId,
+          includeRemote: false,
+        );
+      } catch (error, stackTrace) {
+        // The photo and durable outbox remain valid. Startup reconciliation can
+        // rebuild this derived projection later.
+        AppLogger.error(
+          'PhotoRegistration.CatalogProjection',
+          error,
+          stackTrace,
+        );
+      }
+    }
     AppLogger.metadata('PhotoRegistration', 'Catalog captured 갱신 완료');
     final outbox = _syncOutboxRepository;
     if (outbox != null &&

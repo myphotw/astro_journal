@@ -6,9 +6,10 @@ import '../models/catalog_candidate.dart';
 import '../models/catalog_object.dart';
 import 'catalog_repository.dart';
 
-class CatalogRepositoryImpl implements CatalogRepository {
+class CatalogRepositoryImpl
+    implements CatalogRepository, CatalogCaptureProjectionWriter {
   CatalogRepositoryImpl({CatalogLocalDataSource? dataSource})
-      : _dataSource = dataSource ?? CatalogLocalDataSource();
+    : _dataSource = dataSource ?? CatalogLocalDataSource();
 
   final CatalogLocalDataSource _dataSource;
 
@@ -32,8 +33,22 @@ class CatalogRepositoryImpl implements CatalogRepository {
     String id, {
     required bool captured,
     String? capturedDate,
-  }) =>
-      _dataSource.updateCaptured(id, captured: captured, capturedDate: capturedDate);
+  }) => _dataSource.updateCaptured(
+    id,
+    captured: captured,
+    capturedDate: capturedDate,
+  );
+
+  @override
+  Future<int> updateCaptureProjection(
+    String id, {
+    required bool captured,
+    String? capturedDate,
+  }) => _dataSource.updateCaptureProjection(
+    id,
+    captured: captured,
+    capturedDate: capturedDate,
+  );
 
   @override
   Future<void> insert(CatalogObject object) => _dataSource.insert(object);
@@ -116,7 +131,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
         rotationDeg: rotationDeg,
       );
 
-      final withinFov = offset.xDeg.abs() <= fovWidthDeg / 2 &&
+      final withinFov =
+          offset.xDeg.abs() <= fovWidthDeg / 2 &&
           offset.yDeg.abs() <= fovHeightDeg / 2;
       if (!withinFov) continue;
 

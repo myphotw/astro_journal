@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:astro_journal/data/datasources/gallery_record_link_datasource.dart';
 import 'package:astro_journal/data/datasources/sync_checkpoint_datasource.dart';
+import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
 import 'package:astro_journal/data/models/tc_backend_change.dart';
+import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_repository.dart';
 import 'package:astro_journal/data/repositories/shooting_record_repository.dart';
 import 'package:astro_journal/services/tc_backend_changes_service.dart';
+import 'package:astro_journal/services/catalog_capture_projection_service.dart';
 import 'package:astro_journal/services/tc_backend_pull_sync_coordinator.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:astro_journal/services/tc_backend_sync_gate.dart';
@@ -34,6 +38,7 @@ void main() {
     _FakeRecords? records,
     Map<String, String> links = const {},
     TcBackendSyncGate? gate,
+    CatalogCaptureProjectionService? captureProjection,
   }) => TcBackendPullSyncCoordinator(
     changesApi: api,
     checkpoints: checkpoints,
@@ -42,6 +47,7 @@ void main() {
     recordLinks: _FakeLinks(links),
     settingsService: settings,
     syncGate: gate ?? TcBackendSyncGate(),
+    catalogCaptureProjection: captureProjection,
   );
 
   test('CREATE pulls canonical record into local projection', () async {
@@ -54,15 +60,25 @@ void main() {
       details: {'record-1': _item('record-1', 1)},
     );
     final gallery = _FakeGallery();
+    final records = _FakeRecords();
+    final catalog = _FakeCatalog();
+    final projection = CatalogCaptureProjectionService(
+      catalogRepository: catalog,
+      localRecords: records,
+      galleryRepository: gallery,
+    );
 
     await subject(
       api: api,
       checkpoints: _FakeCheckpoints(),
       gallery: gallery,
+      records: records,
+      captureProjection: projection,
     ).drain();
 
     expect(gallery.items['record-1']?.revision, 1);
     expect(api.detailCalls, ['record-1']);
+    expect(catalog.captured, isTrue);
   });
 
   test('UPDATE applies only a newer revision', () async {
@@ -99,6 +115,12 @@ void main() {
     });
     final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
     final records = _FakeRecords();
+    final catalog = _FakeCatalog()..captured = true;
+    final projection = CatalogCaptureProjectionService(
+      catalogRepository: catalog,
+      localRecords: records,
+      galleryRepository: gallery,
+    );
 
     await subject(
       api: api,
@@ -106,11 +128,13 @@ void main() {
       gallery: gallery,
       records: records,
       links: const {'record-1': 'local-1'},
+      captureProjection: projection,
     ).drain();
 
     expect(gallery.items, isEmpty);
     expect(gallery.tombstones['record-1'], 3);
     expect(records.deleted, ['local-1']);
+    expect(catalog.captured, isFalse);
   });
 
   test('cursor pagination advances after every completed page', () async {
@@ -287,6 +311,14 @@ class _FakeGallery implements GalleryRepository {
   int upserts = 0;
 
   @override
+  Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async =>
+      GallerySnapshot(
+        items: items.values.toList(),
+        source: GallerySnapshotSource.cache,
+        backendEnabled: true,
+      );
+
+  @override
   Future<int?> getCachedRevision(String backendRecordId) async =>
       tombstones[backendRecordId] ?? items[backendRecordId]?.revision;
 
@@ -324,8 +356,66 @@ class _FakeRecords implements ShootingRecordRepository {
   final List<String> deleted = [];
 
   @override
+  Future<List<Never>> getAll() async => const [];
+
+  @override
   Future<void> delete(String id) async {
     deleted.add(id);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeCatalog
+    implements CatalogRepository, CatalogCaptureProjectionWriter {
+  bool captured = false;
+  String? capturedDate;
+
+  CatalogObject get object => CatalogObject(
+    id: 'M42',
+    number: 42,
+    catalog: CatalogType.messier,
+    name: 'Orion Nebula',
+    type: 'Nebula',
+    constellation: 'Orion',
+    ra: '-',
+    dec: '-',
+    magnitude: '-',
+    captured: captured,
+    capturedDate: capturedDate,
+  );
+
+  @override
+  Future<List<CatalogObject>> getAll({bool listOnly = true}) async => [object];
+
+  @override
+  Future<CatalogObject?> getById(String id) async =>
+      id == 'M42' ? object : null;
+
+  @override
+  Future<int> updateCaptureProjection(
+    String id, {
+    required bool captured,
+    String? capturedDate,
+  }) async {
+    if (id != 'M42') return 0;
+    this.captured = captured;
+    this.capturedDate = capturedDate;
+    return 1;
+  }
+
+  @override
+  Future<void> updateCaptured(
+    String id, {
+    required bool captured,
+    String? capturedDate,
+  }) async {
+    await updateCaptureProjection(
+      id,
+      captured: captured,
+      capturedDate: capturedDate,
+    );
   }
 
   @override

@@ -23,6 +23,7 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
     DateTime Function()? now,
     this.recordService,
     this.galleryRepository,
+    this.catalogCaptureReconciler,
     TcBackendSyncGate? syncGate,
   }) : _now = now ?? DateTime.now,
        _syncGate = syncGate ?? TcBackendSyncGate();
@@ -34,6 +35,7 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
   final DateTime Function() _now;
   final TcBackendRecordMutations? recordService;
   final GalleryRepository? galleryRepository;
+  final Future<void> Function(String catalogObjectId)? catalogCaptureReconciler;
   final TcBackendSyncGate _syncGate;
   bool _draining = false;
 
@@ -89,6 +91,7 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
         backendFileId: item.backendFileId,
         uploadJobId: item.uploadJobId,
       );
+      await _reconcileCatalogCaptureFromItem(item);
       return;
     }
     var jobId = item.uploadJobId;
@@ -180,8 +183,31 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
         backendRecordId: created.backendRecordId,
         uploadJobId: jobId,
       );
+      await _reconcileCatalogCapture(record.celestialObjectId);
     } on TcBackendUploadException catch (error) {
       await _fail(item, error);
+    }
+  }
+
+  Future<void> _reconcileCatalogCapture(String catalogObjectId) async {
+    try {
+      await catalogCaptureReconciler?.call(catalogObjectId);
+    } catch (_) {
+      // Upload durability is authoritative here. Startup reconciliation repairs
+      // the derived Catalog projection without replaying the upload.
+    }
+  }
+
+  Future<void> _reconcileCatalogCaptureFromItem(SyncOutboxItem item) async {
+    try {
+      final localRecordId = item.localRecordId;
+      if (localRecordId == null) return;
+      final record = await _records.getById(localRecordId);
+      if (record != null) {
+        await _reconcileCatalogCapture(record.celestialObjectId);
+      }
+    } catch (_) {
+      // The item is already durable and SYNCED. Startup rebuild is the retry.
     }
   }
 

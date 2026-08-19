@@ -7,7 +7,12 @@ abstract class CatalogRepository {
   Future<CatalogObject?> getById(String id);
   Future<List<CatalogObject>> getByCatalog(CatalogType type);
   Future<List<CatalogObject>> search(String query, {int limit = 50});
-  Future<void> updateCaptured(String id, {required bool captured, String? capturedDate});
+  Future<void> updateCaptured(
+    String id, {
+    required bool captured,
+    String? capturedDate,
+  });
+
   Future<void> insert(CatalogObject object);
   Future<void> delete(String id);
 
@@ -35,5 +40,15 @@ abstract class CatalogRepository {
     required double fovWidthDeg,
     required double fovHeightDeg,
     required double rotationDeg,
+  });
+}
+
+/// Optional checked writer used by the capture projection. Keeping this as a
+/// separate capability preserves the V1 CatalogRepository contract.
+abstract interface class CatalogCaptureProjectionWriter {
+  Future<int> updateCaptureProjection(
+    String id, {
+    required bool captured,
+    String? capturedDate,
   });
 }

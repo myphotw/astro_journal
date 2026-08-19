@@ -23,18 +23,19 @@ class CatalogLocalDataSource {
       columns: listOnly
           ? DatabaseConstants.celestialObjectListColumns
           : DatabaseConstants.celestialObjectColumns,
-      orderBy: 'CASE ${DatabaseConstants.colCatalog} '
-              "WHEN 'messier' THEN 1 "
-              "WHEN 'ngc' THEN 2 "
-              "WHEN 'ic' THEN 3 "
-              "WHEN 'caldwell' THEN 4 "
-              "WHEN 'sh2' THEN 5 "
-              "WHEN 'rcw' THEN 6 "
-              "WHEN 'vdb' THEN 7 "
-              "WHEN 'star' THEN 8 "
-              "WHEN 'solar' THEN 9 "
-              "WHEN 'milky' THEN 10 "
-              'ELSE 11 END, '
+      orderBy:
+          'CASE ${DatabaseConstants.colCatalog} '
+          "WHEN 'messier' THEN 1 "
+          "WHEN 'ngc' THEN 2 "
+          "WHEN 'ic' THEN 3 "
+          "WHEN 'caldwell' THEN 4 "
+          "WHEN 'sh2' THEN 5 "
+          "WHEN 'rcw' THEN 6 "
+          "WHEN 'vdb' THEN 7 "
+          "WHEN 'star' THEN 8 "
+          "WHEN 'solar' THEN 9 "
+          "WHEN 'milky' THEN 10 "
+          'ELSE 11 END, '
           '${_catalogInternalOrderBy()}',
     );
     return rows.map(CatalogObject.fromMap).toList();
@@ -69,7 +70,8 @@ class CatalogLocalDataSource {
   /// Messier는 번호순을 유지하고, 그 외 카탈로그는
   /// 대표 천체(is_featured) → 표시 우선순위(display_priority) → 이름순으로 정렬한다.
   static String _catalogInternalOrderBy() {
-    final messierNum = "CASE WHEN ${DatabaseConstants.colCatalog} = 'messier' "
+    final messierNum =
+        "CASE WHEN ${DatabaseConstants.colCatalog} = 'messier' "
         'THEN ${DatabaseConstants.colNum} ELSE 0 END';
     return '$messierNum, '
         '${DatabaseConstants.colIsFeatured} DESC, '
@@ -132,6 +134,23 @@ class CatalogLocalDataSource {
     await db.update(
       DatabaseConstants.tableCelestialObjects,
       values,
+      where: '${DatabaseConstants.colId} = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> updateCaptureProjection(
+    String id, {
+    required bool captured,
+    String? capturedDate,
+  }) async {
+    final db = await _db;
+    return db.update(
+      DatabaseConstants.tableCelestialObjects,
+      {
+        DatabaseConstants.colCaptured: captured ? 1 : 0,
+        DatabaseConstants.colCapturedDate: capturedDate,
+      },
       where: '${DatabaseConstants.colId} = ?',
       whereArgs: [id],
     );

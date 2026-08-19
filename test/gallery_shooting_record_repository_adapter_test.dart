@@ -12,6 +12,7 @@ import 'package:astro_journal/data/repositories/shooting_record_repository.dart'
 import 'package:astro_journal/data/repositories/sync_outbox_repository.dart';
 import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
+import 'package:astro_journal/services/catalog_capture_projection_service.dart';
 import 'package:astro_journal/services/tc_backend_sync_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -50,10 +51,20 @@ void main() {
     GalleryItem? detail,
     _FakeOutbox? outbox,
     _FakeDrain? drain,
+    bool enableCaptureProjection = false,
   }) {
     final gallery = _FakeGalleryRepository(snapshot, detail: detail);
     final localRepository = _FakeLocalRepository(local);
     final catalogRepository = _FakeCatalogRepository(catalogObjects);
+    final recordLinks = _FakeLinks(links);
+    final captureProjection = enableCaptureProjection
+        ? CatalogCaptureProjectionService(
+            catalogRepository: catalogRepository,
+            localRecords: localRepository,
+            galleryRepository: gallery,
+            recordLinks: recordLinks,
+          )
+        : null;
     return _Harness(
       gallery,
       GalleryShootingRecordRepositoryAdapter(
@@ -63,12 +74,14 @@ void main() {
         projectionMapper: GalleryObservationProjectionMapper(
           CatalogSearchService(),
         ),
-        linkDataSource: _FakeLinks(links),
+        linkDataSource: recordLinks,
         syncOutboxRepository: outbox,
         syncCoordinator: drain,
+        catalogCaptureProjection: captureProjection,
       ),
       catalogRepository,
       outbox,
+      captureProjection,
     );
   }
 
@@ -347,6 +360,24 @@ void main() {
       expect(outbox.cancelledLocalIds, ['local-1']);
     },
   );
+
+  test('Gallery last local photo delete clears Catalog projection', () async {
+    final result = harness(
+      snapshot: const GallerySnapshot(
+        items: [],
+        source: GallerySnapshotSource.none,
+        backendEnabled: false,
+      ),
+      local: [_local('local-1', 'M42', capturedAt)],
+      enableCaptureProjection: true,
+    );
+    await result.captureProjection!.reconcileObject('M42');
+    await result.adapter.getAll();
+
+    await result.adapter.delete('local-1');
+
+    expect((await result.catalog.getById('M42'))?.captured, isFalse);
+  });
 }
 
 GallerySnapshot _remoteSnapshot(List<GalleryItem> items) => GallerySnapshot(
@@ -395,11 +426,18 @@ ShootingRecord _local(
 );
 
 class _Harness {
-  const _Harness(this.gallery, this.adapter, this.catalog, this.outbox);
+  const _Harness(
+    this.gallery,
+    this.adapter,
+    this.catalog,
+    this.outbox,
+    this.captureProjection,
+  );
   final _FakeGalleryRepository gallery;
   final GalleryShootingRecordRepositoryAdapter adapter;
   final _FakeCatalogRepository catalog;
   final _FakeOutbox? outbox;
+  final CatalogCaptureProjectionService? captureProjection;
 }
 
 class _FakeGalleryRepository implements GalleryRepository {
@@ -537,7 +575,7 @@ class _FakeDrain implements TcBackendDrainRunner {
 
 class _FakeCatalogRepository implements CatalogRepository {
   _FakeCatalogRepository(this.objects);
-  final List<CatalogObject> objects;
+  List<CatalogObject> objects;
 
   @override
   Future<List<CatalogObject>> getAll({bool listOnly = true}) async => objects;
@@ -583,5 +621,25 @@ class _FakeCatalogRepository implements CatalogRepository {
     String id, {
     required bool captured,
     String? capturedDate,
-  }) async {}
+  }) async {
+    objects = [
+      for (final object in objects)
+        if (object.id == id)
+          CatalogObject(
+            id: object.id,
+            number: object.number,
+            catalog: object.catalog,
+            name: object.name,
+            type: object.type,
+            constellation: object.constellation,
+            ra: object.ra,
+            dec: object.dec,
+            magnitude: object.magnitude,
+            captured: captured,
+            capturedDate: capturedDate,
+          )
+        else
+          object,
+    ];
+  }
 }

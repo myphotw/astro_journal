@@ -20,6 +20,7 @@ import '../../../services/object_imaging_profile_provider.dart';
 import '../../../services/photo_registration_service.dart';
 import '../../../services/season_planner_filter_service.dart';
 import '../../../services/season_planner_service.dart';
+import '../../../services/catalog_capture_projection_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../../catalog/view/catalog_detail_screen.dart';
@@ -48,11 +49,9 @@ class SeasonPlannerScreen extends StatelessWidget {
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => ChangeNotifierProvider(
-          create: (_) => SeasonPlannerViewModel(
-            catalogRepo,
-            shootingRepo,
-            filterService,
-          )..load(),
+          create: (_) =>
+              SeasonPlannerViewModel(catalogRepo, shootingRepo, filterService)
+                ..load(),
           child: const SeasonPlannerScreen(),
         ),
       ),
@@ -64,29 +63,27 @@ class SeasonPlannerScreen extends StatelessWidget {
     final viewModel = context.watch<SeasonPlannerViewModel>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('계절별 촬영 대상'),
-      ),
+      appBar: AppBar(title: const Text('계절별 촬영 대상')),
       body: viewModel.isLoading
           ? const Center(child: CircularProgressIndicator())
           : viewModel.errorMessage != null
-              ? Center(child: Text(viewModel.errorMessage!))
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _PlannerHeaderPanel(viewModel: viewModel),
-                    Expanded(
-                      child: viewModel.items.isEmpty
-                          ? const Center(
-                              child: Text(
-                                '조건에 맞는 촬영 대상이 없습니다.',
-                                style: TextStyle(color: AppColors.textSecondary),
-                              ),
-                            )
-                          : _SeasonObjectGrid(viewModel: viewModel),
-                    ),
-                  ],
+          ? Center(child: Text(viewModel.errorMessage!))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _PlannerHeaderPanel(viewModel: viewModel),
+                Expanded(
+                  child: viewModel.items.isEmpty
+                      ? const Center(
+                          child: Text(
+                            '조건에 맞는 촬영 대상이 없습니다.',
+                            style: TextStyle(color: AppColors.textSecondary),
+                          ),
+                        )
+                      : _SeasonObjectGrid(viewModel: viewModel),
                 ),
+              ],
+            ),
     );
   }
 }
@@ -165,10 +162,7 @@ class _PlannerHeaderPanel extends StatelessWidget {
                 _MonthSelector(viewModel: viewModel),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: AppTheme.spacingSm),
-                child: Divider(
-                  height: 1,
-                  color: Color(0x33FFFFFF),
-                ),
+                child: Divider(height: 1, color: Color(0x33FFFFFF)),
               ),
               Row(
                 children: [
@@ -200,8 +194,7 @@ class _PlannerHeaderPanel extends StatelessWidget {
               const SizedBox(height: 4),
               ResponsiveFilterChipGrid(
                 singleRow: true,
-                itemCount:
-                    1 + SeasonPlannerService.plannerCatalogTypes.length,
+                itemCount: 1 + SeasonPlannerService.plannerCatalogTypes.length,
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return ExpandedFilterChip(
@@ -213,22 +206,22 @@ class _PlannerHeaderPanel extends StatelessWidget {
                       ),
                       selected: viewModel.uncapturedOnly,
                       onSelected: vm.setUncapturedOnly,
-                      backgroundColor: SeasonPlannerFilterTheme
-                          .colorsFor(selected: viewModel.uncapturedOnly)
-                          .background,
-                      selectedColor: SeasonPlannerFilterTheme
-                          .colorsFor(selected: true)
-                          .background,
+                      backgroundColor: SeasonPlannerFilterTheme.colorsFor(
+                        selected: viewModel.uncapturedOnly,
+                      ).background,
+                      selectedColor: SeasonPlannerFilterTheme.colorsFor(
+                        selected: true,
+                      ).background,
                       side: BorderSide(
-                        color: SeasonPlannerFilterTheme
-                            .colorsFor(selected: viewModel.uncapturedOnly)
-                            .border,
+                        color: SeasonPlannerFilterTheme.colorsFor(
+                          selected: viewModel.uncapturedOnly,
+                        ).border,
                         width: viewModel.uncapturedOnly ? 1.5 : 1,
                       ),
                       labelStyle: TextStyle(
-                        color: SeasonPlannerFilterTheme
-                            .colorsFor(selected: viewModel.uncapturedOnly)
-                            .label,
+                        color: SeasonPlannerFilterTheme.colorsFor(
+                          selected: viewModel.uncapturedOnly,
+                        ).label,
                         fontSize: 12,
                         fontWeight: viewModel.uncapturedOnly
                             ? FontWeight.w600
@@ -241,8 +234,9 @@ class _PlannerHeaderPanel extends StatelessWidget {
                       SeasonPlannerService.plannerCatalogTypes[index - 1];
                   final isChecked =
                       selected.isEmpty || selected.contains(catalog);
-                  final colors =
-                      SeasonPlannerFilterTheme.colorsFor(selected: isChecked);
+                  final colors = SeasonPlannerFilterTheme.colorsFor(
+                    selected: isChecked,
+                  );
                   return ExpandedFilterChip(
                     compact: true,
                     label: Text(
@@ -261,8 +255,7 @@ class _PlannerHeaderPanel extends StatelessWidget {
                     labelStyle: TextStyle(
                       color: colors.label,
                       fontSize: 12,
-                      fontWeight:
-                          isChecked ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: isChecked ? FontWeight.w600 : FontWeight.w500,
                     ),
                   );
                 },
@@ -367,8 +360,8 @@ class _SeasonObjectGrid extends StatelessWidget {
     final registrationSvc = context.read<PhotoRegistrationService>();
     final equipmentRepo = context.read<EquipmentRepository>();
     final equipmentRecSvc = context.read<EquipmentRecommendationService>();
-    final baseExposureSettingsService =
-        context.read<BaseExposureSettingsService>();
+    final baseExposureSettingsService = context
+        .read<BaseExposureSettingsService>();
     final profileProvider = context.read<ObjectImagingProfileProvider>();
     final exposurePolicy = context.read<ExposurePolicy>();
     final catalogVm = context.read<CatalogViewModel>();
@@ -377,8 +370,9 @@ class _SeasonObjectGrid extends StatelessWidget {
     final statsVm = context.read<StatsViewModel>();
     final seasonVm = context.read<SeasonPlannerViewModel>();
 
-    final navigationObjects =
-        viewModel.items.map((entry) => entry.object).toList();
+    final navigationObjects = viewModel.items
+        .map((entry) => entry.object)
+        .toList();
 
     final detailVm = CatalogDetailViewModel(
       item.object,
@@ -392,6 +386,7 @@ class _SeasonObjectGrid extends StatelessWidget {
       profileProvider,
       exposurePolicy,
       navigationObjects: navigationObjects,
+      captureProjection: context.read<CatalogCaptureProjectionService>(),
     );
 
     final dataChanged = await Navigator.of(context)
@@ -437,10 +432,9 @@ class _SeasonObjectGrid extends StatelessWidget {
           itemBuilder: (context, index) {
             final item = viewModel.items[index];
             const seasonService = SeasonPlannerService();
-            final equipmentChips =
-                context.watch<CatalogViewModel>().equipmentChipsFor(
-                      item.object.id,
-                    );
+            final equipmentChips = context
+                .watch<CatalogViewModel>()
+                .equipmentChipsFor(item.object.id);
             return CatalogObjectCard(
               object: item.object,
               thumbnailPath: item.thumbnailPath,

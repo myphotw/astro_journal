@@ -142,14 +142,19 @@ void main() {
       ),
     );
     final upload = _FakeStages();
+    final reconciled = <String>[];
     await TcBackendSyncCoordinator(
       outbox,
       _FakeRecords(record),
       settings,
       upload,
+      catalogCaptureReconciler: (catalogObjectId) async {
+        reconciled.add(catalogObjectId);
+      },
     ).drain();
     expect(upload.recordCalls, 0);
     expect(outbox.synced, isTrue);
+    expect(reconciled, ['M42']);
   });
 
   test('queued upload preserves client_file_id', () async {
@@ -163,11 +168,15 @@ void main() {
       ),
     );
     final upload = _FakeStages();
+    final reconciled = <String>[];
     await TcBackendSyncCoordinator(
       outbox,
       _FakeRecords(record),
       settings,
       upload,
+      catalogCaptureReconciler: (catalogObjectId) async {
+        reconciled.add(catalogObjectId);
+      },
     ).drain();
     expect(upload.clientFileId, 'stable-client-id');
     expect(upload.clientRecordId, 'client-record-id');
@@ -176,6 +185,7 @@ void main() {
       'canonical_target_id': 'M42',
       'target_display_name': 'Orion Nebula',
     });
+    expect(reconciled, ['M42']);
   });
 
   test('record POST replay preserves durable client_record_id', () async {

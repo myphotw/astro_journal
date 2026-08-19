@@ -28,10 +28,19 @@ void main() {
 
   test('disabled or unconfigured backend does not drain', () async {
     final runner = _FakeRunner();
-    await TcBackendStartupResumeService(settings, runner).resume();
+    var reconciliations = 0;
+    final service = TcBackendStartupResumeService(
+      settings,
+      runner,
+      reconcileCatalog: () async {
+        reconciliations++;
+      },
+    );
+    await service.resume();
     await settings.save(const TcBackendSettings(baseUrl: '', enabled: false));
-    await TcBackendStartupResumeService(settings, runner).resume();
+    await service.resume();
     expect(runner.calls, 0);
+    expect(reconciliations, 2);
   });
 
   test('drain failure is isolated from startup', () async {
@@ -42,8 +51,28 @@ void main() {
       ),
     );
     final runner = _FakeRunner(error: StateError('offline'));
-    await TcBackendStartupResumeService(settings, runner).resume();
+    var reconciled = false;
+    await TcBackendStartupResumeService(
+      settings,
+      runner,
+      reconcileCatalog: () async {
+        reconciled = true;
+      },
+    ).resume();
     expect(runner.calls, 1);
+    expect(reconciled, isTrue);
+  });
+
+  test('catalog reconciliation failure is isolated from startup', () async {
+    final runner = _FakeRunner();
+
+    await TcBackendStartupResumeService(
+      settings,
+      runner,
+      reconcileCatalog: () async => throw StateError('projection failed'),
+    ).resume();
+
+    expect(runner.calls, 0);
   });
 
   test('two callers can rely on the coordinator drain guard', () async {

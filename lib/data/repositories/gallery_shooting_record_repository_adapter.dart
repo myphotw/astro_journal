@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../services/catalog_search_service.dart';
+import '../../services/catalog_capture_projection_service.dart';
 import '../../services/app_logger.dart';
 import '../../services/tc_backend_sync_coordinator.dart';
 import '../datasources/gallery_record_link_datasource.dart';
@@ -55,6 +56,7 @@ class GalleryShootingRecordRepositoryAdapter
         const EmptyGalleryRecordLinkDataSource(),
     SyncOutboxRepository? syncOutboxRepository,
     TcBackendDrainRunner? syncCoordinator,
+    CatalogCaptureProjectionService? catalogCaptureProjection,
   }) => GalleryShootingRecordRepositoryAdapter._(
     galleryRepository,
     localRepository,
@@ -63,6 +65,7 @@ class GalleryShootingRecordRepositoryAdapter
     linkDataSource,
     syncOutboxRepository,
     syncCoordinator,
+    catalogCaptureProjection,
   );
 
   GalleryShootingRecordRepositoryAdapter._(
@@ -73,6 +76,7 @@ class GalleryShootingRecordRepositoryAdapter
     this._linkDataSource,
     this._syncOutboxRepository,
     this._syncCoordinator,
+    this._catalogCaptureProjection,
   );
 
   final GalleryRepository _galleryRepository;
@@ -82,6 +86,7 @@ class GalleryShootingRecordRepositoryAdapter
   final GalleryRecordLinkDataSource _linkDataSource;
   final SyncOutboxRepository? _syncOutboxRepository;
   final TcBackendDrainRunner? _syncCoordinator;
+  final CatalogCaptureProjectionService? _catalogCaptureProjection;
   Map<String, ShootingRecord> _lastRemoteRecords = const {};
 
   @override
@@ -204,8 +209,10 @@ class GalleryShootingRecordRepositoryAdapter
   Future<void> delete(String id) async {
     final record = _lastRemoteRecords[id];
     if (record?.backendRecordId == null) {
+      final local = await _localRepository.getById(id);
       await _localRepository.delete(id);
       await _syncOutboxRepository?.cancelPendingUpload(id);
+      await _reconcileCatalog(local?.celestialObjectId);
       return;
     }
     final remoteOnly = _isRemoteOnly(id);
@@ -218,7 +225,18 @@ class GalleryShootingRecordRepositoryAdapter
       backendRecordId: record.backendRecordId!,
       localRecordId: remoteOnly ? null : id,
     );
+    await _reconcileCatalog(record.celestialObjectId);
     _requestDrain();
+  }
+
+  Future<void> _reconcileCatalog(String? catalogObjectId) async {
+    final projection = _catalogCaptureProjection;
+    if (projection == null || catalogObjectId == null) return;
+    try {
+      await projection.reconcileObject(catalogObjectId);
+    } catch (error, stackTrace) {
+      AppLogger.error('GalleryDelete.CatalogProjection', error, stackTrace);
+    }
   }
 
   @override

@@ -4,6 +4,7 @@ import '../data/models/tc_backend_change.dart';
 import '../data/repositories/gallery_repository.dart';
 import '../data/repositories/shooting_record_repository.dart';
 import 'tc_backend_changes_service.dart';
+import 'catalog_capture_projection_service.dart';
 import 'tc_backend_settings_service.dart';
 import 'tc_backend_sync_coordinator.dart';
 import 'tc_backend_sync_gate.dart';
@@ -17,6 +18,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     required GalleryRecordLinkDataSource recordLinks,
     required TcBackendSettingsService settingsService,
     required TcBackendSyncGate syncGate,
+    CatalogCaptureProjectionService? catalogCaptureProjection,
     int maxPagesPerDrain = 100,
   }) => TcBackendPullSyncCoordinator._(
     changesApi,
@@ -26,6 +28,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     recordLinks,
     settingsService,
     syncGate,
+    catalogCaptureProjection,
     maxPagesPerDrain,
   );
 
@@ -37,6 +40,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     this._recordLinks,
     this._settingsService,
     this._syncGate,
+    this._catalogCaptureProjection,
     this.maxPagesPerDrain,
   );
 
@@ -49,6 +53,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
   final GalleryRecordLinkDataSource _recordLinks;
   final TcBackendSettingsService _settingsService;
   final TcBackendSyncGate _syncGate;
+  final CatalogCaptureProjectionService? _catalogCaptureProjection;
   final int maxPagesPerDrain;
   bool _draining = false;
 
@@ -84,11 +89,25 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
         await _checkpoints.writeCursor(streamName, nextCursor);
         cursor = nextCursor;
       }
-      if (!page.hasMore) return;
+      if (!page.hasMore) {
+        await _reconcileCatalog();
+        return;
+      }
     }
     throw const TcBackendChangesException(
       'Changes pagination exceeded the per-drain page limit.',
     );
+  }
+
+  Future<void> _reconcileCatalog() async {
+    final projection = _catalogCaptureProjection;
+    if (projection == null) return;
+    try {
+      await projection.reconcileAll();
+    } catch (_) {
+      // Changes and cursor remain durable. Startup reconciliation retries the
+      // rebuild without replaying remote mutations.
+    }
   }
 
   Future<void> _apply(TcBackendChange change) async {

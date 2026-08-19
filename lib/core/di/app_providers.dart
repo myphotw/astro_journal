@@ -50,6 +50,7 @@ import '../../services/geocoding_service.dart';
 import '../../services/location_service.dart';
 import '../../services/metadata_service.dart';
 import '../../services/catalog_search_service.dart';
+import '../../services/catalog_capture_projection_service.dart';
 import '../../services/photo_metadata_pipeline.dart';
 import '../../services/photo_overlay_service.dart';
 import '../../services/photo_registration_service.dart';
@@ -120,6 +121,12 @@ class AppProviders {
       cache: galleryCache,
       authHeaders: tcBackendAuthHeaders,
     );
+    final catalogCaptureProjection = CatalogCaptureProjectionService(
+      catalogRepository: catalogRepository,
+      localRecords: shootingRecordRepository,
+      galleryRepository: galleryRepository,
+      recordLinks: galleryRecordLinks,
+    );
     final tcBackendUploadService = TcBackendUploadService(
       settingsService: tcBackendSettingsService,
       authHeaders: tcBackendAuthHeaders,
@@ -137,6 +144,8 @@ class AppProviders {
       tcBackendUploadService,
       recordService: tcBackendRecordService,
       galleryRepository: galleryRepository,
+      catalogCaptureReconciler: (catalogObjectId) => catalogCaptureProjection
+          .reconcileObject(catalogObjectId, includeRemote: false),
       syncGate: syncGate,
     );
     final syncCheckpoints = GalleryCacheSyncCheckpointDataSource(galleryCache);
@@ -152,10 +161,14 @@ class AppProviders {
       recordLinks: galleryRecordLinks,
       settingsService: tcBackendSettingsService,
       syncGate: syncGate,
+      catalogCaptureProjection: catalogCaptureProjection,
     );
     final startupResumeService = TcBackendStartupResumeService(
       tcBackendSettingsService,
       TcBackendCompositeSyncRunner([syncCoordinator, pullSyncCoordinator]),
+      reconcileCatalog: () async {
+        await catalogCaptureProjection.reconcileAll();
+      },
     );
     final metadataService = MetadataService();
     final catalogSearchService = CatalogSearchService();
@@ -170,6 +183,7 @@ class AppProviders {
           linkDataSource: galleryRecordLinks,
           syncOutboxRepository: syncOutboxRepository,
           syncCoordinator: syncCoordinator,
+          catalogCaptureProjection: catalogCaptureProjection,
         );
     final metadataPipeline = PhotoMetadataPipeline(
       metadataService: metadataService,
@@ -186,6 +200,7 @@ class AppProviders {
       tcBackendUploadService: tcBackendUploadService,
       syncOutboxRepository: syncOutboxRepository,
       syncCoordinator: syncCoordinator,
+      catalogCaptureProjection: catalogCaptureProjection,
     );
     final backupService = BackupService();
     final astronomyService = AstronomyService(apiKeyService);
@@ -272,6 +287,7 @@ class AppProviders {
       shootingRecordRepository,
       equipmentRepository,
       equipmentRecommendationService,
+      captureProjection: catalogCaptureProjection,
     );
 
     final galleryViewModel = GalleryViewModel(
@@ -381,6 +397,9 @@ class AppProviders {
       ),
       Provider<MetadataService>.value(value: metadataService),
       Provider<CatalogSearchService>.value(value: catalogSearchService),
+      ChangeNotifierProvider<CatalogCaptureProjectionService>.value(
+        value: catalogCaptureProjection,
+      ),
       Provider<PhotoMetadataPipeline>.value(value: metadataPipeline),
       Provider<PhotoRegistrationService>.value(value: registrationService),
       Provider<PhotoOverlayService>.value(value: photoOverlayService),

@@ -24,6 +24,7 @@ import '../../../shared/widgets/catalog_object_card.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../../../services/catalog_metadata_enricher.dart';
+import '../../../services/catalog_capture_projection_service.dart';
 import '../../../services/metadata_service.dart';
 import '../../season/view/season_planner_screen.dart';
 import '../../gallery/viewmodel/gallery_view_model.dart';
@@ -117,10 +118,7 @@ class _CatalogScreenState extends State<CatalogScreen>
     });
   }
 
-  void _onShootingFilterChanged(
-    BuildContext context,
-    ShootingFilter filter,
-  ) {
+  void _onShootingFilterChanged(BuildContext context, ShootingFilter filter) {
     final vm = context.read<CatalogViewModel>();
     _saveScrollPosition(vm);
     vm.selectShootingFilter(filter);
@@ -177,8 +175,8 @@ class _CatalogScreenState extends State<CatalogScreen>
     final registrationSvc = context.read<PhotoRegistrationService>();
     final equipmentRepo = context.read<EquipmentRepository>();
     final equipmentRecSvc = context.read<EquipmentRecommendationService>();
-    final baseExposureSettingsService =
-        context.read<BaseExposureSettingsService>();
+    final baseExposureSettingsService = context
+        .read<BaseExposureSettingsService>();
     final profileProvider = context.read<ObjectImagingProfileProvider>();
     final exposurePolicy = context.read<ExposurePolicy>();
     final catalogVm = context.read<CatalogViewModel>();
@@ -200,6 +198,7 @@ class _CatalogScreenState extends State<CatalogScreen>
       profileProvider,
       exposurePolicy,
       navigationObjects: navigationObjects,
+      captureProjection: context.read<CatalogCaptureProjectionService>(),
     );
 
     final dataChanged = await Navigator.of(context)
@@ -221,13 +220,7 @@ class _CatalogScreenState extends State<CatalogScreen>
     if (!dataChanged) return;
 
     unawaited(catalogVm.load(silent: true));
-    unawaited(
-      Future.wait([
-        galleryVm.load(),
-        homeVm.load(),
-        statsVm.load(),
-      ]),
-    );
+    unawaited(Future.wait([galleryVm.load(), homeVm.load(), statsVm.load()]));
   }
 
   void _openSearch(BuildContext context) {
@@ -261,11 +254,11 @@ class _CatalogScreenState extends State<CatalogScreen>
           ),
         )
         .then((_) {
-      catalogVm.load();
-      galleryVm.load();
-      homeVm.load();
-      statsVm.load();
-    });
+          catalogVm.load();
+          galleryVm.load();
+          homeVm.load();
+          statsVm.load();
+        });
   }
 
   @override
@@ -363,153 +356,152 @@ class _CatalogScreenState extends State<CatalogScreen>
       body: viewModel.isLoading && viewModel.allObjects.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : viewModel.errorMessage != null && viewModel.allObjects.isEmpty
-              ? Center(child: Text(viewModel.errorMessage!))
-              : Column(
-                  children: [
-                    if (_isSearching)
-                      ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _searchController,
-                        // 검색 결과 위젯의 context는 선택 즉시 트리에서
-                        // 제거되므로(_isSearching=false), 네비게이션에는
-                        // State의 context(this.context)를 사용해야 한다.
-                        builder: (_, value, _) {
-                          return InlineCatalogSearchResults(
-                            query: value.text,
-                            allObjects: viewModel.allObjects,
-                            searchIndex: viewModel.searchIndex,
-                            onObjectSelected: (object) {
-                              final resolved =
-                                  viewModel.resolveForNavigation(object);
-                              final navigation =
-                                  viewModel.navigationTargetsForSearch(object);
-                              setState(() {
-                                _isSearching = false;
-                                _searchController.clear();
-                              });
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (!context.mounted) return;
-                                _openCatalogDetail(
-                                  context,
-                                  object: resolved,
-                                  navigationObjects: navigation,
-                                );
-                              });
-                            },
+          ? Center(child: Text(viewModel.errorMessage!))
+          : Column(
+              children: [
+                if (_isSearching)
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _searchController,
+                    // 검색 결과 위젯의 context는 선택 즉시 트리에서
+                    // 제거되므로(_isSearching=false), 네비게이션에는
+                    // State의 context(this.context)를 사용해야 한다.
+                    builder: (_, value, _) {
+                      return InlineCatalogSearchResults(
+                        query: value.text,
+                        allObjects: viewModel.allObjects,
+                        searchIndex: viewModel.searchIndex,
+                        onObjectSelected: (object) {
+                          final resolved = viewModel.resolveForNavigation(
+                            object,
                           );
+                          final navigation = viewModel
+                              .navigationTargetsForSearch(object);
+                          setState(() {
+                            _isSearching = false;
+                            _searchController.clear();
+                          });
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!context.mounted) return;
+                            _openCatalogDetail(
+                              context,
+                              object: resolved,
+                              navigationObjects: navigation,
+                            );
+                          });
                         },
+                      );
+                    },
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.spacingLg,
+                    vertical: AppTheme.spacingSm,
+                  ),
+                  child: FullWidthSegmentedButton<ShootingFilter>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ShootingFilter.all,
+                        label: Text('전체'),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppTheme.spacingLg,
-                        vertical: AppTheme.spacingSm,
+                      ButtonSegment(
+                        value: ShootingFilter.captured,
+                        label: Text('촬영 완료'),
                       ),
-                      child: FullWidthSegmentedButton<ShootingFilter>(
-                        segments: const [
-                          ButtonSegment(
-                            value: ShootingFilter.all,
-                            label: Text('전체'),
-                          ),
-                          ButtonSegment(
-                            value: ShootingFilter.captured,
-                            label: Text('촬영 완료'),
-                          ),
-                          ButtonSegment(
-                            value: ShootingFilter.notCaptured,
-                            label: Text('미촬영'),
-                          ),
-                        ],
-                        selected: {viewModel.shootingFilter},
-                        onSelectionChanged: (selection) {
-                          _onShootingFilterChanged(context, selection.first);
-                        },
+                      ButtonSegment(
+                        value: ShootingFilter.notCaptured,
+                        label: Text('미촬영'),
                       ),
-                    ),
-                    ResponsiveFilterChipGrid(
-                      singleRow: true,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppTheme.spacingLg,
+                    ],
+                    selected: {viewModel.shootingFilter},
+                    onSelectionChanged: (selection) {
+                      _onShootingFilterChanged(context, selection.first);
+                    },
+                  ),
+                ),
+                ResponsiveFilterChipGrid(
+                  singleRow: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.spacingLg,
+                  ),
+                  itemCount: CatalogKindFilter.values.length,
+                  itemBuilder: (context, index) {
+                    final filter = CatalogKindFilter.values[index];
+                    final selected = viewModel.kindFilter == filter;
+                    return ExpandedFilterChip(
+                      compact: true,
+                      label: Text(
+                        filter.label,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 10),
                       ),
-                      itemCount: CatalogKindFilter.values.length,
-                      itemBuilder: (context, index) {
-                        final filter = CatalogKindFilter.values[index];
-                        final selected = viewModel.kindFilter == filter;
-                        return ExpandedFilterChip(
-                          compact: true,
-                          label: Text(
-                            filter.label,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 10),
+                      selected: selected,
+                      onSelected: (_) => _onKindFilterChanged(context, filter),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: AppTheme.spacingSm),
+                Expanded(
+                  child: viewModel.objects.isEmpty
+                      ? const Center(
+                          child: Text(
+                            '표시할 천체가 없습니다.',
+                            style: TextStyle(color: AppColors.textSecondary),
                           ),
-                          selected: selected,
-                          onSelected: (_) =>
-                              _onKindFilterChanged(context, filter),
-                          labelStyle: TextStyle(
-                            fontSize: 12,
-                            fontWeight: selected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: AppTheme.spacingSm),
-                    Expanded(
-                      child: viewModel.objects.isEmpty
-                          ? const Center(
-                              child: Text(
-                                '표시할 천체가 없습니다.',
-                                style:
-                                    TextStyle(color: AppColors.textSecondary),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final columns = _gridCrossAxisCount(
+                              constraints.maxWidth,
+                            );
+                            final gridKey = _scrollStorageKey(viewModel);
+                            final objects = viewModel.objects;
+                            return GridView.builder(
+                              key: PageStorageKey<String>(
+                                'catalog_grid_$gridKey',
                               ),
-                            )
-                          : LayoutBuilder(
-                              builder: (context, constraints) {
-                                final columns =
-                                    _gridCrossAxisCount(constraints.maxWidth);
-                                final gridKey =
-                                    _scrollStorageKey(viewModel);
-                                final objects = viewModel.objects;
-                                return GridView.builder(
-                                  key: PageStorageKey<String>(
-                                    'catalog_grid_$gridKey',
-                                  ),
-                                  controller: _scrollController,
-                                  padding: const EdgeInsets.all(
-                                    AppTheme.spacingLg,
-                                  ),
-                                  addAutomaticKeepAlives: false,
-                                  gridDelegate:
-                                      SliverGridDelegateWithFixedCrossAxisCount(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.all(AppTheme.spacingLg),
+                              addAutomaticKeepAlives: false,
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: columns,
                                     crossAxisSpacing: AppTheme.spacingSm,
                                     mainAxisSpacing: AppTheme.spacingSm,
                                     childAspectRatio: 1.1,
                                   ),
-                                  itemCount: objects.length,
-                                  itemBuilder: (context, index) {
-                                    final object = objects[index];
-                                    final thumbnail =
-                                        viewModel.thumbnailFor(object.id);
-                                    return CatalogObjectCard(
+                              itemCount: objects.length,
+                              itemBuilder: (context, index) {
+                                final object = objects[index];
+                                final thumbnail = viewModel.thumbnailFor(
+                                  object.id,
+                                );
+                                return CatalogObjectCard(
+                                  object: object,
+                                  thumbnailPath: thumbnail,
+                                  equipmentChips: viewModel.equipmentChipsFor(
+                                    object.id,
+                                  ),
+                                  onTap: () {
+                                    _openCatalogDetail(
+                                      context,
                                       object: object,
-                                      thumbnailPath: thumbnail,
-                                      equipmentChips: viewModel
-                                          .equipmentChipsFor(object.id),
-                                      onTap: () {
-                                        _openCatalogDetail(
-                                          context,
-                                          object: object,
-                                          navigationObjects: objects,
-                                        );
-                                      },
+                                      navigationObjects: objects,
                                     );
                                   },
                                 );
                               },
-                            ),
-                    ),
-                  ],
+                            );
+                          },
+                        ),
                 ),
+              ],
+            ),
     );
   }
 }
@@ -635,8 +627,9 @@ class _AddCatalogEntryScreenState extends State<_AddCatalogEntryScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _magnitudeController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: '등급 (magnitude)',
                 hintText: '예: 8.5',
@@ -704,6 +697,8 @@ class _AddCatalogEntryScreenState extends State<_AddCatalogEntryScreen> {
               context.read<BaseExposureSettingsService>(),
               context.read<ObjectImagingProfileProvider>(),
               context.read<ExposurePolicy>(),
+              captureProjection: context
+                  .read<CatalogCaptureProjectionService>(),
             ),
             child: const CatalogDetailScreen(),
           ),
@@ -711,9 +706,9 @@ class _AddCatalogEntryScreenState extends State<_AddCatalogEntryScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('저장 실패: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
       setState(() => _isSaving = false);
     }
   }
@@ -727,10 +722,9 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: Theme.of(context)
-          .textTheme
-          .labelMedium
-          ?.copyWith(color: AppColors.textSecondary),
+      style: Theme.of(
+        context,
+      ).textTheme.labelMedium?.copyWith(color: AppColors.textSecondary),
     );
   }
 }

@@ -12,6 +12,7 @@ import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/shooting_record_repository.dart';
 import '../../../services/catalog_object_sorter.dart';
+import '../../../services/catalog_capture_projection_service.dart';
 import '../../../services/catalog_search_index.dart';
 import '../../../services/catalog_search_service.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
@@ -19,17 +20,35 @@ import '../../../services/equipment/equipment_recommendation_service.dart';
 enum ShootingFilter { all, captured, notCaptured }
 
 class CatalogViewModel extends ChangeNotifier {
-  CatalogViewModel(
+  factory CatalogViewModel(
+    CatalogRepository catalogRepository,
+    ShootingRecordRepository shootingRecordRepository,
+    EquipmentRepository equipmentRepository,
+    EquipmentRecommendationService equipmentRecommendationService, {
+    CatalogCaptureProjectionService? captureProjection,
+  }) => CatalogViewModel._(
+    catalogRepository,
+    shootingRecordRepository,
+    equipmentRepository,
+    equipmentRecommendationService,
+    captureProjection,
+  );
+
+  CatalogViewModel._(
     this._catalogRepository,
     this._shootingRecordRepository,
     this._equipmentRepository,
     this._equipmentRecommendationService,
-  );
+    this._captureProjection,
+  ) {
+    _captureProjection?.addListener(_onCaptureProjectionChanged);
+  }
 
   final CatalogRepository _catalogRepository;
   final ShootingRecordRepository _shootingRecordRepository;
   final EquipmentRepository _equipmentRepository;
   final EquipmentRecommendationService _equipmentRecommendationService;
+  final CatalogCaptureProjectionService? _captureProjection;
 
   bool _isLoading = false;
   bool _hasLoaded = false;
@@ -72,8 +91,10 @@ class CatalogViewModel extends ChangeNotifier {
       _thumbnailMap.values.take(32).toList(growable: false);
 
   CatalogObject resolveForNavigation(CatalogObject object) {
-    final resolved =
-        CatalogSearchService.resolvePrimaryFromList(object, _allObjects);
+    final resolved = CatalogSearchService.resolvePrimaryFromList(
+      object,
+      _allObjects,
+    );
     for (final candidate in _allObjects) {
       if (candidate.id == resolved.id) {
         return candidate;
@@ -96,8 +117,9 @@ class CatalogViewModel extends ChangeNotifier {
   List<CatalogObject> navigationTargetsForSearch(CatalogObject object) {
     final resolved = resolveForNavigation(object);
     final current = objects;
-    final rest =
-        current.where((candidate) => candidate.id != resolved.id).toList();
+    final rest = current
+        .where((candidate) => candidate.id != resolved.id)
+        .toList();
     return [resolved, ...rest];
   }
 
@@ -107,13 +129,25 @@ class CatalogViewModel extends ChangeNotifier {
   CatalogEquipmentChips equipmentChipsFor(String celestialObjectId) =>
       _equipmentChipsMap[celestialObjectId] ?? const CatalogEquipmentChips();
 
+  void _onCaptureProjectionChanged() {
+    if (!_hasLoaded) return;
+    unawaited(load(silent: true));
+  }
+
+  @override
+  void dispose() {
+    _captureProjection?.removeListener(_onCaptureProjectionChanged);
+    super.dispose();
+  }
+
   /// 필터·정렬이 적용된 목록. 스크롤 중 재계산하지 않도록 캐시한다.
   List<CatalogObject> get objects =>
       _visibleObjects ??= _computeVisibleObjects();
 
   List<CatalogObject> _computeVisibleObjects() {
-    Iterable<CatalogObject> filtered =
-        _allObjects.where((object) => object.isPrimaryCatalog);
+    Iterable<CatalogObject> filtered = _allObjects.where(
+      (object) => object.isPrimaryCatalog,
+    );
 
     if (_selectedTab != null) {
       filtered = filtered.where((o) => o.catalog == _selectedTab);
@@ -166,10 +200,7 @@ class CatalogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> load({
-    bool silent = false,
-    bool deferHeavyWork = false,
-  }) async {
+  Future<void> load({bool silent = false, bool deferHeavyWork = false}) async {
     if (_isLoading) return;
     if (!silent) {
       _isLoading = true;
@@ -220,7 +251,10 @@ class CatalogViewModel extends ChangeNotifier {
     await _finishHeavyLoad(objects, Stopwatch()..start());
   }
 
-  Future<void> _finishHeavyLoad(List<CatalogObject> objects, Stopwatch sw) async {
+  Future<void> _finishHeavyLoad(
+    List<CatalogObject> objects,
+    Stopwatch sw,
+  ) async {
     _searchIndex = await CatalogSearchIndex.buildAsync(
       objects,
       globalAliases: CatalogSearchService.globalAliases,
