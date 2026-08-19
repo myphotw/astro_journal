@@ -42,7 +42,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Google Maps SDK: build-time placeholder; runtime value synced from ApiKeyService -->
+        <!-- Google Maps SDK key is injected as a build-time Android resource. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_maps_api_key" />

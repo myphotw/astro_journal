@@ -282,7 +282,7 @@ class AppProviders {
     // 탭 첫 진입 시 MainShell._ensureTabLoaded는 hasLoaded면 재로드하지 않는다.
     final catalogViewModel = CatalogViewModel(
       catalogRepository,
-      shootingRecordRepository,
+      galleryShootingRecordRepository,
       equipmentRepository,
       equipmentRecommendationService,
       captureProjection: catalogCaptureProjection,
@@ -382,6 +382,9 @@ class AppProviders {
         value: tcBackendMediaAuthService,
       ),
       Provider<GalleryRepository>.value(value: galleryRepository),
+      Provider<GalleryShootingRecordRepositoryAdapter>.value(
+        value: galleryShootingRecordRepository,
+      ),
       Provider<TcBackendUploadService>.value(value: tcBackendUploadService),
       Provider<TcBackendRecordService>.value(value: tcBackendRecordService),
       Provider<TcBackendChangesService>.value(value: changesService),

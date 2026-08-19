@@ -26,6 +26,10 @@ import '../viewmodel/gallery_view_model.dart';
 import '../viewmodel/plate_solve_view_model.dart';
 import '../widgets/photo_overlay_view.dart';
 
+@visibleForTesting
+bool shouldShowManualPlateSolve(ShootingRecord record) =>
+    record.photoUri != null && record.photoUri!.isNotEmpty;
+
 // ── GalleryDetailScreen ──────────────────────────────────────────────────────
 
 class GalleryDetailScreen extends StatefulWidget {
@@ -769,10 +773,7 @@ class _ViewBody extends StatelessWidget {
         title: '메모',
         content: record.memo.isEmpty ? '(없음)' : record.memo,
       ),
-      if (!record.isRemoteAsset &&
-          record.photoUri != null &&
-          record.photoUri!.isNotEmpty &&
-          onRunPlateSolve != null) ...[
+      if (shouldShowManualPlateSolve(record) && onRunPlateSolve != null) ...[
         const SizedBox(height: 12),
         _PlateSolveSection(record: record, onRun: onRunPlateSolve!),
       ],

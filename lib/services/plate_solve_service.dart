@@ -191,8 +191,15 @@ class PlateSolveService {
       );
     } on TcBackendExternalApiException catch (e) {
       AppLogger.error(_tag, e);
+      final message = switch (e.code) {
+        TcBackendExternalApiErrorCode.apiKeyNotConfigured ||
+        TcBackendExternalApiErrorCode.providerError ||
+        TcBackendExternalApiErrorCode.backendDisabled =>
+          'Plate Solve 서비스를 사용할 수 없습니다.',
+        _ => e.message,
+      };
       return PlateSolveResult.failure(
-        errorMessage: e.message,
+        errorMessage: message,
         solver: 'tc_backend',
         solveTimeMs: sw.elapsedMilliseconds,
       );

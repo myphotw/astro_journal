@@ -318,6 +318,17 @@ class _HomeBodyState extends State<_HomeBody> {
     final selectedEquipmentGroup = equipmentGroups.isEmpty
         ? null
         : equipmentGroups[equipmentIndex];
+    final activeSite = viewModel.activeObservationSiteViewModel.active;
+    final activeEquipmentId = activeSite.effectiveEquipmentId;
+    String? activeEquipmentName;
+    if (activeEquipmentId != null) {
+      for (final group in equipmentGroups) {
+        if (group.equipment.id == activeEquipmentId) {
+          activeEquipmentName = group.equipment.name;
+          break;
+        }
+      }
+    }
 
     // Expanded+비스크롤 Grid 때문에 휴대폰에서 상하 드래그가 막히던 구조.
     // 본문 전체를 스크롤하고, 카테고리 그리드는 shrinkWrap으로 넣는다.
@@ -326,24 +337,9 @@ class _HomeBodyState extends State<_HomeBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTheme.spacingLg,
-              AppTheme.spacingSm,
-              AppTheme.spacingLg,
-              0,
-            ),
-            child: ActiveObservationSiteSelector(
-              viewModel: viewModel.activeObservationSiteViewModel,
-              onSelectCurrentLocation: _selectCurrentSite,
-              onSelectSite: _selectSavedSite,
-              onOpenDetail: _openActiveSiteDetail,
-              onManageSites: _manageSites,
-              onSaveCurrentLocation: _saveCurrentLocation,
-            ),
-          ),
           if (condition != null)
             Padding(
+              key: const Key('home-observation-summary'),
               padding: const EdgeInsets.fromLTRB(
                 AppTheme.spacingLg,
                 AppTheme.spacingSm,
@@ -358,6 +354,20 @@ class _HomeBodyState extends State<_HomeBody> {
               ),
             ),
           if (condition != null) const SizedBox(height: AppTheme.spacingSm),
+          Padding(
+            key: const Key('home-active-site-selector'),
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+            child: ActiveObservationSiteSelector(
+              viewModel: viewModel.activeObservationSiteViewModel,
+              equipmentName: activeEquipmentName,
+              onSelectCurrentLocation: _selectCurrentSite,
+              onSelectSite: _selectSavedSite,
+              onOpenDetail: _openActiveSiteDetail,
+              onManageSites: _manageSites,
+              onSaveCurrentLocation: _saveCurrentLocation,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
             child: _SeasonPlannerEntryCard(month: now.month),

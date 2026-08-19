@@ -102,6 +102,100 @@ void main() {
   });
 
   test(
+    'remote-only M54 drives capture projection and Catalog photo source',
+    () async {
+      const m54 = CatalogObject(
+        id: 'M54',
+        number: 54,
+        catalog: CatalogType.messier,
+        name: 'Sagittarius Cluster',
+        type: 'Cluster',
+        constellation: 'Sagittarius',
+        ra: '-',
+        dec: '-',
+        magnitude: '-',
+      );
+      final result = harness(
+        snapshot: _remoteSnapshot([
+          _item('record-m54', 'sha-m54', 'M54', capturedAt),
+        ]),
+        catalogObjects: const [m54],
+        enableCaptureProjection: true,
+      );
+
+      final projection = await result.captureProjection!.reconcileObject('M54');
+      final records = await result.adapter.getByCelestialObjectId('M54');
+
+      expect(projection.captured, isTrue);
+      expect(projection.photoCount, 1);
+      expect(records, hasLength(1));
+      expect(records.single.thumbnailUrl, '/thumbnail/sha-m54');
+      expect(records.single.photoUri, '/preview/sha-m54');
+    },
+  );
+
+  test('linked local and remote M54 photo is exposed once', () async {
+    const m54 = CatalogObject(
+      id: 'M54',
+      number: 54,
+      catalog: CatalogType.messier,
+      name: 'Sagittarius Cluster',
+      type: 'Cluster',
+      constellation: 'Sagittarius',
+      ra: '-',
+      dec: '-',
+      magnitude: '-',
+    );
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item('record-m54', 'sha-m54', 'M54', capturedAt),
+      ]),
+      local: [_local('local-m54', 'M54', capturedAt)],
+      links: const {'record-m54': 'local-m54'},
+      catalogObjects: const [m54],
+    );
+
+    final records = await result.adapter.getByCelestialObjectId('M54');
+
+    expect(records, hasLength(1));
+    expect(records.single.id, 'local-m54');
+    expect(records.single.backendRecordId, 'record-m54');
+  });
+
+  test(
+    'last remote M54 delete clears photo source and captured flag',
+    () async {
+      const m54 = CatalogObject(
+        id: 'M54',
+        number: 54,
+        catalog: CatalogType.messier,
+        name: 'Sagittarius Cluster',
+        type: 'Cluster',
+        constellation: 'Sagittarius',
+        ra: '-',
+        dec: '-',
+        magnitude: '-',
+      );
+      final result = harness(
+        snapshot: _remoteSnapshot([
+          _item('record-m54', 'sha-m54', 'M54', capturedAt),
+        ]),
+        catalogObjects: const [m54],
+        outbox: _FakeOutbox(),
+        enableCaptureProjection: true,
+      );
+      final record = (await result.adapter.getAll()).single;
+
+      await result.adapter.delete(record.id);
+
+      final projection = await result.captureProjection!.reconcileObject('M54');
+      expect(await result.adapter.getByCelestialObjectId('M54'), isEmpty);
+      expect(projection.captured, isFalse);
+      expect(projection.photoCount, 0);
+    },
+  );
+
+  test(
     'unmatched catalog item is retained with canonical fallback name',
     () async {
       final item = _item('record-x', 'sha-x', 'CUSTOM-1', capturedAt);
@@ -442,7 +536,7 @@ class _Harness {
 
 class _FakeGalleryRepository implements GalleryRepository {
   _FakeGalleryRepository(this.snapshot, {this.detail});
-  final GallerySnapshot snapshot;
+  GallerySnapshot snapshot;
   final GalleryItem? detail;
   final List<String> detailIds = [];
   final List<Map<String, Object?>> localPatches = [];
@@ -477,6 +571,14 @@ class _FakeGalleryRepository implements GalleryRepository {
   @override
   Future<void> applyLocalDelete(String backendRecordId) async {
     localDeletes.add(backendRecordId);
+    snapshot = GallerySnapshot(
+      items: snapshot.items
+          .where((item) => item.backendRecordId != backendRecordId)
+          .toList(),
+      source: snapshot.source,
+      backendEnabled: snapshot.backendEnabled,
+      remoteFailed: snapshot.remoteFailed,
+    );
   }
 
   @override

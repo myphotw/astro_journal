@@ -8,6 +8,7 @@ class GalleryObservationProjection {
     required this.backendRecordId,
     required this.revision,
     required this.backendFileId,
+    this.commonFileId,
     required this.catalogObjectId,
     required this.captureDatetime,
     required this.favorite,
@@ -28,6 +29,7 @@ class GalleryObservationProjection {
   final String backendRecordId;
   final int revision;
   final String backendFileId;
+  final int? commonFileId;
   final String catalogObjectId;
   final String thumbnailUrl;
   final String previewUrl;
@@ -51,6 +53,7 @@ class GalleryObservationProjection {
     backendRecordId: item.backendRecordId,
     revision: item.revision,
     backendFileId: item.backendFileId,
+    commonFileId: item.commonFileId,
     catalogObjectId: item.catalogObjectId,
     thumbnailUrl: item.thumbnailUrl,
     previewUrl: item.previewUrl,
@@ -62,7 +65,8 @@ class GalleryObservationProjection {
     location: item.location,
     latitude: item.latitude,
     longitude: item.longitude,
-    targetName: resolvedTargetName ??
+    targetName:
+        resolvedTargetName ??
         item.catalogObjectId.ifNotEmpty ??
         item.originalFilename,
     syncState: item.syncState ?? 'SYNCED',
@@ -119,6 +123,7 @@ class GalleryObservationProjection {
       backendRecordId: backendRecordId,
       backendRevision: revision,
       backendFileId: backendFileId,
+      commonFileId: commonFileId,
       thumbnailUrl: thumbnailUrl,
       previewUrl: previewUrl,
       originalUrl: originalUrl,

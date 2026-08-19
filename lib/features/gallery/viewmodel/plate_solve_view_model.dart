@@ -75,10 +75,12 @@ class PlateSolveViewModel extends ChangeNotifier {
       return failure;
     }
 
-    final commonFileId = await _commonFileLinks?.getCommonFileId(record.id);
+    final commonFileId =
+        record.commonFileId ??
+        await _commonFileLinks?.getCommonFileId(record.id);
     if (_commonFileLinks != null && commonFileId == null) {
       final failure = PlateSolveResult.failure(
-        errorMessage: 'Backend 업로드가 완료된 사진에서만 Plate Solve를 실행할 수 있습니다.',
+        errorMessage: '사진 등록이 완료된 후 Plate Solve를 사용할 수 있습니다.',
         solver: 'tc_backend',
       );
       _setState(record.id, PlateSolveRunState(result: failure));

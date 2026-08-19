@@ -7,6 +7,7 @@ class GalleryItem {
     required this.favorite,
     required this.representative,
     required this.backendFileId,
+    this.commonFileId,
     required this.thumbnailUrl,
     required this.previewUrl,
     required this.originalUrl,
@@ -28,6 +29,7 @@ class GalleryItem {
   final bool favorite;
   final bool representative;
   final String backendFileId;
+  final int? commonFileId;
   final String thumbnailUrl;
   final String previewUrl;
   final String originalUrl;
@@ -56,6 +58,7 @@ class GalleryItem {
     favorite: favorite ?? this.favorite,
     representative: representative ?? this.representative,
     backendFileId: backendFileId,
+    commonFileId: commonFileId,
     thumbnailUrl: thumbnailUrl,
     previewUrl: previewUrl,
     originalUrl: originalUrl,
@@ -78,6 +81,7 @@ class GalleryItem {
     'favorite': favorite,
     'representative': representative,
     'file_id': backendFileId,
+    if (commonFileId != null) 'common_file_id': commonFileId,
     'filename': originalFilename,
     'mime_type': mimeType,
     'thumbnail_url': thumbnailUrl,
@@ -101,6 +105,7 @@ class GalleryItem {
       favorite: _requiredBool(json, 'favorite'),
       representative: _requiredBool(json, 'representative'),
       backendFileId: _requiredString(json, 'file_id'),
+      commonFileId: _optionalInt(json['common_file_id']),
       thumbnailUrl: _requiredString(json, 'thumbnail_url'),
       previewUrl: _requiredString(json, 'preview_url'),
       originalUrl: _requiredString(json, 'original_url'),
@@ -126,6 +131,12 @@ class GalleryItem {
     final value = json[key];
     if (value is num) return value.toInt();
     throw FormatException('Gallery item has no valid $key.');
+  }
+
+  static int? _optionalInt(Object? value) {
+    if (value is num && value.toInt() > 0) return value.toInt();
+    final parsed = int.tryParse(value?.toString() ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 
   static bool _requiredBool(Map<String, dynamic> json, String key) {

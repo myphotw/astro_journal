@@ -73,6 +73,8 @@ void main() {
     await viewModel.load();
     var selectedCurrent = 0;
     String? selectedSite;
+    var detailOpens = 0;
+    var manageOpens = 0;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -87,8 +89,9 @@ void main() {
               selectedSite = id;
               await viewModel.selectSavedSite(site);
             },
-            onOpenDetail: () {},
-            onManageSites: () {},
+            onOpenDetail: () => detailOpens++,
+            onManageSites: () => manageOpens++,
+            equipmentName: 'Seestar S30 Pro',
           ),
         ),
       ),
@@ -96,6 +99,13 @@ void main() {
 
     expect(find.text('오늘의 관측지'), findsOneWidget);
     expect(find.text('현재 위치 (임시)'), findsOneWidget);
+    expect(find.text('Alt-Az · Seestar S30 Pro'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('active-observation-site-card')))
+          .height,
+      lessThanOrEqualTo(72),
+    );
 
     await tester.tap(find.byKey(const Key('active-observation-site-selector')));
     await tester.pumpAndSettle();
@@ -103,6 +113,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(selectedSite, 'home');
     expect(selectedCurrent, 0);
+    expect(find.text('우리집'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('open-active-site-detail')));
+    await tester.tap(find.byKey(const Key('manage-observation-sites')));
+    expect(detailOpens, 1);
+    expect(manageOpens, 1);
 
     await tester.tap(find.byKey(const Key('active-observation-site-selector')));
     await tester.pumpAndSettle();

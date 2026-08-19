@@ -10,7 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/season_planner_filter_theme.dart';
 import '../../../data/models/season_planner_item.dart';
 import '../../../data/repositories/catalog_repository.dart';
-import '../../../data/repositories/shooting_record_repository.dart';
+import '../../../data/repositories/gallery_shooting_record_repository_adapter.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/exposure_policy.dart';
@@ -43,7 +43,7 @@ class SeasonPlannerScreen extends StatelessWidget {
 
   static Future<void> open(BuildContext context) {
     final catalogRepo = context.read<CatalogRepository>();
-    final shootingRepo = context.read<ShootingRecordRepository>();
+    final shootingRepo = context.read<GalleryShootingRecordRepositoryAdapter>();
     final filterService = context.read<SeasonPlannerFilterService>();
 
     return Navigator.of(context).push<void>(
@@ -355,7 +355,7 @@ class _SeasonObjectGrid extends StatelessWidget {
 
   Future<void> _openDetail(BuildContext context, SeasonPlannerItem item) async {
     final catalogRepo = context.read<CatalogRepository>();
-    final shootingRepo = context.read<ShootingRecordRepository>();
+    final shootingRepo = context.read<GalleryShootingRecordRepositoryAdapter>();
     final metadataSvc = context.read<MetadataService>();
     final registrationSvc = context.read<PhotoRegistrationService>();
     final equipmentRepo = context.read<EquipmentRepository>();

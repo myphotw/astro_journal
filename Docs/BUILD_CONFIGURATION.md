@@ -17,8 +17,11 @@ The application uses `https://onepieces.synology.me:8443` by default. Developers
 From the project root run:
 
 ```powershell
-.\scripts\build_release.ps1
+.\scripts\build_app.ps1 -Mode Debug
+.\scripts\build_app.ps1 -Mode Release
 ```
+
+`scripts/build_release.ps1` remains as a backward-compatible Release wrapper.
 
 The helper validates both required values without printing them, runs `flutter pub get`, injects the backend token through a temporary Dart-define file, builds the release APK, removes the temporary file, and prints the APK path and size.
 

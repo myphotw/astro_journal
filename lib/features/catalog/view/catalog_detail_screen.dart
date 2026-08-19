@@ -132,9 +132,7 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
             child: const Text('취소'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () async {
               Navigator.of(dialogContext).pop();
               await viewModel.deleteObject();
@@ -216,19 +214,12 @@ class _CatalogDetailPage extends StatelessWidget {
           captured: viewModel.isCaptured,
         ),
         const SizedBox(height: 12),
-        SkyMapLocationButton(
-          object: object,
-          popBeforeNavigate: false,
-        ),
+        SkyMapLocationButton(object: object, popBeforeNavigate: false),
         const SizedBox(height: 12),
         _InfoSection(
           items: [
             _InfoItem(label: '대표명', value: object.displayName),
-            _InfoItem(
-              label: '교차 카탈로그',
-              value: crossCatalog,
-              multiline: true,
-            ),
+            _InfoItem(label: '교차 카탈로그', value: crossCatalog, multiline: true),
             _InfoItem(label: '통칭', value: object.displayCommonName),
             _InfoItem(label: '별칭', value: alias, multiline: true),
             _InfoItem(label: '분류', value: object.displayType),
@@ -246,9 +237,7 @@ class _CatalogDetailPage extends StatelessWidget {
         ],
         if (viewModel.exposureGuidance != null) ...[
           const SizedBox(height: 12),
-          CatalogExposureGuidanceSection(
-            guidance: viewModel.exposureGuidance!,
-          ),
+          CatalogExposureGuidanceSection(guidance: viewModel.exposureGuidance!),
         ],
         const SizedBox(height: 12),
         EquipmentRecommendationSection(
@@ -267,14 +256,9 @@ class _CatalogDetailPage extends StatelessWidget {
             ),
             _InfoItem(
               label: '촬영 횟수',
-              value: viewModel.isLoading
-                  ? '-'
-                  : '${viewModel.captureCount}회',
+              value: viewModel.isLoading ? '-' : '${viewModel.captureCount}회',
             ),
-            _InfoItem(
-              label: '마지막 촬영일',
-              value: lastCapturedText,
-            ),
+            _InfoItem(label: '마지막 촬영일', value: lastCapturedText),
           ],
         ),
         if (viewModel.records.isNotEmpty) ...[
@@ -285,6 +269,9 @@ class _CatalogDetailPage extends StatelessWidget {
             onRefresh: () => viewModel.load(),
             onSetRepresentative: viewModel.setRepresentativePhoto,
           ),
+        ] else if (viewModel.isCaptured && viewModel.captureCount > 0) ...[
+          const SizedBox(height: 12),
+          _PhotoPendingCard(onRefresh: viewModel.load),
         ],
       ],
     );
@@ -324,9 +311,9 @@ class _HeaderCard extends StatelessWidget {
               Text(
                 displayId,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: accentColor,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: accentColor,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const Spacer(),
               Icon(
@@ -340,9 +327,9 @@ class _HeaderCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               name,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ],
@@ -370,10 +357,9 @@ class _DescriptionCard extends StatelessWidget {
         children: [
           Text(
             '상세 설명',
-            style: Theme.of(context)
-                .textTheme
-                .labelMedium
-                ?.copyWith(color: AppColors.textSecondary),
+            style: Theme.of(
+              context,
+            ).textTheme.labelMedium?.copyWith(color: AppColors.textSecondary),
           ),
           const Divider(height: 16, color: AppColors.textSecondary),
           Text(
@@ -392,10 +378,7 @@ class _DescriptionCard extends StatelessWidget {
 }
 
 class _InfoSection extends StatelessWidget {
-  const _InfoSection({
-    this.title,
-    required this.items,
-  });
+  const _InfoSection({this.title, required this.items});
 
   final String? title;
   final List<_InfoItem> items;
@@ -415,10 +398,9 @@ class _InfoSection extends StatelessWidget {
           if (title != null) ...[
             Text(
               title!,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium
-                  ?.copyWith(color: AppColors.textSecondary),
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: AppColors.textSecondary),
             ),
             const Divider(height: 16, color: AppColors.textSecondary),
           ],
@@ -495,6 +477,7 @@ class _PhotoListSection extends StatelessWidget {
         .toList();
 
     return Container(
+      key: const Key('catalog-photo-list'),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -509,10 +492,9 @@ class _PhotoListSection extends StatelessWidget {
             children: [
               Text(
                 '촬영 사진',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelMedium
-                    ?.copyWith(color: AppColors.textSecondary),
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
               Text(
                 '${withPhoto.length}장',
@@ -527,10 +509,7 @@ class _PhotoListSection extends StatelessWidget {
           if (representative != null) ...[
             const Text(
               '대표 사진',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 8),
             _RepresentativePhoto(
@@ -543,10 +522,7 @@ class _PhotoListSection extends StatelessWidget {
           if (withPhoto.length > 1) ...[
             const Text(
               '썸네일 (길게 눌러 대표 지정)',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 8),
             SizedBox(
@@ -562,8 +538,7 @@ class _PhotoListSection extends StatelessWidget {
                     allRecords: records,
                     isRepresentative: record.isRepresentative,
                     onRefresh: onRefresh,
-                    onSetRepresentative: () =>
-                        onSetRepresentative(record.id),
+                    onSetRepresentative: () => onSetRepresentative(record.id),
                   );
                 },
               ),
@@ -578,6 +553,29 @@ class _PhotoListSection extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PhotoPendingCard extends StatelessWidget {
+  const _PhotoPendingCard({required this.onRefresh});
+
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      key: const Key('catalog-photo-pending'),
+      child: ListTile(
+        leading: const Icon(Icons.photo_library_outlined),
+        title: const Text('촬영 사진을 불러오지 못했습니다.'),
+        subtitle: const Text('네트워크 또는 Gallery 캐시 상태를 확인해 주세요.'),
+        trailing: IconButton(
+          tooltip: '촬영 사진 새로고침',
+          onPressed: () => onRefresh(),
+          icon: const Icon(Icons.refresh),
+        ),
       ),
     );
   }
@@ -688,11 +686,7 @@ class _ThumbnailTile extends StatelessWidget {
             const Positioned(
               top: 4,
               right: 4,
-              child: Icon(
-                Icons.star,
-                color: AppColors.solar,
-                size: 16,
-              ),
+              child: Icon(Icons.star, color: AppColors.solar, size: 16),
             ),
         ],
       ),
@@ -833,8 +827,6 @@ class _Thumbnail extends StatelessWidget {
   }
 }
 
-
-
 class _AddPhotoFab extends StatelessWidget {
   const _AddPhotoFab({required this.accentColor});
 
@@ -851,9 +843,9 @@ class _AddPhotoFab extends StatelessWidget {
           onPressed: isPicking
               ? null
               : () => _onPickPhoto(
-                    context,
-                    context.read<CatalogDetailViewModel>(),
-                  ),
+                  context,
+                  context.read<CatalogDetailViewModel>(),
+                ),
           icon: isPicking
               ? const SizedBox(
                   width: 20,
@@ -882,9 +874,9 @@ class _AddPhotoFab extends StatelessWidget {
 
     if (payload == null) {
       if (viewModel.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(viewModel.errorMessage!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(viewModel.errorMessage!)));
       }
       return;
     }
@@ -904,28 +896,29 @@ class _AddPhotoFab extends StatelessWidget {
       }
     }());
 
-    final outcomes =
-        await Navigator.of(context).push<List<RegistrationOutcome>>(
-      PageRouteBuilder<List<RegistrationOutcome>>(
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return RegistrationScreen.single(
-            session: session,
-            allObjects: const [],
-            skipTargetStep: true,
-          );
-        },
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            ),
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 260),
-      ),
-    );
+    final outcomes = await Navigator.of(context)
+        .push<List<RegistrationOutcome>>(
+          PageRouteBuilder<List<RegistrationOutcome>>(
+            pageBuilder: (context, animation, secondaryAnimation) {
+              return RegistrationScreen.single(
+                session: session,
+                allObjects: const [],
+                skipTargetStep: true,
+              );
+            },
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                    child: child,
+                  );
+                },
+            transitionDuration: const Duration(milliseconds: 260),
+          ),
+        );
 
     if (!context.mounted) return;
     if (outcomes == null || outcomes.isEmpty) {
@@ -943,14 +936,13 @@ class _AddPhotoFab extends StatelessWidget {
     if (!context.mounted) return;
 
     if (viewModel.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(viewModel.errorMessage!)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(viewModel.errorMessage!)));
     } else if (saved != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('사진이 저장되었습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('사진이 저장되었습니다.')));
     }
   }
 }
-

@@ -27,6 +27,7 @@ class ShootingRecord {
     this.backendRecordId,
     this.backendRevision,
     this.backendFileId,
+    this.commonFileId,
     this.thumbnailUrl,
     this.previewUrl,
     this.originalUrl,
@@ -71,6 +72,7 @@ class ShootingRecord {
   /// Remote Gallery fields are transient projection data and are not written
   /// into the V1 shooting_records table.
   final String? backendFileId;
+  final int? commonFileId;
   final String? backendRecordId;
   final int? backendRevision;
   final String? thumbnailUrl;
@@ -105,14 +107,16 @@ class ShootingRecord {
       DatabaseConstants.colOriginalFilename: originalFilename,
       DatabaseConstants.colMemo: memo,
       DatabaseConstants.colLocation: location,
-      DatabaseConstants.colExifJson:
-          exif != null ? jsonEncode(exif!.toJson()) : null,
+      DatabaseConstants.colExifJson: exif != null
+          ? jsonEncode(exif!.toJson())
+          : null,
       DatabaseConstants.colMetadataJson: metadataJson,
       DatabaseConstants.colCreatedAt: createdAt.toIso8601String(),
       DatabaseConstants.colIsRepresentative: isRepresentative ? 1 : 0,
       DatabaseConstants.colIsFavorite: isFavorite ? 1 : 0,
-      DatabaseConstants.colPlateSolveJson:
-          plateSolve != null ? PlateSolveResult.encode(plateSolve!) : null,
+      DatabaseConstants.colPlateSolveJson: plateSolve != null
+          ? PlateSolveResult.encode(plateSolve!)
+          : null,
       DatabaseConstants.colDetectMethod: detectMethod?.value,
       DatabaseConstants.colAnalysisStatus: analysisStatus.value,
     };
@@ -124,16 +128,15 @@ class ShootingRecord {
     return ShootingRecord(
       id: map[DatabaseConstants.colId] as String,
       celestialObjectId: map[DatabaseConstants.colCelestialObjectId] as String,
-      capturedAt: DateTime.parse(map[DatabaseConstants.colCapturedAt] as String),
+      capturedAt: DateTime.parse(
+        map[DatabaseConstants.colCapturedAt] as String,
+      ),
       photoUri: map[DatabaseConstants.colPhotoUri] as String?,
-      originalFilename:
-          map[DatabaseConstants.colOriginalFilename] as String?,
+      originalFilename: map[DatabaseConstants.colOriginalFilename] as String?,
       memo: map[DatabaseConstants.colMemo] as String? ?? '',
       location: map[DatabaseConstants.colLocation] as String?,
       exif: exifJson != null && exifJson.isNotEmpty
-          ? ExifInfo.fromJson(
-              jsonDecode(exifJson) as Map<String, dynamic>,
-            )
+          ? ExifInfo.fromJson(jsonDecode(exifJson) as Map<String, dynamic>)
           : null,
       metadataJson: map[DatabaseConstants.colMetadataJson] as String?,
       createdAt: DateTime.parse(map[DatabaseConstants.colCreatedAt] as String),
@@ -173,6 +176,7 @@ class ShootingRecord {
     String? backendRecordId,
     int? backendRevision,
     String? backendFileId,
+    int? commonFileId,
     String? thumbnailUrl,
     String? previewUrl,
     String? originalUrl,
@@ -192,13 +196,13 @@ class ShootingRecord {
       createdAt: createdAt ?? this.createdAt,
       isRepresentative: isRepresentative ?? this.isRepresentative,
       isFavorite: isFavorite ?? this.isFavorite,
-      plateSolve:
-          clearPlateSolve ? null : (plateSolve ?? this.plateSolve),
+      plateSolve: clearPlateSolve ? null : (plateSolve ?? this.plateSolve),
       detectMethod: detectMethod ?? this.detectMethod,
       analysisStatus: analysisStatus ?? this.analysisStatus,
       backendRecordId: backendRecordId ?? this.backendRecordId,
       backendRevision: backendRevision ?? this.backendRevision,
       backendFileId: backendFileId ?? this.backendFileId,
+      commonFileId: commonFileId ?? this.commonFileId,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       previewUrl: previewUrl ?? this.previewUrl,
       originalUrl: originalUrl ?? this.originalUrl,

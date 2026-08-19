@@ -13,6 +13,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/repositories/catalog_repository.dart';
+import '../../../data/repositories/gallery_shooting_record_repository_adapter.dart';
 import '../../../data/repositories/shooting_record_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
@@ -170,7 +171,7 @@ class _CatalogScreenState extends State<CatalogScreen>
     required List<CatalogObject> navigationObjects,
   }) async {
     final catalogRepo = context.read<CatalogRepository>();
-    final shootingRepo = context.read<ShootingRecordRepository>();
+    final shootingRepo = context.read<GalleryShootingRecordRepositoryAdapter>();
     final metadataSvc = context.read<MetadataService>();
     final registrationSvc = context.read<PhotoRegistrationService>();
     final equipmentRepo = context.read<EquipmentRepository>();
@@ -688,7 +689,7 @@ class _AddCatalogEntryScreenState extends State<_AddCatalogEntryScreen> {
           builder: (_) => ChangeNotifierProvider(
             create: (_) => CatalogDetailViewModel(
               newObject,
-              widget.shootingRecordRepository,
+              context.read<GalleryShootingRecordRepositoryAdapter>(),
               widget.catalogRepository,
               widget.registrationService,
               widget.metadataService,

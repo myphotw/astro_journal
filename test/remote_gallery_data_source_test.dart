@@ -12,7 +12,12 @@ void main() {
       baseUrl: 'https://backend.test',
       client: MockClient((request) async {
         requested = request.url;
-        return http.Response(jsonEncode({'items': [_astroItemJson()]}), 200);
+        return http.Response(
+          jsonEncode({
+            'items': [_astroItemJson()],
+          }),
+          200,
+        );
       }),
     );
 
@@ -24,6 +29,7 @@ void main() {
     expect(item.revision, 7);
     expect(item.catalogObjectId, 'M42');
     expect(item.backendFileId, 'sha-1');
+    expect(item.commonFileId, 178);
     expect(item.favorite, isTrue);
     expect(item.representative, isTrue);
     expect(item.latitude, 33.3);
@@ -64,6 +70,7 @@ Map<String, dynamic> _astroItemJson() => {
   'favorite': true,
   'representative': true,
   'file_id': 'sha-1',
+  'common_file_id': 178,
   'filename': 'm42.fit',
   'mime_type': 'image/fits',
   'thumbnail_url': '/media/thumb/sha-1',

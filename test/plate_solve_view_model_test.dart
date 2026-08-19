@@ -2,6 +2,7 @@ import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/core/constants/equipment_kind.dart';
 import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/models/api_test_result.dart';
+import 'package:astro_journal/data/datasources/common_file_link_datasource.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
@@ -19,7 +20,12 @@ import 'package:astro_journal/services/celestial_object_search_service.dart';
 import 'package:astro_journal/services/plate_solve/plate_solve_provider.dart';
 import 'package:astro_journal/services/plate_solve_service.dart';
 import 'package:astro_journal/services/plate_solve_settings_service.dart';
+import 'package:astro_journal/services/tc_backend_external_api_client.dart';
+import 'package:astro_journal/services/tc_backend_plate_solve_service.dart';
+import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -46,18 +52,21 @@ void main() {
 
   PlateSolveViewModel buildViewModel({
     required _RecordingPlateSolveProvider provider,
+    PlateSolveService? service,
+    CommonFileLinkDataSource? commonFileLinks,
   }) {
     final searchService = CelestialObjectSearchService(
       catalogRepository,
       photoObjectRepository,
     );
     return PlateSolveViewModel(
-      PlateSolveService([provider], PlateSolveSettingsService()),
+      service ?? PlateSolveService([provider], PlateSolveSettingsService()),
       PlateSolveSettingsService(),
       galleryViewModel,
       searchService,
       catalogRepository,
       equipmentRepository,
+      commonFileLinks: commonFileLinks,
     );
   }
 
@@ -165,7 +174,122 @@ void main() {
       expect(result.success, isFalse);
       expect(provider.calls, isEmpty);
     });
+
+    test('등록 전 사진은 direct provider 없이 안전하게 안내한다', () async {
+      final provider = _RecordingPlateSolveProvider(
+        PlateSolveResult.success(centerRa: 1, centerDec: 1),
+      );
+      final viewModel = buildViewModel(
+        provider: provider,
+        commonFileLinks: const _FakeCommonFileLinks(null),
+      );
+      final record = ShootingRecord(
+        id: 'pending-photo',
+        celestialObjectId: 'M31',
+        capturedAt: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        photoUri: '/pending.jpg',
+      );
+
+      final result = await viewModel.solve(record);
+
+      expect(result.success, isFalse);
+      expect(result.errorMessage, '사진 등록이 완료된 후 Plate Solve를 사용할 수 있습니다.');
+      expect(provider.calls, isEmpty);
+    });
+
+    test('common_file_id가 있으면 Backend-only solve 결과를 저장한다', () async {
+      var backendCalls = 0;
+      final provider = _RecordingPlateSolveProvider(
+        PlateSolveResult.failure(errorMessage: 'direct must not run'),
+      );
+      final service = _backendPlateSolveService(provider, (request) async {
+        backendCalls++;
+        return http.Response(
+          '{"job_id":"job-1","status":"COMPLETED","common_file_id":178,'
+          '"provider":"astrometry.net","result":{"ra":10,"dec":20}}',
+          200,
+        );
+      });
+      final viewModel = buildViewModel(
+        provider: provider,
+        service: service,
+        commonFileLinks: const _FakeCommonFileLinks(null),
+      );
+
+      final result = await viewModel.solve(_registeredRecord());
+
+      expect(result.success, isTrue);
+      expect(backendCalls, 1);
+      expect(provider.calls, isEmpty);
+      expect(
+        shootingRecordRepository.updateCalls.last.plateSolve?.success,
+        isTrue,
+      );
+    });
+
+    test('Backend provider unavailable은 credential 용어 없이 안내한다', () async {
+      final provider = _RecordingPlateSolveProvider(
+        PlateSolveResult.failure(errorMessage: 'direct must not run'),
+      );
+      final service = _backendPlateSolveService(
+        provider,
+        (_) async => http.Response(
+          '{"detail":{"code":"API_KEY_NOT_CONFIGURED",'
+          '"message":"provider detail"}}',
+          503,
+        ),
+      );
+      final viewModel = buildViewModel(
+        provider: provider,
+        service: service,
+        commonFileLinks: const _FakeCommonFileLinks(null),
+      );
+
+      final result = await viewModel.solve(_registeredRecord());
+
+      expect(result.success, isFalse);
+      expect(result.errorMessage, 'Plate Solve 서비스를 사용할 수 없습니다.');
+      expect(result.errorMessage, isNot(contains('API Key')));
+      expect(provider.calls, isEmpty);
+    });
   });
+}
+
+PlateSolveService _backendPlateSolveService(
+  PlateSolveProvider provider,
+  Future<http.Response> Function(http.Request request) handler,
+) {
+  final client = TcBackendExternalApiClient(
+    settingsService: TcBackendSettingsService(
+      useBuildConfiguration: true,
+      buildBaseUrl: 'https://backend.test',
+    ),
+    client: MockClient(handler),
+  );
+  return PlateSolveService(
+    [provider],
+    PlateSolveSettingsService(),
+    backendService: TcBackendPlateSolveService(client: client),
+  );
+}
+
+ShootingRecord _registeredRecord() => ShootingRecord(
+  id: 'registered-photo',
+  celestialObjectId: 'M31',
+  capturedAt: DateTime(2026, 1, 1),
+  createdAt: DateTime(2026, 1, 1),
+  photoUri: '/registered.jpg',
+  commonFileId: 178,
+);
+
+class _FakeCommonFileLinks implements CommonFileLinkDataSource {
+  const _FakeCommonFileLinks(this.value);
+
+  final int? value;
+
+  @override
+  Future<int?> getCommonFileId(String localRecordId) async => value;
 }
 
 class _SolveCall {
@@ -270,8 +394,7 @@ class _FakeCatalogRepository implements CatalogRepository {
     required double raDeg,
     required double decDeg,
     required double radiusDeg,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<List<CatalogObject>> findObjectsInPhotoField({
@@ -280,8 +403,7 @@ class _FakeCatalogRepository implements CatalogRepository {
     required double fovWidthDeg,
     required double fovHeightDeg,
     required double rotationDeg,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<CatalogObject?> getById(String id) async => objects[id];
@@ -311,15 +433,15 @@ class _FakeCatalogRepository implements CatalogRepository {
 class _FakeEquipmentRepository implements EquipmentRepository {
   @override
   Future<List<Equipment>> getAll({bool activeOnly = false}) async => const [
-        Equipment(
-          id: 'cam-1',
-          name: 'Seestar S50',
-          kind: EquipmentKind.smartTelescope,
-          purpose: EquipmentPurpose.imaging,
-          fovWidthDegrees: 1.28,
-          fovHeightDegrees: 0.72,
-        ),
-      ];
+    Equipment(
+      id: 'cam-1',
+      name: 'Seestar S50',
+      kind: EquipmentKind.smartTelescope,
+      purpose: EquipmentPurpose.imaging,
+      fovWidthDegrees: 1.28,
+      fovHeightDegrees: 0.72,
+    ),
+  ];
 
   @override
   Future<Equipment?> getById(String id) async => null;
@@ -363,12 +485,12 @@ class _FakeShootingRecordRepository implements ShootingRecordRepository {
     String celestialObjectId,
     DateTime capturedAt, {
     Duration tolerance = const Duration(minutes: 1),
-  }) async =>
-      null;
+  }) async => null;
 
   @override
-  Future<ShootingRecord?> findByOriginalFilename(String originalFilename) async =>
-      null;
+  Future<ShootingRecord?> findByOriginalFilename(
+    String originalFilename,
+  ) async => null;
 
   @override
   Future<List<ShootingRecord>> getAll() async => const [];
@@ -376,8 +498,7 @@ class _FakeShootingRecordRepository implements ShootingRecordRepository {
   @override
   Future<List<ShootingRecord>> getByCelestialObjectId(
     String celestialObjectId,
-  ) async =>
-      const [];
+  ) async => const [];
 
   @override
   Future<ShootingRecord?> getById(String id) async => null;
