@@ -18,9 +18,16 @@ import '../../../services/observation_site_validator.dart';
 import '../../horizon_scan/view/horizon_scan_screen.dart';
 
 class ObservationSiteEditScreen extends StatefulWidget {
-  const ObservationSiteEditScreen({super.key, this.site});
+  const ObservationSiteEditScreen({
+    super.key,
+    this.site,
+    this.initialLatitude,
+    this.initialLongitude,
+  });
 
   final ObservationSite? site;
+  final double? initialLatitude;
+  final double? initialLongitude;
 
   @override
   State<ObservationSiteEditScreen> createState() =>
@@ -57,8 +64,12 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     _siteId = site?.id ?? _uuid.v4();
     _name = TextEditingController(text: site?.name);
     _address = TextEditingController(text: site?.address);
-    _latitude = TextEditingController(text: site?.latitude.toString());
-    _longitude = TextEditingController(text: site?.longitude.toString());
+    _latitude = TextEditingController(
+      text: (site?.latitude ?? widget.initialLatitude)?.toString(),
+    );
+    _longitude = TextEditingController(
+      text: (site?.longitude ?? widget.initialLongitude)?.toString(),
+    );
     _bortle = TextEditingController(text: site?.bortle?.toString());
     _sqm = TextEditingController(text: site?.sqm?.toString());
     _minAltitude = TextEditingController(
@@ -224,7 +235,7 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     final result = await showDialog<HorizonPoint>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(existing == null ? 'Horizon 지점 추가' : 'Horizon 지점 수정'),
+        title: Text(existing == null ? '방향별 고도 추가' : '방향별 고도 수정'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -304,7 +315,7 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     final result = await showDialog<BlockedAzimuthRange>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(existing == null ? '관측 불가 구간 추가' : '관측 불가 구간 수정'),
+        title: Text(existing == null ? '막힌 방향 추가' : '막힌 방향 수정'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -558,6 +569,14 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
                   value: null,
                   child: Text('지정 안 함'),
                 ),
+                if (_defaultEquipmentId != null &&
+                    !_equipment.any(
+                      (equipment) => equipment.id == _defaultEquipmentId,
+                    ))
+                  DropdownMenuItem<String?>(
+                    value: _defaultEquipmentId,
+                    child: const Text('저장된 장비'),
+                  ),
                 ..._equipment.map(
                   (equipment) => DropdownMenuItem<String?>(
                     value: equipment.id,
@@ -582,7 +601,7 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               ],
             ),
             _textField(_memo, '메모', maxLines: 3),
-            _sectionTitle('촬영 가능 범위'),
+            _sectionTitle('촬영 가능 시야'),
             OutlinedButton.icon(
               key: const Key('start-horizon-scan'),
               onPressed: _openHorizonScan,
@@ -592,11 +611,11 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
             const Padding(
               padding: EdgeInsets.only(top: 6, bottom: 12),
               child: Text(
-                '카메라로 방향과 기울기를 기록합니다. 현재 Horizon 데이터는 변경하지 않습니다.',
+                '카메라로 주변 방향과 기울기를 확인합니다.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
             ),
-            Text('관측 불가 방향', style: Theme.of(context).textTheme.titleSmall),
+            Text('막힌 방향', style: Theme.of(context).textTheme.titleSmall),
             ..._blockedRanges.map(
               (range) => ListTile(
                 key: Key('blocked-range-${range.id}'),
@@ -614,17 +633,17 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               key: const Key('add-blocked-range'),
               onPressed: _editBlockedRange,
               icon: const Icon(Icons.add),
-              label: const Text('관측 불가 구간 추가'),
+              label: const Text('막힌 방향 추가'),
             ),
             const SizedBox(height: 16),
-            Text('Horizon 지점', style: Theme.of(context).textTheme.titleSmall),
+            Text('방향별 최소/최대 고도', style: Theme.of(context).textTheme.titleSmall),
             ..._points.map(
               (point) => ListTile(
                 key: Key('horizon-point-${point.id}'),
                 contentPadding: EdgeInsets.zero,
-                title: Text('방위각 ${point.azimuth}°'),
+                title: Text('방향 ${point.azimuth}°'),
                 subtitle: Text(
-                  '최소 ${point.minAltitude}° · 최대 ${point.maxAltitude?.toString() ?? '제한 없음'}',
+                  '아래 ${point.minAltitude}°까지 가림 · 위 ${point.maxAltitude?.toString() ?? '제한 없음'}',
                 ),
                 onTap: () => _editHorizonPoint(point),
                 trailing: IconButton(
@@ -637,7 +656,7 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               key: const Key('add-horizon-point'),
               onPressed: _editHorizonPoint,
               icon: const Icon(Icons.add),
-              label: const Text('Horizon 지점 추가'),
+              label: const Text('방향별 고도 추가'),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(

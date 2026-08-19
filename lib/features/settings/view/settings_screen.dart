@@ -185,11 +185,11 @@ class _ObservationSiteSection extends StatelessWidget {
           color: AppColors.textSecondary,
         ),
         title: const Text(
-          '관측지 등록·관리',
+          '관측지 관리',
           style: TextStyle(color: AppColors.textPrimary),
         ),
         subtitle: const Text(
-          '위치, 장비, 추적 방식, 촬영 가능 범위',
+          '저장된 관측지 목록',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
         trailing: const Icon(

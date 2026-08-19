@@ -28,6 +28,10 @@ import '../../../services/season_planner_service.dart';
 import '../../catalog/viewmodel/catalog_view_model.dart';
 import '../../season/view/season_planner_screen.dart';
 import '../../settings/view/settings_screen.dart';
+import '../../settings/view/observation_site_edit_screen.dart';
+import '../../settings/view/observation_site_list_screen.dart';
+import '../../observation_site/view/observation_site_detail_screen.dart';
+import '../../observation_site/widgets/active_observation_site_selector.dart';
 import '../viewmodel/home_view_model.dart';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -163,6 +167,61 @@ class _HomeBodyState extends State<_HomeBody> {
 
   HomeViewModel get viewModel => widget.viewModel;
 
+  Future<void> _selectCurrentSite() async {
+    await viewModel.activeObservationSiteViewModel.selectCurrentLocation();
+    await viewModel.refreshForActiveSite();
+  }
+
+  Future<void> _selectSavedSite(String id) async {
+    final activeViewModel = viewModel.activeObservationSiteViewModel;
+    for (final site in activeViewModel.sites) {
+      if (site.id != id) continue;
+      await activeViewModel.selectSavedSite(site);
+      await viewModel.refreshForActiveSite();
+      return;
+    }
+  }
+
+  void _openActiveSiteDetail() {
+    final siteId =
+        viewModel.activeObservationSiteViewModel.active.selectedSiteId;
+    if (siteId == null) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ObservationSiteDetailScreen(
+          siteId: siteId,
+          homeViewModel: viewModel,
+          activeViewModel: viewModel.activeObservationSiteViewModel,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _manageSites() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const ObservationSiteListScreen()),
+    );
+    await viewModel.activeObservationSiteViewModel.load(force: true);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _saveCurrentLocation() async {
+    final active = viewModel.activeObservationSiteViewModel.active;
+    if (active.latitude == null || active.longitude == null) return;
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ObservationSiteEditScreen(
+          initialLatitude: active.latitude,
+          initialLongitude: active.longitude,
+        ),
+      ),
+    );
+    if (changed == true) {
+      await viewModel.activeObservationSiteViewModel.load(force: true);
+      if (mounted) setState(() {});
+    }
+  }
+
   String _seasonText(int month) {
     if (month >= 3 && month <= 5) return '봄 하늘';
     if (month >= 6 && month <= 8) return '여름 하늘';
@@ -267,6 +326,22 @@ class _HomeBodyState extends State<_HomeBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.spacingLg,
+              AppTheme.spacingSm,
+              AppTheme.spacingLg,
+              0,
+            ),
+            child: ActiveObservationSiteSelector(
+              viewModel: viewModel.activeObservationSiteViewModel,
+              onSelectCurrentLocation: _selectCurrentSite,
+              onSelectSite: _selectSavedSite,
+              onOpenDetail: _openActiveSiteDetail,
+              onManageSites: _manageSites,
+              onSaveCurrentLocation: _saveCurrentLocation,
+            ),
+          ),
           if (condition != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(

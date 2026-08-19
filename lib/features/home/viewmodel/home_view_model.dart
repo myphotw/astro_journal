@@ -38,6 +38,7 @@ import '../../../services/scheduler_engine.dart';
 import '../../../services/weather_cache_service.dart';
 import '../../../services/weather_service.dart';
 import '../../../services/rain_observation_policy.dart';
+import '../../observation_site/viewmodel/active_observation_site_view_model.dart';
 
 // ── Value objects ────────────────────────────────────────────────────────────
 
@@ -219,6 +220,7 @@ class HomeViewModel extends ChangeNotifier {
     this._equipmentRepository,
     this._equipmentRecommendationService,
     this._schedulerEngine,
+    this._activeObservationSiteViewModel,
   );
 
   final CatalogRepository _catalogRepository;
@@ -233,9 +235,11 @@ class HomeViewModel extends ChangeNotifier {
   final EquipmentRepository _equipmentRepository;
   final EquipmentRecommendationService _equipmentRecommendationService;
   final SchedulerEngine _schedulerEngine;
+  final ActiveObservationSiteViewModel _activeObservationSiteViewModel;
 
   bool _isLoading = false;
   bool _isWeatherLoading = false;
+  int _weatherRequestGeneration = 0;
   String? _errorMessage;
   List<RecommendationResult> _recommendedObjects = [];
   List<RecommendationResult> _allRecommendedObjects = [];
@@ -291,10 +295,13 @@ class HomeViewModel extends ChangeNotifier {
   double get longitude => _longitude;
   ObservationContext? get lastSessionContext => _lastSessionContext;
   TrackingMode get trackingMode => _trackingMode;
+  ActiveObservationSiteViewModel get activeObservationSiteViewModel =>
+      _activeObservationSiteViewModel;
 
   Future<void> setTrackingMode(TrackingMode mode) async {
     if (_trackingMode == mode) return;
     _trackingMode = mode;
+    _activeObservationSiteViewModel.setTemporaryTrackingOverride(mode);
     notifyListeners();
 
     if (_cachedAllObjects.isEmpty || _nightStart == null || _nightEnd == null) {
@@ -584,7 +591,14 @@ class HomeViewModel extends ChangeNotifier {
       moonIllumination: moonIllumination ?? context.moonIllumination,
     );
 
-    final equipment = await _equipmentRepository.getAll(activeOnly: true);
+    final allEquipment = await _equipmentRepository.getAll(activeOnly: true);
+    final preferredEquipmentId =
+        _activeObservationSiteViewModel.active.effectiveEquipmentId;
+    final equipment = preferredEquipmentId == null
+        ? allEquipment
+        : allEquipment
+              .where((item) => item.id == preferredEquipmentId)
+              .toList();
     final result = await _recommendationEngine.build(
       catalog: allObjects,
       settings: _recommendationSettings,
@@ -941,6 +955,8 @@ class HomeViewModel extends ChangeNotifier {
 
     final sw = Stopwatch()..start();
     try {
+      await _activeObservationSiteViewModel.load();
+      _applyActiveSiteDefaults();
       final now = DateTime.now();
 
       _recommendationSettings = await _recommendationSettingsService.load();
@@ -953,7 +969,10 @@ class HomeViewModel extends ChangeNotifier {
       );
 
       final moon = _moonFromPhase(ObservationScoreService.computeMoonInfo(now));
-      _observationCondition = _buildCondition(moon: moon, siteName: '현재 위치');
+      _observationCondition = _buildCondition(
+        moon: moon,
+        siteName: _activeObservationSiteViewModel.active.displayName,
+      );
 
       if (_nightStart == null || _nightEnd == null) {
         final est = _estimateNightWindow(now);
@@ -1050,12 +1069,44 @@ class HomeViewModel extends ChangeNotifier {
     await _fetchWeather();
   }
 
+  Future<void> refreshForActiveSite() async {
+    _applyActiveSiteDefaults();
+    await _fetchWeather();
+  }
+
+  void _applyActiveSiteDefaults() {
+    final active = _activeObservationSiteViewModel.active;
+    _trackingMode = active.effectiveTrackingMode;
+    if (active.latitude != null && active.longitude != null) {
+      _latitude = active.latitude!;
+      _longitude = active.longitude!;
+      _hasLocation = true;
+    }
+  }
+
   Future<void> _fetchWeather() async {
+    final requestGeneration = ++_weatherRequestGeneration;
     _isWeatherLoading = true;
     notifyListeners();
 
     try {
-      final location = await _locationService.getCurrentLocation();
+      final active = _activeObservationSiteViewModel.active;
+      final location = active.isCurrentLocation
+          ? await _locationService.getCurrentLocation()
+          : LocationData(
+              latitude: active.latitude!,
+              longitude: active.longitude!,
+              accuracy: 0,
+              timestamp: DateTime.now(),
+            );
+      if (requestGeneration != _weatherRequestGeneration) return;
+
+      if (active.isCurrentLocation) {
+        _activeObservationSiteViewModel.updateCurrentLocation(
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+      }
 
       final latDiff = (_latitude - location.latitude).abs();
       final lonDiff = (_longitude - location.longitude).abs();
@@ -1077,6 +1128,7 @@ class HomeViewModel extends ChangeNotifier {
 
       final weather = results[0] as WeatherData;
       final forecasts = results[1] as List<WeatherForecastSlot>;
+      if (requestGeneration != _weatherRequestGeneration) return;
 
       await _weatherCacheService.save(
         latitude: location.latitude,
@@ -1090,8 +1142,10 @@ class HomeViewModel extends ChangeNotifier {
         longitude: location.longitude,
         weather: weather,
         forecasts: forecasts,
+        siteName: active.displayName,
       );
     } catch (e) {
+      if (requestGeneration != _weatherRequestGeneration) return;
       final cached = await _weatherCacheService.load(
         latitude: _latitude,
         longitude: _longitude,
@@ -1106,6 +1160,7 @@ class HomeViewModel extends ChangeNotifier {
           isFromCache: true,
           cachedAt: cached.cachedAt,
           weatherError: '오프라인 · 저장된 날씨 정보 표시',
+          siteName: _activeObservationSiteViewModel.active.displayName,
         );
       } else {
         final current = _observationCondition;
@@ -1147,8 +1202,10 @@ class HomeViewModel extends ChangeNotifier {
         }
       }
     } finally {
-      _isWeatherLoading = false;
-      notifyListeners();
+      if (requestGeneration == _weatherRequestGeneration) {
+        _isWeatherLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -1160,6 +1217,7 @@ class HomeViewModel extends ChangeNotifier {
     bool isFromCache = false,
     DateTime? cachedAt,
     String? weatherError,
+    String? siteName,
   }) async {
     _cachedForecasts = forecasts;
     final now = DateTime.now();
@@ -1198,7 +1256,9 @@ class HomeViewModel extends ChangeNotifier {
 
     _observationCondition = _buildCondition(
       moon: moon,
-      siteName: weather.cityName.isNotEmpty ? weather.cityName : '현재 위치',
+      siteName:
+          siteName ??
+          (weather.cityName.isNotEmpty ? weather.cityName : '현재 위치'),
       summary: summary,
       currentWeather: weather,
       weatherError: weatherError,

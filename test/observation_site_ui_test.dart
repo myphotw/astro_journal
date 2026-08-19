@@ -2,6 +2,9 @@ import 'package:astro_journal/data/models/blocked_azimuth_range.dart';
 import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/observation_site.dart';
+import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
+import 'package:astro_journal/core/constants/equipment_kind.dart';
+import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/data/repositories/observation_site_repository.dart';
 import 'package:astro_journal/features/settings/view/observation_site_list_screen.dart';
@@ -75,21 +78,28 @@ class _FakeObservationSiteRepository implements ObservationSiteRepository {
 }
 
 class _FakeEquipmentRepository implements EquipmentRepository {
+  _FakeEquipmentRepository([this.items = const []]);
+  final List<Equipment> items;
   @override
   Future<void> delete(String id) async {}
   @override
-  Future<List<Equipment>> getAll({bool activeOnly = false}) async => const [];
+  Future<List<Equipment>> getAll({bool activeOnly = false}) async => items;
   @override
   Future<Equipment?> getById(String id) async => null;
   @override
   Future<void> save(Equipment equipment) async {}
 }
 
-Widget _app(_FakeObservationSiteRepository repository) {
+Widget _app(
+  _FakeObservationSiteRepository repository, {
+  List<Equipment> equipment = const [],
+}) {
   return MultiProvider(
     providers: [
       Provider<ObservationSiteRepository>.value(value: repository),
-      Provider<EquipmentRepository>.value(value: _FakeEquipmentRepository()),
+      Provider<EquipmentRepository>.value(
+        value: _FakeEquipmentRepository(equipment),
+      ),
     ],
     child: const MaterialApp(home: ObservationSiteListScreen()),
   );
@@ -166,14 +176,14 @@ void main() {
     await tester.enterText(find.byKey(const Key('horizon-min-altitude')), '25');
     await tester.tap(find.widgetWithText(FilledButton, '적용'));
     await tester.pumpAndSettle();
-    expect(find.text('방위각 120.0°'), findsOneWidget);
+    expect(find.text('방향 120.0°'), findsOneWidget);
 
-    await tester.tap(find.text('방위각 120.0°'));
+    await tester.tap(find.text('방향 120.0°'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('horizon-min-altitude')), '30');
     await tester.tap(find.widgetWithText(FilledButton, '적용'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('최소 30.0°'), findsOneWidget);
+    expect(find.textContaining('아래 30.0°까지 가림'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const Key('save-observation-site')));
     await tester.tap(find.byKey(const Key('save-observation-site')));
@@ -228,13 +238,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('기존 관측지'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('observation-site-detail')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('edit-observation-site-detail')));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('site-name')), '수정 관측지');
     await tester.ensureVisible(find.byKey(const Key('save-observation-site')));
     await tester.tap(find.byKey(const Key('save-observation-site')));
     await tester.pumpAndSettle();
     expect(repository.sites.single.name, '수정 관측지');
 
-    await tester.tap(find.text('수정 관측지'));
+    await tester.tap(find.byKey(const Key('edit-observation-site-detail')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('delete-observation-site')));
     await tester.pumpAndSettle();
@@ -242,4 +255,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.sites, isEmpty);
   });
+
+  testWidgets(
+    'site detail changes tracking and equipment and shows horizon summary',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = _FakeObservationSiteRepository()
+        ..sites.add(
+          ObservationSite(
+            id: 'site-detail',
+            name: '우리집',
+            latitude: 37.5,
+            longitude: 127,
+            bortle: 8,
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+            blockedAzimuthRanges: const [
+              BlockedAzimuthRange(
+                id: 'range-1',
+                observationSiteId: 'site-detail',
+                startAzimuth: 350,
+                endAzimuth: 20,
+              ),
+            ],
+            horizonPoints: const [
+              HorizonPoint(
+                id: 'point-1',
+                observationSiteId: 'site-detail',
+                azimuth: 120,
+                minAltitude: 25,
+              ),
+            ],
+          ),
+        );
+      const equipment = Equipment(
+        id: 'seestar',
+        name: 'Seestar S30 Pro',
+        kind: EquipmentKind.smartTelescope,
+        purpose: EquipmentPurpose.imaging,
+      );
+      await tester.pumpWidget(_app(repository, equipment: const [equipment]));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('우리집'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('촬영 가능 시야'), findsOneWidget);
+      expect(
+        find.byKey(const Key('observation-site-horizon-visualization')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('site-detail-horizon-scan')), findsOneWidget);
+      expect(
+        find.byKey(const Key('site-detail-manual-horizon')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('site-detail-tracking')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('EQ').last);
+      await tester.pumpAndSettle();
+      expect(repository.sites.single.trackingMode, TrackingMode.eq);
+
+      await tester.tap(find.byKey(const Key('site-detail-equipment')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Seestar S30 Pro').last);
+      await tester.pumpAndSettle();
+      expect(repository.sites.single.defaultEquipmentId, 'seestar');
+
+      await tester.tap(find.byKey(const Key('site-detail-manual-horizon')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('save-observation-site')), findsOneWidget);
+      expect(find.text('막힌 방향'), findsOneWidget);
+    },
+  );
 }

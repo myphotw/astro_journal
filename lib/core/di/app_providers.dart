@@ -33,6 +33,7 @@ import '../../features/home/viewmodel/home_view_model.dart';
 import '../../features/light_pollution_map/viewmodel/light_pollution_map_view_model.dart';
 import '../../features/main/viewmodel/main_back_navigation_view_model.dart';
 import '../../features/horizon_scan/services/device_orientation_service.dart';
+import '../../features/observation_site/viewmodel/active_observation_site_view_model.dart';
 import '../../features/settings/viewmodel/equipment_view_model.dart';
 import '../../features/settings/viewmodel/settings_view_model.dart';
 import '../../features/settings/viewmodel/tc_backend_view_model.dart';
@@ -209,6 +210,9 @@ class AppProviders {
     final photoOverlayService = PhotoOverlayService(catalogRepository);
     final weatherCacheService = WeatherCacheService();
     final locationService = LocationService();
+    final activeObservationSiteViewModel = ActiveObservationSiteViewModel(
+      observationSiteRepository,
+    );
     final deviceOrientationService = NativeDeviceOrientationService();
     final recommendationSettingsService = RecommendationSettingsService();
     final baseExposureSettingsService = BaseExposureSettingsService();
@@ -258,6 +262,7 @@ class AppProviders {
       equipmentRepository,
       equipmentRecommendationService,
       schedulerEngine,
+      activeObservationSiteViewModel,
     );
 
     // Home/Catalog/Gallery/Stats 등은 AppStartupViewModel이 순차 preload한다.
@@ -393,6 +398,7 @@ class AppProviders {
       Provider<WeatherCacheService>.value(value: weatherCacheService),
       Provider<LocationService>.value(value: locationService),
       Provider<DeviceOrientationService>.value(value: deviceOrientationService),
+      ChangeNotifierProvider.value(value: activeObservationSiteViewModel),
       Provider<RecommendationSettingsService>.value(
         value: recommendationSettingsService,
       ),

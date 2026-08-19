@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/repositories/observation_site_repository.dart';
+import '../../home/viewmodel/home_view_model.dart';
+import '../../observation_site/view/observation_site_detail_screen.dart';
+import '../../observation_site/viewmodel/active_observation_site_view_model.dart';
 import 'observation_site_edit_screen.dart';
 
 class ObservationSiteListScreen extends StatefulWidget {
@@ -26,7 +29,17 @@ class _ObservationSiteListScreenState extends State<ObservationSiteListScreen> {
   }
 
   void _reload() {
-    _sites = context.read<ObservationSiteRepository>().list();
+    _sites = context.read<ObservationSiteRepository>().list().then((sites) {
+      sites.sort((a, b) {
+        final recent = (b.lastUsedAt?.millisecondsSinceEpoch ?? 0).compareTo(
+          a.lastUsedAt?.millisecondsSinceEpoch ?? 0,
+        );
+        if (recent != 0) return recent;
+        if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+        return a.name.compareTo(b.name);
+      });
+      return sites;
+    });
   }
 
   Future<void> _refresh() async {
@@ -39,6 +52,27 @@ class _ObservationSiteListScreenState extends State<ObservationSiteListScreen> {
       MaterialPageRoute(builder: (_) => ObservationSiteEditScreen(site: site)),
     );
     if (changed == true && mounted) await _refresh();
+  }
+
+  Future<void> _openDetail(ObservationSite site) async {
+    HomeViewModel? home;
+    ActiveObservationSiteViewModel? active;
+    try {
+      home = context.read<HomeViewModel>();
+      active = context.read<ActiveObservationSiteViewModel>();
+    } on ProviderNotFoundException {
+      // The screen remains independently testable without the app-level shell.
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ObservationSiteDetailScreen(
+          siteId: site.id,
+          homeViewModel: home,
+          activeViewModel: active,
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
   }
 
   Future<void> _toggleFavorite(ObservationSite site) async {
@@ -96,7 +130,7 @@ class _ObservationSiteListScreenState extends State<ObservationSiteListScreen> {
                   color: AppColors.surface,
                   child: ListTile(
                     key: Key('observation-site-${site.id}'),
-                    onTap: () => _openEditor(site),
+                    onTap: () => _openDetail(site),
                     leading: IconButton(
                       tooltip: site.isFavorite ? '즐겨찾기 해제' : '즐겨찾기',
                       onPressed: () => _toggleFavorite(site),
