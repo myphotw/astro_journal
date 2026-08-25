@@ -33,23 +33,23 @@ class RecommendationSettings {
   final RecommendationPriorityMode priorityMode;
 
   static RecommendationSettings get defaults => RecommendationSettings(
-        enabledCatalogs: {
-          CatalogType.messier,
-          CatalogType.ngc,
-          CatalogType.ic,
-          CatalogType.sh2,
-          CatalogType.caldwell,
-          CatalogType.rcw,
-          CatalogType.vdb,
-          CatalogType.barnard,
-          CatalogType.ldn,
-          CatalogType.lbn,
-        },
-        azimuthStart: 0,
-        azimuthEnd: 359,
-        minAltitude: 20,
-        maxAltitude: 90,
-      );
+    enabledCatalogs: {
+      CatalogType.messier,
+      CatalogType.ngc,
+      CatalogType.ic,
+      CatalogType.sh2,
+      CatalogType.caldwell,
+      CatalogType.rcw,
+      CatalogType.vdb,
+      CatalogType.barnard,
+      CatalogType.ldn,
+      CatalogType.lbn,
+    },
+    azimuthStart: 0,
+    azimuthEnd: 359,
+    minAltitude: 0,
+    maxAltitude: 90,
+  );
 
   /// 방위각이 설정 범위 내에 있는지 확인 (300°→80° 같은 wrap-around 지원).
   bool isAzimuthInRange(double az) {
@@ -86,10 +86,6 @@ class RecommendationSettings {
 /// 추천 대상 설정을 SharedPreferences에 저장/로드하는 서비스.
 class RecommendationSettingsService {
   static const _keyCatalogs = 'rec_catalogs_v1';
-  static const _keyAzStart = 'rec_az_start_v1';
-  static const _keyAzEnd = 'rec_az_end_v1';
-  static const _keyAltMin = 'rec_alt_min_v1';
-  static const _keyAltMax = 'rec_alt_max_v1';
   static const _keyPriorityMode = 'rec_priority_mode_v1';
 
   Future<RecommendationSettings> load() async {
@@ -112,10 +108,13 @@ class RecommendationSettingsService {
 
     return RecommendationSettings(
       enabledCatalogs: catalogs,
-      azimuthStart: prefs.getInt(_keyAzStart) ?? 0,
-      azimuthEnd: prefs.getInt(_keyAzEnd) ?? 359,
-      minAltitude: prefs.getInt(_keyAltMin) ?? 20,
-      maxAltitude: prefs.getInt(_keyAltMax) ?? 90,
+      // 관측 방향은 ActiveObservationSite/Horizon이 소유한다. 과거 전역
+      // 방위각 설정은 읽지 않고 전체 범위를 안전한 호환값으로 사용한다.
+      azimuthStart: 0,
+      azimuthEnd: 359,
+      // Site Horizon 연동 전에는 과거 전역 고도 제한을 적용하지 않는다.
+      minAltitude: 0,
+      maxAltitude: 90,
       priorityMode: RecommendationPriorityMode.fromStorageValue(
         prefs.getString(_keyPriorityMode),
       ),
@@ -128,10 +127,6 @@ class RecommendationSettingsService {
       _keyCatalogs,
       settings.enabledCatalogs.map((c) => c.value).toList(),
     );
-    await prefs.setInt(_keyAzStart, settings.azimuthStart);
-    await prefs.setInt(_keyAzEnd, settings.azimuthEnd);
-    await prefs.setInt(_keyAltMin, settings.minAltitude);
-    await prefs.setInt(_keyAltMax, settings.maxAltitude);
     await prefs.setString(_keyPriorityMode, settings.priorityMode.storageValue);
   }
 }

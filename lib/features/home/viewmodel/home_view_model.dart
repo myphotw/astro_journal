@@ -245,6 +245,7 @@ class HomeViewModel extends ChangeNotifier {
   List<RecommendationResult> _allRecommendedObjects = [];
   List<ScheduleItem> _scheduleItems = [];
   List<EquipmentTonightGroup> _equipmentTonightGroups = [];
+  List<Equipment> _activeEquipment = [];
   List<String> _plannedObjectOrder = [];
   bool _userEditedTonightPlan = false;
   List<ScheduleItem> _recommendedScheduleItems = [];
@@ -284,6 +285,7 @@ class HomeViewModel extends ChangeNotifier {
   List<ScheduleItem> get scheduleItems => _scheduleItems;
   List<EquipmentTonightGroup> get equipmentTonightGroups =>
       _equipmentTonightGroups;
+  List<Equipment> get activeEquipment => List.unmodifiable(_activeEquipment);
   Set<String> get plannedObjectIds => Set.unmodifiable(_plannedObjectOrder);
   bool get userEditedTonightPlan => _userEditedTonightPlan;
   List<CategoryProgress> get categoryProgress => _categoryProgress;
@@ -302,6 +304,28 @@ class HomeViewModel extends ChangeNotifier {
     if (_trackingMode == mode) return;
     _trackingMode = mode;
     _activeObservationSiteViewModel.setTemporaryTrackingOverride(mode);
+    notifyListeners();
+
+    if (_cachedAllObjects.isEmpty || _nightStart == null || _nightEnd == null) {
+      return;
+    }
+
+    await _applyRecommendations(
+      allObjects: _cachedAllObjects,
+      now: DateTime.now(),
+      cloudCoverage: _observationCondition?.cloudCover ?? 0,
+      windSpeed: _observationCondition?.windSpeed ?? 0,
+      moonIllumination: _observationCondition?.moon.illumination,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setEquipment(String? equipmentId) async {
+    if (_activeObservationSiteViewModel.active.effectiveEquipmentId ==
+        equipmentId) {
+      return;
+    }
+    _activeObservationSiteViewModel.setTemporaryEquipmentOverride(equipmentId);
     notifyListeners();
 
     if (_cachedAllObjects.isEmpty || _nightStart == null || _nightEnd == null) {
@@ -592,6 +616,7 @@ class HomeViewModel extends ChangeNotifier {
     );
 
     final allEquipment = await _equipmentRepository.getAll(activeOnly: true);
+    _activeEquipment = allEquipment;
     final preferredEquipmentId =
         _activeObservationSiteViewModel.active.effectiveEquipmentId;
     final equipment = preferredEquipmentId == null

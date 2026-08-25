@@ -1,6 +1,7 @@
 import 'package:astro_journal/data/models/tc_backend_models.dart';
 import 'package:astro_journal/features/settings/viewmodel/tc_backend_view_model.dart';
 import 'package:astro_journal/services/tc_backend_service.dart';
+import 'package:astro_journal/services/tc_backend_auth_service.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -129,6 +130,31 @@ void main() {
         TcBackendConnectionStatus.unreachable,
       );
     });
+
+    test(
+      'readiness request uses configured URL and masked bearer contract',
+      () async {
+        late http.Request captured;
+        final service = TcBackendService(
+          baseUrl: 'https://backend.example',
+          authHeaders: TcBackendAuthHeaders(
+            const BuildConfiguredTcBackendTokenStore(token: 'test-token'),
+          ),
+          client: MockClient((request) async {
+            captured = request;
+            return http.Response('{"services":{}}', 200);
+          }),
+        );
+
+        await service.getReadiness();
+
+        expect(
+          captured.url.toString(),
+          'https://backend.example/api/common/readiness',
+        );
+        expect(captured.headers['Authorization'], 'Bearer test-token');
+      },
+    );
   });
 }
 

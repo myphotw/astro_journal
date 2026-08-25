@@ -56,7 +56,7 @@ void main() {
     expect(find.text('날씨'), findsOneWidget);
     expect(find.text('위치 검색'), findsOneWidget);
     expect(find.text('Plate Solve'), findsOneWidget);
-    expect(find.text('Vision'), findsOneWidget);
+    expect(find.text('Vision'), findsNothing);
     expect(find.text('대기중 3건'), findsOneWidget);
     expect(find.text('처리중 2건'), findsOneWidget);
     expect(find.text('실패 1건'), findsOneWidget);

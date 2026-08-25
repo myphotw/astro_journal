@@ -54,4 +54,21 @@ void main() {
     expect(manifest, contains('@string/google_maps_api_key'));
     expect(manifest, isNot(contains('runtime value synced')));
   });
+
+  test('debug and release use the same masked local build helper', () {
+    final script = File('scripts/build_app.ps1').readAsStringSync();
+    final config = File(
+      'lib/core/config/app_build_config.dart',
+    ).readAsStringSync();
+
+    expect(script, contains("[ValidateSet('Debug', 'Release')]"));
+    expect(script, contains('flutter build apk "--\$variant"'));
+    expect(script, contains('TC_BACKEND_AUTH_TOKEN'));
+    expect(script, contains('TC_BACKEND_URL'));
+    expect(script, contains('--dart-define-from-file='));
+    expect(script, isNot(contains('Write-Host \$config')));
+    expect(script, isNot(contains('Write-Host \$defines')));
+    expect(config, contains('defaultBackendUrl'));
+    expect(config, contains("String.fromEnvironment(\n    'TC_BACKEND_URL'"));
+  });
 }

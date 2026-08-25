@@ -30,6 +30,8 @@ class MainApplication : Application() {
 
     override fun onCreate() {
 
+        super.onCreate()
+
         GoogleMapsApiKeyHolder.applyBuildConfiguredKey(this)
 
         try {
@@ -41,8 +43,6 @@ class MainApplication : Application() {
             Log.e(GoogleMapsApiKeyHolder.LOG_TAG, "MapsInitializer failed", error)
 
         }
-
-        super.onCreate()
 
     }
 

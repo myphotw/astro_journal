@@ -8,17 +8,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../../features/home/viewmodel/home_view_model.dart';
 import '../../../services/backup_service.dart';
 import '../../../services/recommendation_settings_service.dart';
-import '../../../services/base_exposure_settings_service.dart';
 import '../viewmodel/equipment_view_model.dart';
 import '../viewmodel/settings_view_model.dart';
 import '../widgets/tc_backend_settings_section.dart';
 import '../widgets/astrojournal_reset_section.dart';
 import 'equipment_list_screen.dart';
-import 'exif_debug_screen.dart';
-import 'metadata_debug_screen.dart';
 import 'observation_site_list_screen.dart';
 import 'recommendation_settings_screen.dart';
-import 'base_exposure_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -40,7 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('관리자'),
+        title: const Text('설정'),
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
       ),
@@ -54,9 +50,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           _SectionHeader(title: '추천 대상 설정', icon: Icons.stars_outlined),
           _RecommendationSection(),
-          const SizedBox(height: 24),
-          _SectionHeader(title: '기본 촬영환경 설정', icon: Icons.wb_twilight_outlined),
-          _BaseExposureSection(),
           const SizedBox(height: 24),
           _SectionHeader(title: '관측지 관리', icon: Icons.location_on_outlined),
           _ObservationSiteSection(),
@@ -72,9 +65,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           _SectionHeader(title: '초기화', icon: Icons.delete_sweep_outlined),
           const AstroJournalResetSection(),
-          const SizedBox(height: 24),
-          _SectionHeader(title: '개발자 옵션', icon: Icons.bug_report_outlined),
-          _DeveloperSection(),
         ],
       ),
     );
@@ -209,7 +199,7 @@ class _RecommendationSection extends StatelessWidget {
           style: TextStyle(color: AppColors.textPrimary),
         ),
         subtitle: const Text(
-          '카탈로그 · 방위각 범위 · 고도 범위',
+          '카탈로그 · 추천 우선순위',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
         trailing: const Icon(
@@ -228,41 +218,6 @@ class _RecommendationSection extends StatelessWidget {
                 ),
               ],
               child: const RecommendationSettingsScreen(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BaseExposureSection extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return _SettingsCard(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(
-          Icons.wb_twilight_outlined,
-          color: AppColors.textSecondary,
-        ),
-        title: const Text(
-          '기준 Bortle 등급',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        subtitle: const Text(
-          '카탈로그 기본 촬영시간 계산 기준 (기본값 8)',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: AppColors.textSecondary,
-        ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => Provider.value(
-              value: context.read<BaseExposureSettingsService>(),
-              child: const BaseExposureSettingsScreen(),
             ),
           ),
         ),
@@ -732,69 +687,6 @@ class _BackupProgressBody extends StatelessWidget {
 // ──────────────────────────────────────────────
 // Shared card wrapper
 // ──────────────────────────────────────────────
-
-// ──────────────────────────────────────────────
-// Developer Section
-// ──────────────────────────────────────────────
-
-class _DeveloperSection extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return _SettingsCard(
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(
-              Icons.data_object_outlined,
-              color: AppColors.textSecondary,
-            ),
-            title: const Text(
-              '메타데이터 보기',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-            ),
-            subtitle: const Text(
-              '사진의 EXIF, OwnerName JSON, 파일명 분석 결과를 확인합니다.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-              color: AppColors.textSecondary,
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const MetadataDebugScreen(),
-              ),
-            ),
-          ),
-          const Divider(color: AppColors.textSecondary, height: 1),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(
-              Icons.photo_camera_outlined,
-              color: AppColors.textSecondary,
-            ),
-            title: const Text(
-              'EXIF 디버그',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-            ),
-            subtitle: const Text(
-              '원본 EXIF, dump, MakerNote, copy 비교, Pipeline 단계별 확인',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-              color: AppColors.textSecondary,
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ExifDebugScreen()),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _SettingsCard extends StatelessWidget {
   const _SettingsCard({required this.child});

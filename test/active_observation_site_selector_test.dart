@@ -1,6 +1,7 @@
 import 'package:astro_journal/data/models/blocked_azimuth_range.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/observation_site.dart';
+import 'package:astro_journal/data/models/weather_data.dart';
 import 'package:astro_journal/data/repositories/observation_site_repository.dart';
 import 'package:astro_journal/features/observation_site/viewmodel/active_observation_site_view_model.dart';
 import 'package:astro_journal/features/observation_site/widgets/active_observation_site_selector.dart';
@@ -64,8 +65,10 @@ void main() {
     final site = ObservationSite(
       id: 'home',
       name: '우리집',
+      address: '서울 구로구 천왕동',
       latitude: 37.5,
       longitude: 127,
+      bortle: 8,
       createdAt: DateTime(2026),
       updatedAt: DateTime(2026),
     );
@@ -92,19 +95,33 @@ void main() {
             onOpenDetail: () => detailOpens++,
             onManageSites: () => manageOpens++,
             equipmentName: 'Seestar S30 Pro',
+            activeWeather: WeatherData(
+              temperature: 27,
+              feelsLike: 28,
+              humidity: 60,
+              windSpeed: 0.8,
+              windDegree: 0,
+              pressure: 1012,
+              cloudCoverage: 38,
+              visibility: 10000,
+              sunrise: DateTime(2026),
+              sunset: DateTime(2026),
+              description: '흐림',
+              cityName: '서울',
+            ),
           ),
         ),
       ),
     );
 
-    expect(find.text('오늘의 관측지'), findsOneWidget);
-    expect(find.text('현재 위치 (임시)'), findsOneWidget);
+    expect(find.text('관측지'), findsOneWidget);
+    expect(find.text('현재 위치'), findsOneWidget);
     expect(find.text('Alt-Az · Seestar S30 Pro'), findsOneWidget);
     expect(
       tester
           .getSize(find.byKey(const Key('active-observation-site-card')))
           .height,
-      lessThanOrEqualTo(72),
+      lessThanOrEqualTo(80),
     );
 
     await tester.tap(find.byKey(const Key('active-observation-site-selector')));
@@ -114,6 +131,9 @@ void main() {
     expect(selectedSite, 'home');
     expect(selectedCurrent, 0);
     expect(find.text('우리집'), findsOneWidget);
+    expect(find.textContaining('서울 구로구 천왕동'), findsOneWidget);
+    expect(find.textContaining('Bortle 8'), findsOneWidget);
+    expect(find.textContaining('흐림 38% · 27°C'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('open-active-site-detail')));
     await tester.tap(find.byKey(const Key('manage-observation-sites')));
@@ -122,7 +142,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('active-observation-site-selector')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('현재 위치 (임시)').last);
+    await tester.tap(find.text('현재 위치').last);
     await tester.pumpAndSettle();
     expect(selectedCurrent, 1);
   });

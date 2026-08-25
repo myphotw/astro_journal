@@ -325,7 +325,7 @@ class AppProviders {
     final statsAnalyticsService = StatsAnalyticsService();
 
     final statsViewModel = StatsViewModel(
-      shootingRecordRepository,
+      galleryShootingRecordRepository,
       catalogRepository,
       statsAnalyticsService,
     );

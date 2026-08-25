@@ -42,7 +42,7 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.cloud_done_outlined),
               title: Text('서비스 연결 상태'),
-              subtitle: Text('서버와 자격 증명은 앱 설치 시 자동 구성됩니다.'),
+              subtitle: Text('서버 연결은 앱 설치 시 자동 구성됩니다.'),
             ),
             _ReadinessPanel(viewModel: viewModel),
             const SizedBox(height: 12),
@@ -99,7 +99,7 @@ class _ReadinessPanel extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _StatusRow(label: 'NAS 서버', ready: connected),
+          _StatusRow(label: 'NAS 서버', ready: connected, readyText: '연결됨'),
           _StatusRow(label: 'Google 지도', text: '앱에 구성됨', ready: true),
           _StatusRow(
             label: '날씨',
@@ -115,7 +115,6 @@ class _ReadinessPanel extends StatelessWidget {
             label: 'Plate Solve',
             ready: readiness?.configured('astrometry') == true,
           ),
-          _StatusRow(label: 'Vision', ready: readiness?.vision == true),
         ],
       ),
     );
@@ -123,11 +122,17 @@ class _ReadinessPanel extends StatelessWidget {
 }
 
 class _StatusRow extends StatelessWidget {
-  const _StatusRow({required this.label, required this.ready, this.text});
+  const _StatusRow({
+    required this.label,
+    required this.ready,
+    this.text,
+    this.readyText = '사용 가능',
+  });
 
   final String label;
   final bool ready;
   final String? text;
+  final String readyText;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -136,7 +141,7 @@ class _StatusRow extends StatelessWidget {
       children: [
         Expanded(child: Text(label)),
         Text(
-          text ?? (ready ? '정상' : '서버 연결 필요'),
+          text ?? (ready ? readyText : '서버 연결 필요'),
           style: TextStyle(
             color: ready ? Colors.greenAccent : AppColors.textSecondary,
             fontSize: 12,

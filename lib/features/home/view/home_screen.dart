@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/formatters/catalog_object_display_formatter.dart';
-import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
@@ -21,51 +20,17 @@ import '../../../services/observation_score_service.dart';
 import '../../../shared/widgets/catalog_equipment_chips_row.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
-import '../view/widgets/equipment_recommendation_carousel.dart';
 import '../view/widgets/shooting_plan_action_button.dart';
-import '../../../core/constants/astro_season.dart';
-import '../../../services/season_planner_service.dart';
-import '../../catalog/viewmodel/catalog_view_model.dart';
 import '../../season/view/season_planner_screen.dart';
+import '../../season/viewmodel/season_planner_view_model.dart';
 import '../../settings/view/settings_screen.dart';
 import '../../settings/view/observation_site_edit_screen.dart';
 import '../../settings/view/observation_site_list_screen.dart';
 import '../../observation_site/view/observation_site_detail_screen.dart';
-import '../../observation_site/widgets/active_observation_site_selector.dart';
+import 'widgets/home_observation_context_controls.dart';
 import '../viewmodel/home_view_model.dart';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-String _catalogLabel(CatalogType type) {
-  switch (type) {
-    case CatalogType.messier:
-      return 'Messier';
-    case CatalogType.ngc:
-      return 'NGC';
-    case CatalogType.ic:
-      return 'IC';
-    case CatalogType.caldwell:
-      return 'Caldwell';
-    case CatalogType.sh2:
-      return 'Sh2';
-    case CatalogType.rcw:
-      return 'RCW';
-    case CatalogType.vdb:
-      return 'vdB';
-    case CatalogType.barnard:
-      return 'Barnard';
-    case CatalogType.ldn:
-      return 'LDN';
-    case CatalogType.lbn:
-      return 'LBN';
-    case CatalogType.star:
-      return 'Stars';
-    case CatalogType.solar:
-      return 'Solar System';
-    case CatalogType.milky:
-      return 'Milky Way';
-  }
-}
 
 Color _scoreColor(int score) => ObservationScoreService.scoreColor(score);
 
@@ -121,7 +86,7 @@ class HomeScreen extends StatelessWidget {
             actions: [
               IconButton(
                 icon: const Icon(Icons.settings_outlined),
-                tooltip: '관리자',
+                tooltip: '설정',
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const SettingsScreen(),
@@ -149,8 +114,6 @@ class HomeScreen extends StatelessWidget {
 
 // ── _HomeBody ────────────────────────────────────────────────────────────────
 
-enum _RecommendationSectionTab { targets, equipment }
-
 class _HomeBody extends StatefulWidget {
   const _HomeBody({required this.viewModel});
 
@@ -161,10 +124,6 @@ class _HomeBody extends StatefulWidget {
 }
 
 class _HomeBodyState extends State<_HomeBody> {
-  _RecommendationSectionTab _recommendationTab =
-      _RecommendationSectionTab.targets;
-  int _equipmentGroupIndex = 0;
-
   HomeViewModel get viewModel => widget.viewModel;
 
   Future<void> _selectCurrentSite() async {
@@ -282,56 +241,24 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  void _showEquipmentRecommended(BuildContext context) {
-    final groups = viewModel.equipmentTonightGroups;
-    if (groups.isEmpty) return;
-    final index = _equipmentGroupIndex.clamp(0, groups.length - 1);
-    final group = groups[index];
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _RecommendedListSheet(
-        items: group.targets,
-        month: DateTime.now().month,
-        title: '${group.equipment.name} 추천 대상',
-        canAddToPlan: group.isVisual
-            ? (_) => false
-            : viewModel.canAddToShootingPlan,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final condition = viewModel.observationCondition;
     final isUnavailable =
         condition?.observationStatus == ObservationStatus.unavailable;
-    final equipmentGroups = viewModel.equipmentTonightGroups;
-    final equipmentIndex = equipmentGroups.isEmpty
-        ? 0
-        : _equipmentGroupIndex.clamp(0, equipmentGroups.length - 1);
-    final selectedEquipmentGroup = equipmentGroups.isEmpty
-        ? null
-        : equipmentGroups[equipmentIndex];
     final activeSite = viewModel.activeObservationSiteViewModel.active;
     final activeEquipmentId = activeSite.effectiveEquipmentId;
     String? activeEquipmentName;
     if (activeEquipmentId != null) {
-      for (final group in equipmentGroups) {
-        if (group.equipment.id == activeEquipmentId) {
-          activeEquipmentName = group.equipment.name;
+      for (final equipment in viewModel.activeEquipment) {
+        if (equipment.id == activeEquipmentId) {
+          activeEquipmentName = equipment.name;
           break;
         }
       }
     }
 
-    // Expanded+비스크롤 Grid 때문에 휴대폰에서 상하 드래그가 막히던 구조.
-    // 본문 전체를 스크롤하고, 카테고리 그리드는 shrinkWrap으로 넣는다.
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
@@ -348,30 +275,29 @@ class _HomeBodyState extends State<_HomeBody> {
               ),
               child: _ObservationIndexCard(
                 condition: condition,
+                bortle: viewModel.lastSessionContext?.bortle,
                 isWeatherLoading: viewModel.isWeatherLoading,
                 onDetailTap: () => _showObservationDetail(context),
                 onRefresh: () => context.read<HomeViewModel>().refresh(),
+                contextControls: HomeObservationContextControls(
+                  siteViewModel: viewModel.activeObservationSiteViewModel,
+                  equipment: viewModel.activeEquipment,
+                  selectedEquipmentId: activeEquipmentId,
+                  selectedEquipmentName: activeEquipmentName,
+                  trackingMode: viewModel.trackingMode,
+                  onSelectCurrentLocation: _selectCurrentSite,
+                  onSelectSite: _selectSavedSite,
+                  onOpenSiteDetail: _openActiveSiteDetail,
+                  onManageSites: _manageSites,
+                  onSaveCurrentLocation: _saveCurrentLocation,
+                  onEquipmentChanged: viewModel.setEquipment,
+                  onTrackingChanged: viewModel.setTrackingMode,
+                  activeWeather: condition.weather,
+                  isWeatherLoading: viewModel.isWeatherLoading,
+                  currentLocationBortle: viewModel.lastSessionContext?.bortle,
+                ),
               ),
             ),
-          if (condition != null) const SizedBox(height: AppTheme.spacingSm),
-          Padding(
-            key: const Key('home-active-site-selector'),
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-            child: ActiveObservationSiteSelector(
-              viewModel: viewModel.activeObservationSiteViewModel,
-              equipmentName: activeEquipmentName,
-              onSelectCurrentLocation: _selectCurrentSite,
-              onSelectSite: _selectSavedSite,
-              onOpenDetail: _openActiveSiteDetail,
-              onManageSites: _manageSites,
-              onSaveCurrentLocation: _saveCurrentLocation,
-            ),
-          ),
-          const SizedBox(height: AppTheme.spacingSm),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-            child: _SeasonPlannerEntryCard(month: now.month),
-          ),
           const SizedBox(height: AppTheme.spacingMd),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
@@ -385,40 +311,25 @@ class _HomeBodyState extends State<_HomeBody> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '오늘의 추천',
+                          '오늘 밤 추천',
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.bold,
                               ),
                         ),
-                        if (_recommendationTab ==
-                            _RecommendationSectionTab.targets)
-                          Text(
-                            _seasonText(now.month),
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 11,
-                            ),
+                        Text(
+                          _seasonText(now.month),
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 11,
                           ),
+                        ),
                       ],
                     ),
-                    if ((_recommendationTab ==
-                                _RecommendationSectionTab.targets &&
-                            viewModel.allRecommendedObjects.isNotEmpty) ||
-                        (_recommendationTab ==
-                                _RecommendationSectionTab.equipment &&
-                            selectedEquipmentGroup != null &&
-                            selectedEquipmentGroup.targets.isNotEmpty))
+                    if (viewModel.allRecommendedObjects.isNotEmpty)
                       TextButton(
-                        onPressed: () {
-                          if (_recommendationTab ==
-                              _RecommendationSectionTab.targets) {
-                            _showAllRecommended(context);
-                          } else {
-                            _showEquipmentRecommended(context);
-                          }
-                        },
+                        onPressed: () => _showAllRecommended(context),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -433,33 +344,6 @@ class _HomeBodyState extends State<_HomeBody> {
                         ),
                       ),
                   ],
-                ),
-                const SizedBox(height: AppTheme.spacingSm),
-                SegmentedButton<_RecommendationSectionTab>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _RecommendationSectionTab.targets,
-                      label: Text('추천 대상', style: TextStyle(fontSize: 12)),
-                    ),
-                    ButtonSegment(
-                      value: _RecommendationSectionTab.equipment,
-                      label: Text('추천 장비', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                  selected: {_recommendationTab},
-                  onSelectionChanged: (selection) {
-                    setState(() {
-                      _recommendationTab = selection.first;
-                      if (selection.first ==
-                          _RecommendationSectionTab.equipment) {
-                        _equipmentGroupIndex = 0;
-                      }
-                    });
-                  },
-                  style: ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
                 ),
               ],
             ),
@@ -491,65 +375,20 @@ class _HomeBodyState extends State<_HomeBody> {
           if (viewModel.observationCondition?.observationStatus ==
               ObservationStatus.limited)
             const SizedBox(height: AppTheme.spacingSm),
-          if (_recommendationTab == _RecommendationSectionTab.targets)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingLg,
-              ),
-              child: viewModel.recommendedObjects.isEmpty
-                  ? _NoRecommendationWidget(reasons: viewModel.exclusionReasons)
-                  : _RecommendedObjectGrid(
-                      items: viewModel.recommendedObjects.take(4).toList(),
-                      onTap: (rec) => _showObjectDetail(context, rec),
-                      isPlanned: viewModel.isPlanned,
-                      equipmentChipsFor: viewModel.todayEquipmentChipsFor,
-                      canAddToPlan: viewModel.canAddToShootingPlan,
-                      onTogglePlan: (id) =>
-                          context.read<HomeViewModel>().toggleTonightPlan(id),
-                    ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingLg,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  EquipmentRecommendationCarousel(
-                    groups: equipmentGroups,
-                    initialIndex: equipmentIndex,
-                    onIndexChanged: (index) {
-                      setState(() => _equipmentGroupIndex = index);
-                    },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+            child: viewModel.recommendedObjects.isEmpty
+                ? _NoRecommendationWidget(reasons: viewModel.exclusionReasons)
+                : _RecommendedObjectGrid(
+                    items: viewModel.recommendedObjects.take(4).toList(),
+                    onTap: (rec) => _showObjectDetail(context, rec),
+                    isPlanned: viewModel.isPlanned,
+                    equipmentChipsFor: viewModel.todayEquipmentChipsFor,
+                    canAddToPlan: viewModel.canAddToShootingPlan,
+                    onTogglePlan: (id) =>
+                        context.read<HomeViewModel>().toggleTonightPlan(id),
                   ),
-                  if (selectedEquipmentGroup != null &&
-                      !selectedEquipmentGroup.isVisual) ...[
-                    const SizedBox(height: AppTheme.spacingSm),
-                    _TrackingModeSelector(
-                      selected: viewModel.trackingMode,
-                      onChanged: (mode) =>
-                          context.read<HomeViewModel>().setTrackingMode(mode),
-                    ),
-                  ],
-                  if (selectedEquipmentGroup != null &&
-                      selectedEquipmentGroup.targets.isNotEmpty) ...[
-                    const SizedBox(height: AppTheme.spacingSm),
-                    _RecommendedObjectGrid(
-                      items: selectedEquipmentGroup.targets.take(4).toList(),
-                      onTap: (rec) => _showObjectDetail(context, rec),
-                      isPlanned: viewModel.isPlanned,
-                      equipmentChipsFor: viewModel.todayEquipmentChipsFor,
-                      canAddToPlan: (id) =>
-                          !selectedEquipmentGroup.isVisual &&
-                          viewModel.canAddToShootingPlan(id),
-                      onTogglePlan: (id) =>
-                          context.read<HomeViewModel>().toggleTonightPlan(id),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          ),
           const SizedBox(height: AppTheme.spacingMd),
           if (viewModel.scheduleItems.isNotEmpty)
             Padding(
@@ -575,40 +414,13 @@ class _HomeBodyState extends State<_HomeBody> {
               viewModel.scheduleEmptyMessage != null)
             const SizedBox(height: AppTheme.spacingMd),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-            child: Text(
-              '카테고리별 진행 현황',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppTheme.spacingSm),
-          Padding(
             padding: const EdgeInsets.fromLTRB(
               AppTheme.spacingLg,
               0,
               AppTheme.spacingLg,
               AppTheme.spacingMd,
             ),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: AppTheme.spacingSm,
-                mainAxisSpacing: AppTheme.spacingSm,
-                mainAxisExtent: 110,
-              ),
-              itemCount: viewModel.categoryProgress.length,
-              itemBuilder: (context, index) {
-                return _CategoryProgressCard(
-                  progress: viewModel.categoryProgress[index],
-                  compact: false,
-                );
-              },
-            ),
+            child: _FuturePlanningSection(month: now.month),
           ),
         ],
       ),
@@ -616,90 +428,68 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 }
 
-// ── 계절별 촬영 대상 진입 카드 ───────────────────────────────────────────────
+// ── 미래 계획 진입 ──────────────────────────────────────────────────────────
 
-class _SeasonPlannerEntryCard extends StatelessWidget {
-  const _SeasonPlannerEntryCard({required this.month});
+class _FuturePlanningSection extends StatelessWidget {
+  const _FuturePlanningSection({required this.month});
 
   final int month;
 
   @override
   Widget build(BuildContext context) {
-    const service = SeasonPlannerService();
-    final season = AstroSeason.fromMonth(month);
-    // CatalogViewModel 전체 watch 대신 revision만 구독해 홈 불필요 리빌드를 줄인다.
-    return Selector<CatalogViewModel, int>(
-      selector: (_, vm) => vm.objectsRevision,
-      builder: (context, revision, child) {
-        final objects = context.read<CatalogViewModel>().allObjects;
-        final summary = service.summarize(
-          objects: objects,
-          month: month,
-          season: season,
-        );
-        return _buildCard(context, season, summary);
-      },
-    );
-  }
-
-  Widget _buildCard(
-    BuildContext context,
-    AstroSeason season,
-    SeasonSummary summary,
-  ) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      child: InkWell(
+    return Container(
+      key: const Key('home-future-planning'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        onTap: () => SeasonPlannerScreen.open(context),
-        child: Padding(
-          padding: const EdgeInsets.all(AppTheme.spacingMd),
-          child: Row(
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '미리 계획하기',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            '월별·계절별로 촬영 대상을 미리 살펴보세요.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.solar.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.calendar_month_outlined,
-                  color: AppColors.solar,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: AppTheme.spacingMd),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${season.label} 하늘 · 계절별 촬영 대상',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '추천 ${summary.total}개 · 미촬영 ${summary.uncaptured}개',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                child: OutlinedButton.icon(
+                  key: const Key('open-month-planner'),
+                  onPressed: () => SeasonPlannerScreen.open(
+                    context,
+                    initialViewMode: SeasonPlannerViewMode.byMonth,
+                    initialMonth: month,
+                  ),
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: const Text('월별 촬영 대상'),
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                color: AppColors.textSecondary,
-                size: 20,
+              const SizedBox(width: AppTheme.spacingSm),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('open-season-planner'),
+                  onPressed: () => SeasonPlannerScreen.open(
+                    context,
+                    initialViewMode: SeasonPlannerViewMode.bySeason,
+                  ),
+                  icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                  label: const Text('계절별 촬영 대상'),
+                ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -710,15 +500,19 @@ class _SeasonPlannerEntryCard extends StatelessWidget {
 class _ObservationIndexCard extends StatelessWidget {
   const _ObservationIndexCard({
     required this.condition,
+    required this.bortle,
     required this.isWeatherLoading,
     required this.onDetailTap,
     required this.onRefresh,
+    required this.contextControls,
   });
 
   final ObservationCondition condition;
+  final int? bortle;
   final bool isWeatherLoading;
   final VoidCallback onDetailTap;
   final VoidCallback onRefresh;
+  final Widget contextControls;
 
   @override
   Widget build(BuildContext context) {
@@ -744,17 +538,25 @@ class _ObservationIndexCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            '오늘의 관측 조건',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
               const Icon(
-                Icons.location_on_outlined,
+                Icons.nightlight_outlined,
                 size: 12,
                 color: AppColors.textSecondary,
               ),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  condition.siteName,
+                  '현재 관측 환경',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,
@@ -801,6 +603,7 @@ class _ObservationIndexCard extends StatelessWidget {
             ],
           ),
           Row(
+            key: const Key('home-observation-score'),
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               if (condition.isObservationFeasible) ...[
@@ -868,6 +671,7 @@ class _ObservationIndexCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             condition.commentText,
+            key: const Key('home-observation-status'),
             style: const TextStyle(
               color: AppColors.textPrimary,
               fontSize: 12,
@@ -912,7 +716,9 @@ class _ObservationIndexCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(child: _MetricsRow(condition: condition)),
+              Expanded(
+                child: _MetricsRow(condition: condition, bortle: bortle),
+              ),
               OutlinedButton.icon(
                 onPressed: onDetailTap,
                 icon: const Icon(Icons.expand_more, size: 14),
@@ -932,6 +738,22 @@ class _ObservationIndexCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          const Divider(height: 1, color: Color(0x33FFFFFF)),
+          const SizedBox(height: AppTheme.spacingSm),
+          const Text(
+            '촬영 조건',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          KeyedSubtree(
+            key: const Key('home-observation-context-section'),
+            child: contextControls,
           ),
         ],
       ),
@@ -960,8 +782,9 @@ class _StarsRow extends StatelessWidget {
 }
 
 class _MetricsRow extends StatelessWidget {
-  const _MetricsRow({required this.condition});
+  const _MetricsRow({required this.condition, required this.bortle});
   final ObservationCondition condition;
+  final int? bortle;
 
   @override
   Widget build(BuildContext context) {
@@ -1002,6 +825,8 @@ class _MetricsRow extends StatelessWidget {
           emoji: condition.moon.phaseEmoji,
           label: '월령 ${condition.moon.age.toStringAsFixed(1)}일',
         ),
+        if (bortle != null)
+          _MetricChip(icon: Icons.dark_mode_outlined, label: 'Bortle $bortle'),
       ],
     );
   }
@@ -1961,53 +1786,6 @@ class _LimitedRecommendationNotice extends StatelessWidget {
 
 // ── 추천 없음 위젯 ───────────────────────────────────────────────────────────
 
-class _TrackingModeSelector extends StatelessWidget {
-  const _TrackingModeSelector({
-    required this.selected,
-    required this.onChanged,
-  });
-
-  final TrackingMode selected;
-  final ValueChanged<TrackingMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Text(
-          '촬영 모드',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: AppTheme.spacingSm),
-        Expanded(
-          child: SegmentedButton<TrackingMode>(
-            segments: const [
-              ButtonSegment(
-                value: TrackingMode.altAz,
-                label: Text('Alt-Az', style: TextStyle(fontSize: 11)),
-              ),
-              ButtonSegment(
-                value: TrackingMode.eq,
-                label: Text('EQ', style: TextStyle(fontSize: 11)),
-              ),
-            ],
-            selected: {selected},
-            onSelectionChanged: (selection) => onChanged(selection.first),
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _NoRecommendationWidget extends StatelessWidget {
   const _NoRecommendationWidget({required this.reasons});
   final List<String> reasons;
@@ -2506,7 +2284,7 @@ class _RecommendDetailSheet extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '성공률',
+                        '촬영 적합도',
                         style: TextStyle(
                           color: color.withAlpha(180),
                           fontSize: 9,
@@ -2709,17 +2487,10 @@ class _RecommendDetailSheet extends StatelessWidget {
 // ── 전체 추천 목록 시트 ──────────────────────────────────────────────────────
 
 class _RecommendedListSheet extends StatelessWidget {
-  const _RecommendedListSheet({
-    required this.items,
-    required this.month,
-    this.title,
-    this.canAddToPlan,
-  });
+  const _RecommendedListSheet({required this.items, required this.month});
 
   final List<RecommendationResult> items;
   final int month;
-  final String? title;
-  final bool Function(String objectId)? canAddToPlan;
 
   String _seasonText(int month) {
     if (month >= 3 && month <= 5) return '봄 하늘';
@@ -2774,7 +2545,7 @@ class _RecommendedListSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          title ?? '오늘의 추천 대상',
+                          '오늘의 추천 대상',
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
                                 color: AppColors.textPrimary,
@@ -2816,9 +2587,7 @@ class _RecommendedListSheet extends StatelessWidget {
                   separatorBuilder: (_, _) => const SizedBox(height: 2),
                   itemBuilder: (context, index) {
                     final rec = items[index];
-                    final showPlan =
-                        canAddToPlan?.call(rec.object.id) ??
-                        homeVm.canAddToShootingPlan(rec.object.id);
+                    final showPlan = homeVm.canAddToShootingPlan(rec.object.id);
                     return _RecommendListTile(
                       recommended: rec,
                       rank: index + 1,
@@ -3060,113 +2829,6 @@ class _RecommendListTile extends StatelessWidget {
   }
 }
 
-// ── ③ 카테고리 진행현황 카드 ─────────────────────────────────────────────────
-
-class _CategoryProgressCard extends StatelessWidget {
-  const _CategoryProgressCard({required this.progress, this.compact = false});
-
-  final CategoryProgress progress;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = progress.type.accentColor;
-    final percent = progress.progressPercent;
-    final label = _catalogLabel(progress.type);
-    final verticalPadding = compact ? AppTheme.spacingSm : AppTheme.spacingMd;
-    final titleSize = compact ? 12.0 : 14.0;
-    final statSize = compact ? 11.0 : 12.0;
-    final percentSize = compact ? 12.0 : 13.0;
-    final progressHeight = compact ? 6.0 : 8.0;
-
-    return GestureDetector(
-      onTap: () {
-        context.read<AppNavigationNotifier>().navigateToCatalog(progress.type);
-      },
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          horizontal: AppTheme.spacingMd,
-          vertical: verticalPadding,
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Row(
-                    children: [
-                      Container(
-                        width: compact ? 7 : 9,
-                        height: compact ? 7 : 9,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: AppTheme.spacingSm),
-                      Flexible(
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: titleSize,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${progress.captured}/${progress.total}',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: statSize,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${percent.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        color: color,
-                        fontSize: percentSize,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            SizedBox(height: compact ? 6 : AppTheme.spacingSm),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress.progress,
-                minHeight: progressHeight,
-                backgroundColor: color.withAlpha(38),
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ── 스케줄 없음 위젯 ───────────────────────────────────────────────────────────
 
 class _ScheduleEmptyWidget extends StatelessWidget {
@@ -3237,7 +2899,7 @@ class _ObservationSessionTimeline extends StatelessWidget {
               const Icon(Icons.timeline, color: AppColors.ic, size: 16),
               const SizedBox(width: 6),
               Text(
-                '오늘 밤 촬영 순서',
+                '오늘 밤 촬영 스케줄',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.bold,

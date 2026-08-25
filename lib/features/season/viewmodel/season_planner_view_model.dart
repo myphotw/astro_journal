@@ -18,7 +18,12 @@ class SeasonPlannerViewModel extends ChangeNotifier {
     this._shootingRecordRepository,
     this._filterService, {
     SeasonPlannerService? seasonPlannerService,
-  }) : _seasonPlannerService = seasonPlannerService ?? const SeasonPlannerService();
+    SeasonPlannerViewMode initialViewMode = SeasonPlannerViewMode.bySeason,
+    int? initialMonth,
+  }) : _seasonPlannerService =
+           seasonPlannerService ?? const SeasonPlannerService(),
+       _viewMode = initialViewMode,
+       _selectedMonth = initialMonth ?? DateTime.now().month;
 
   final CatalogRepository _catalogRepository;
   final ShootingRecordRepository _shootingRecordRepository;
@@ -30,9 +35,9 @@ class SeasonPlannerViewModel extends ChangeNotifier {
   List<SeasonPlannerItem> _items = const [];
   final Map<String, String> _thumbnailMap = {};
 
-  SeasonPlannerViewMode _viewMode = SeasonPlannerViewMode.bySeason;
+  SeasonPlannerViewMode _viewMode;
   AstroSeason _selectedSeason = AstroSeason.fromMonth(DateTime.now().month);
-  int _selectedMonth = DateTime.now().month;
+  int _selectedMonth;
   bool _uncapturedOnly = false;
   Set<CatalogType> _catalogFilters = {};
 
@@ -138,10 +143,11 @@ class SeasonPlannerViewModel extends ChangeNotifier {
     _items = _seasonPlannerService.buildItems(
       objects: objects,
       month: _selectedMonth,
-      season: _viewMode == SeasonPlannerViewMode.bySeason ? _selectedSeason : null,
+      season: _viewMode == SeasonPlannerViewMode.bySeason
+          ? _selectedSeason
+          : null,
       uncapturedOnly: _uncapturedOnly,
-      catalogFilters:
-          _catalogFilters.isEmpty ? null : _catalogFilters,
+      catalogFilters: _catalogFilters.isEmpty ? null : _catalogFilters,
       thumbnails: _thumbnailMap,
     );
     notifyListeners();

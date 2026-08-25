@@ -41,7 +41,11 @@ int _gridCrossAxisCount(double width) {
 class SeasonPlannerScreen extends StatelessWidget {
   const SeasonPlannerScreen({super.key});
 
-  static Future<void> open(BuildContext context) {
+  static Future<void> open(
+    BuildContext context, {
+    SeasonPlannerViewMode initialViewMode = SeasonPlannerViewMode.bySeason,
+    int? initialMonth,
+  }) {
     final catalogRepo = context.read<CatalogRepository>();
     final shootingRepo = context.read<GalleryShootingRecordRepositoryAdapter>();
     final filterService = context.read<SeasonPlannerFilterService>();
@@ -49,9 +53,13 @@ class SeasonPlannerScreen extends StatelessWidget {
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => ChangeNotifierProvider(
-          create: (_) =>
-              SeasonPlannerViewModel(catalogRepo, shootingRepo, filterService)
-                ..load(),
+          create: (_) => SeasonPlannerViewModel(
+            catalogRepo,
+            shootingRepo,
+            filterService,
+            initialViewMode: initialViewMode,
+            initialMonth: initialMonth,
+          )..load(),
           child: const SeasonPlannerScreen(),
         ),
       ),
