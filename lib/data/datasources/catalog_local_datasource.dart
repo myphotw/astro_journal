@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart' show Database, ConflictAlgorithm;
 
 import '../../services/catalog_fts_service.dart';
 import '../../core/constants/catalog_type.dart';
 import '../../core/constants/database_constants.dart';
+import '../../core/policies/catalog_deletion_policy.dart';
 import '../database/app_database.dart';
 import '../models/catalog_object.dart';
 
@@ -38,7 +41,10 @@ class CatalogLocalDataSource {
           'ELSE 11 END, '
           '${_catalogInternalOrderBy()}',
     );
-    return rows.map(CatalogObject.fromMap).toList();
+    return rows
+        .map(CatalogObject.fromMap)
+        .where((object) => !object.isDeleted)
+        .toList();
   }
 
   Future<CatalogObject?> getById(String id) async {
@@ -63,7 +69,10 @@ class CatalogLocalDataSource {
       whereArgs: [type.value],
       orderBy: _catalogInternalOrderBy(),
     );
-    return rows.map(CatalogObject.fromMap).toList();
+    return rows
+        .map(CatalogObject.fromMap)
+        .where((object) => !object.isDeleted)
+        .toList();
   }
 
   /// 카탈로그 내부 정렬:
@@ -104,6 +113,7 @@ class CatalogLocalDataSource {
     return ids
         .where(byId.containsKey)
         .map((id) => CatalogObject.fromMap(byId[id]!))
+        .where((object) => !object.isDeleted)
         .toList(growable: false);
   }
 
@@ -165,12 +175,47 @@ class CatalogLocalDataSource {
     );
   }
 
+  /// 사용자 대상을 목록/검색에서 숨긴다.
+  ///
+  /// row를 남겨 shooting_records/photo_objects의 FK와 과거 대상 이름을
+  /// 보존한다. 내장 seed ID는 이 계층에서도 거부한다.
   Future<void> delete(String id) async {
     final db = await _db;
-    await db.delete(
+    final rows = await db.query(
       DatabaseConstants.tableCelestialObjects,
+      columns: [DatabaseConstants.colId, DatabaseConstants.colTagsJson],
+      where: '${DatabaseConstants.colId} = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+
+    final rawTags = rows.single[DatabaseConstants.colTagsJson] as String?;
+    final tags = _parseTags(rawTags);
+    if (!CatalogDeletionPolicy.canDelete(id: id, tags: tags)) {
+      throw StateError('내장 카탈로그 대상은 삭제할 수 없습니다.');
+    }
+
+    final updatedTags = <String>{...tags, CatalogDeletionPolicy.deletedTag};
+    await db.update(
+      DatabaseConstants.tableCelestialObjects,
+      {DatabaseConstants.colTagsJson: jsonEncode(updatedTags.toList())},
       where: '${DatabaseConstants.colId} = ?',
       whereArgs: [id],
     );
+    await CatalogFtsService.removeObject(db, id);
+  }
+
+  static List<String> _parseTags(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((item) => item.toString()).toList(growable: false);
+      }
+    } catch (_) {
+      return const [];
+    }
+    return const [];
   }
 }

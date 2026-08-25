@@ -54,7 +54,14 @@ class CatalogRepositoryImpl
   Future<void> insert(CatalogObject object) => _dataSource.insert(object);
 
   @override
-  Future<void> delete(String id) => _dataSource.delete(id);
+  Future<void> delete(String id) async {
+    final object = await _dataSource.getById(id);
+    if (object == null) return;
+    if (!object.canDelete) {
+      throw StateError('내장 카탈로그 대상은 삭제할 수 없습니다.');
+    }
+    await _dataSource.delete(id);
+  }
 
   @override
   Future<List<CatalogCandidate>> findNearbyObjects({

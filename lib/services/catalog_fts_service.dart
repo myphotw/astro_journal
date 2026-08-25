@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import '../core/constants/catalog_type.dart';
 import '../core/constants/constellation_names.dart';
 import '../core/constants/database_constants.dart';
+import '../core/policies/catalog_deletion_policy.dart';
 import '../data/models/catalog_object.dart';
 
 /// SQLite FTS5 기반 카탈로그 검색.
@@ -56,6 +57,11 @@ abstract final class CatalogFtsService {
 
     final batch = db.batch();
     for (final row in rows) {
+      if (CatalogDeletionPolicy.isDeleted(
+        _parseJsonList(row[DatabaseConstants.colTagsJson] as String?),
+      )) {
+        continue;
+      }
       final objectId = row[DatabaseConstants.colId] as String;
       final searchText = _composeSearchText(
         row,
@@ -68,6 +74,11 @@ abstract final class CatalogFtsService {
       });
     }
     await batch.commit(noResult: true);
+  }
+
+  static Future<void> removeObject(Database db, String objectId) async {
+    await ensureSchema(db);
+    await db.delete(_table, where: '$_colObjectId = ?', whereArgs: [objectId]);
   }
 
   static Future<List<String>> searchObjectIds(

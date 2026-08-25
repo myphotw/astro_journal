@@ -148,6 +148,8 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
   int get objectCount => _objects.length;
 
+  bool get canDelete => object.canDelete;
+
   bool get canSwipe => _objects.length > 1;
 
   String? get positionLabel =>
@@ -538,11 +540,13 @@ class CatalogDetailViewModel extends ChangeNotifier {
   Future<void> deleteObject() async {
     _errorMessage = null;
 
-    try {
-      for (final record in List.of(_records)) {
-        await _shootingRecordRepository.delete(record.id);
-      }
+    if (!object.canDelete) {
+      _errorMessage = '기본 카탈로그 대상은 삭제할 수 없습니다.';
+      notifyListeners();
+      return;
+    }
 
+    try {
       await _catalogRepository.delete(object.id);
 
       _dataChanged = true;

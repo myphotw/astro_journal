@@ -84,11 +84,13 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: '항목 삭제',
-            onPressed: () => _showDeleteDialog(context, viewModel),
-          ),
+          if (viewModel.canDelete)
+            IconButton(
+              key: const Key('catalog-delete-button'),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '사용자 대상 삭제',
+              onPressed: () => _showDeleteDialog(context, viewModel),
+            ),
         ],
       ),
       body: viewModel.canSwipe
@@ -121,10 +123,10 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('항목 삭제'),
+        title: const Text('사용자 대상 삭제'),
         content: Text(
-          '"${viewModel.object.displayId}" 항목을 삭제하시겠습니까?\n'
-          '연관된 촬영 기록도 함께 삭제됩니다.',
+          '"${viewModel.object.displayId}" 대상을 삭제하시겠습니까?\n'
+          '이 대상에 연결된 촬영 기록과 사진은 삭제되지 않습니다.',
         ),
         actions: [
           TextButton(

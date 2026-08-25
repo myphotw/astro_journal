@@ -124,6 +124,7 @@ class DatabaseConstants {
     colCapturedDate,
     colPhotoUri,
     colAliasesJson,
+    colTagsJson,
     colCommonName,
     colObjectType,
     colSeestarSupported,

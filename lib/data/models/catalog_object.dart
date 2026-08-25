@@ -5,6 +5,7 @@ import '../../core/constants/constellation_names.dart';
 import '../../core/constants/database_constants.dart';
 import '../../core/constants/object_type.dart';
 import '../../core/formatters/catalog_metadata_format.dart';
+import '../../core/policies/catalog_deletion_policy.dart';
 import '../../core/utils/catalog_reference_classifier.dart';
 import '../../core/utils/text_sanitizer.dart';
 import '../../services/catalog_display_name_resolver.dart';
@@ -172,6 +173,16 @@ class CatalogObject {
 
   /// 목록·상세 이동 시 사용할 대표 Catalog ID.
   String get effectivePrimaryId => primaryCatalogId ?? id;
+
+  /// 앱 번들 seed가 아닌, 사용자가 직접 추가한 대상인지 여부.
+  bool get isCustom => CatalogDeletionPolicy.isCustom(id: id, tags: tags);
+
+  bool get isBuiltIn => !isCustom;
+
+  /// 사용자 삭제 후 목록/검색에서는 숨기되 기존 촬영기록 참조는 보존한다.
+  bool get isDeleted => CatalogDeletionPolicy.isDeleted(tags);
+
+  bool get canDelete => CatalogDeletionPolicy.canDelete(id: id, tags: tags);
 
   /// UI 표시용 별칭 (한자 제거).
   List<String> get displayAliases => TextSanitizer.sanitizeList(aliases);

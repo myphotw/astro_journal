@@ -8,6 +8,8 @@ import 'package:uuid/uuid.dart';
 import '../../../core/constants/catalog_kind_filter.dart';
 import '../../../core/constants/catalog_sort_order.dart';
 import '../../../core/constants/catalog_type.dart';
+import '../../../core/constants/data_source.dart';
+import '../../../core/policies/catalog_deletion_policy.dart';
 import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
@@ -677,6 +679,8 @@ class _AddCatalogEntryScreenState extends State<_AddCatalogEntryScreen> {
           ra: '',
           dec: '',
           magnitude: magnitude.isNotEmpty ? magnitude : '-',
+          dataSource: DataSource.manual,
+          tags: const [CatalogDeletionPolicy.userCreatedTag],
         ),
       );
 
