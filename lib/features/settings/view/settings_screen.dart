@@ -12,6 +12,7 @@ import '../../../services/base_exposure_settings_service.dart';
 import '../viewmodel/equipment_view_model.dart';
 import '../viewmodel/settings_view_model.dart';
 import '../widgets/tc_backend_settings_section.dart';
+import '../widgets/astrojournal_reset_section.dart';
 import 'equipment_list_screen.dart';
 import 'exif_debug_screen.dart';
 import 'metadata_debug_screen.dart';
@@ -70,7 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _BackupSection(),
           const SizedBox(height: 24),
           _SectionHeader(title: '초기화', icon: Icons.delete_sweep_outlined),
-          _ResetSection(),
+          const AstroJournalResetSection(),
           const SizedBox(height: 24),
           _SectionHeader(title: '개발자 옵션', icon: Icons.bug_report_outlined),
           _DeveloperSection(),
@@ -725,103 +726,6 @@ class _BackupProgressBody extends StatelessWidget {
         );
       },
     );
-  }
-}
-
-// ──────────────────────────────────────────────
-// Reset Section — 전체 초기화 (단일 버튼)
-// ──────────────────────────────────────────────
-
-class _ResetSection extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    // context.watch 사용 → isLoading 상태 변경 시 즉시 재빌드
-    final viewModel = context.watch<SettingsViewModel>();
-    final isLoading = viewModel.isLoading;
-
-    return _SettingsCard(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(
-          Icons.delete_forever_outlined,
-          color: isLoading ? AppColors.textSecondary : Colors.redAccent,
-        ),
-        title: const Text(
-          '전체 초기화',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        subtitle: const Text(
-          '모든 사진 파일, 촬영 기록, 카탈로그 촬영 상태를 삭제합니다.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-        trailing: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        enabled: !isLoading,
-        onTap: isLoading ? null : () => _confirmDeleteAll(context, viewModel),
-      ),
-    );
-  }
-
-  Future<void> _confirmDeleteAll(
-    BuildContext context,
-    SettingsViewModel viewModel,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          '전체 초기화',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: const Text(
-          '모든 사진 파일과 촬영 기록이 삭제되고\n카탈로그 촬영 상태가 초기화됩니다.\n\n이 작업은 되돌릴 수 없습니다.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
-              '취소',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('초기화', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    try {
-      final result = await viewModel.deleteAll();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '초기화 완료 — 사진 ${result.photos}장, 기록 ${result.records}건 삭제됨',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('초기화 중 오류가 발생했습니다: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
   }
 }
 

@@ -8,6 +8,7 @@ import 'catalog_capture_projection_service.dart';
 import 'tc_backend_settings_service.dart';
 import 'tc_backend_sync_coordinator.dart';
 import 'tc_backend_sync_gate.dart';
+import 'astrojournal_local_capture_reset_service.dart';
 
 class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
   factory TcBackendPullSyncCoordinator({
@@ -19,6 +20,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     required TcBackendSettingsService settingsService,
     required TcBackendSyncGate syncGate,
     CatalogCaptureProjectionService? catalogCaptureProjection,
+    AstroJournalLocalCaptureReset? localCaptureReset,
     int maxPagesPerDrain = 100,
   }) => TcBackendPullSyncCoordinator._(
     changesApi,
@@ -29,6 +31,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     settingsService,
     syncGate,
     catalogCaptureProjection,
+    localCaptureReset,
     maxPagesPerDrain,
   );
 
@@ -41,10 +44,11 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     this._settingsService,
     this._syncGate,
     this._catalogCaptureProjection,
+    this._localCaptureReset,
     this.maxPagesPerDrain,
   );
 
-  static const streamName = 'common_changes:AstroJournal';
+  static const streamName = SyncCheckpointStreams.astroJournalChanges;
 
   final TcBackendChangesApi _changesApi;
   final SyncCheckpointDataSource _checkpoints;
@@ -54,6 +58,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
   final TcBackendSettingsService _settingsService;
   final TcBackendSyncGate _syncGate;
   final CatalogCaptureProjectionService? _catalogCaptureProjection;
+  final AstroJournalLocalCaptureReset? _localCaptureReset;
   final int maxPagesPerDrain;
   bool _draining = false;
 
@@ -75,6 +80,10 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     for (var pageIndex = 0; pageIndex < maxPagesPerDrain; pageIndex++) {
       final page = await _changesApi.getChanges(cursor: cursor);
       for (final change in page.changes) {
+        if (change.isAstroJournalReset) {
+          await _localCaptureReset?.clearCaptureData();
+          continue;
+        }
         if (!change.isObservationRecord) continue;
         await _apply(change);
       }

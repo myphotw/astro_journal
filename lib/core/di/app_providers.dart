@@ -84,6 +84,9 @@ import '../../services/tc_backend_plate_solve_service.dart';
 import '../../services/tc_backend_pull_sync_coordinator.dart';
 import '../../services/tc_backend_sync_gate.dart';
 import '../../services/tc_backend_auth_service.dart';
+import '../../services/tc_backend_astrojournal_reset_service.dart';
+import '../../services/astrojournal_capture_reset_coordinator.dart';
+import '../../services/astrojournal_local_capture_reset_service.dart';
 import '../navigation/app_navigation_notifier.dart';
 
 class AppProviders {
@@ -136,6 +139,20 @@ class AppProviders {
     );
     final syncOutboxRepository = SyncOutboxRepositoryImpl();
     final syncGate = TcBackendSyncGate();
+    late Future<void> Function() refreshAfterCaptureReset;
+    late PhotoFirstRegistrationViewModel photoFirstViewModel;
+    final localCaptureReset = AstroJournalLocalCaptureResetService(
+      onDataChanged: () => refreshAfterCaptureReset(),
+    );
+    final resetApi = TcBackendAstroJournalResetService(
+      settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
+    );
+    final captureResetCoordinator = AstroJournalCaptureResetCoordinator(
+      resetApi,
+      localCaptureReset,
+      syncGate,
+    );
     final syncCoordinator = TcBackendSyncCoordinator(
       syncOutboxRepository,
       shootingRecordRepository,
@@ -161,6 +178,7 @@ class AppProviders {
       settingsService: tcBackendSettingsService,
       syncGate: syncGate,
       catalogCaptureProjection: catalogCaptureProjection,
+      localCaptureReset: localCaptureReset,
     );
     final startupResumeService = TcBackendStartupResumeService(
       tcBackendSettingsService,
@@ -256,7 +274,7 @@ class AppProviders {
       observationConditionService,
     );
 
-    final photoFirstViewModel = PhotoFirstRegistrationViewModel(
+    photoFirstViewModel = PhotoFirstRegistrationViewModel(
       catalogRepository,
       registrationService,
       catalogSearchService,
@@ -326,17 +344,19 @@ class AppProviders {
       recommendationSettingsService,
     );
 
-    final settingsViewModel = SettingsViewModel(
-      photoRepository,
-      shootingRecordRepository,
-      apiKeyService,
-      backupService,
-      onDataChanged: () => Future.wait([
+    refreshAfterCaptureReset = () async {
+      photoFirstViewModel.reset();
+      await Future.wait([
         galleryViewModel.load(),
         statsViewModel.load(),
         homeViewModel.load(),
         catalogViewModel.load(),
-      ]),
+      ]);
+    };
+
+    final settingsViewModel = SettingsViewModel(
+      captureResetCoordinator,
+      backupService,
     );
 
     final tcBackendViewModel = TcBackendViewModel(
@@ -391,6 +411,11 @@ class AppProviders {
       Provider<SyncOutboxRepository>.value(value: syncOutboxRepository),
       Provider<SyncCheckpointDataSource>.value(value: syncCheckpoints),
       Provider<TcBackendSyncGate>.value(value: syncGate),
+      Provider<AstroJournalResetApi>.value(value: resetApi),
+      Provider<AstroJournalLocalCaptureReset>.value(value: localCaptureReset),
+      Provider<AstroJournalCaptureResetCoordinator>.value(
+        value: captureResetCoordinator,
+      ),
       Provider<TcBackendSyncCoordinator>.value(value: syncCoordinator),
       Provider<TcBackendPullSyncCoordinator>.value(value: pullSyncCoordinator),
       Provider<TcBackendStartupResumeService>.value(

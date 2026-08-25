@@ -2,6 +2,10 @@ import 'dart:convert';
 
 import 'gallery_cache_local_datasource.dart';
 
+abstract final class SyncCheckpointStreams {
+  static const astroJournalChanges = 'common_changes:AstroJournal';
+}
+
 abstract class SyncCheckpointDataSource {
   Future<String?> readCursor(String streamName);
   Future<void> writeCursor(String streamName, String cursor);

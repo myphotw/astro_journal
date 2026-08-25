@@ -14,6 +14,7 @@ import 'package:astro_journal/services/catalog_capture_projection_service.dart';
 import 'package:astro_journal/services/tc_backend_pull_sync_coordinator.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:astro_journal/services/tc_backend_sync_gate.dart';
+import 'package:astro_journal/services/astrojournal_local_capture_reset_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -39,6 +40,7 @@ void main() {
     Map<String, String> links = const {},
     TcBackendSyncGate? gate,
     CatalogCaptureProjectionService? captureProjection,
+    AstroJournalLocalCaptureReset? localCaptureReset,
   }) => TcBackendPullSyncCoordinator(
     changesApi: api,
     checkpoints: checkpoints,
@@ -48,6 +50,7 @@ void main() {
     settingsService: settings,
     syncGate: gate ?? TcBackendSyncGate(),
     catalogCaptureProjection: captureProjection,
+    localCaptureReset: localCaptureReset,
   );
 
   test('CREATE pulls canonical record into local projection', () async {
@@ -229,6 +232,33 @@ void main() {
     await Future.wait([push, pull]);
     expect(api.requestedCursors, [null]);
   });
+
+  test(
+    'AstroJournalReset event invalidates capture data and advances cursor',
+    () async {
+      final api = _FakeChangesApi({
+        null: _page([
+          const TcBackendChange(
+            resourceType: 'AstroJournalReset',
+            resourceId: 'AstroJournal',
+            operation: TcBackendChangeOperation.update,
+          ),
+        ], 'cursor-after-reset'),
+      });
+      final checkpoints = _FakeCheckpoints();
+      final localReset = _FakeLocalCaptureReset();
+
+      await subject(
+        api: api,
+        checkpoints: checkpoints,
+        gallery: _FakeGallery(),
+        localCaptureReset: localReset,
+      ).drain();
+
+      expect(localReset.calls, 1);
+      expect(checkpoints.cursor, 'cursor-after-reset');
+    },
+  );
 }
 
 TcBackendChange _change(
@@ -428,4 +458,13 @@ class _FakeLinks implements GalleryRecordLinkDataSource {
 
   @override
   Future<Map<String, String>> localIdsByBackendRecordId() async => links;
+}
+
+class _FakeLocalCaptureReset implements AstroJournalLocalCaptureReset {
+  int calls = 0;
+
+  @override
+  Future<void> clearCaptureData({String? resetEventCursor}) async {
+    calls++;
+  }
 }

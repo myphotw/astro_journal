@@ -21,6 +21,13 @@ class TcBackendChange {
         .toLowerCase();
     return normalized == 'observationrecord';
   }
+
+  bool get isAstroJournalReset {
+    final normalized = resourceType
+        .replaceAll(RegExp('[^a-zA-Z]'), '')
+        .toLowerCase();
+    return normalized == 'astrojournalreset';
+  }
 }
 
 class TcBackendChangesPage {
