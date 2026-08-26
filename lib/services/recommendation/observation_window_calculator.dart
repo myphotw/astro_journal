@@ -5,6 +5,7 @@ import '../../data/models/object_observation_window.dart';
 import '../../data/models/observation_context.dart';
 import '../../data/models/tonight_observation_session.dart';
 import '../celestial_position_service.dart';
+import '../horizon_visibility_service.dart';
 import '../observation_feasibility_policy.dart';
 import '../observation_score_service.dart';
 import '../recommendation/feasible_slot_continuity.dart';
@@ -39,13 +40,17 @@ class ObservationWindowCalculator {
     this._positionService, {
     MoonScore? moonScore,
     ObservationFeasibilityPolicy? feasibilityPolicy,
-  })  : _moonScore = moonScore ?? const MoonScore(),
-        _feasibilityPolicy =
-            feasibilityPolicy ?? const ObservationFeasibilityPolicy();
+    HorizonVisibilityService? horizonVisibilityService,
+  }) : _moonScore = moonScore ?? const MoonScore(),
+       _feasibilityPolicy =
+           feasibilityPolicy ?? const ObservationFeasibilityPolicy(),
+       _horizonVisibilityService =
+           horizonVisibilityService ?? const HorizonVisibilityService();
 
   final CelestialPositionService _positionService;
   final MoonScore _moonScore;
   final ObservationFeasibilityPolicy _feasibilityPolicy;
+  final HorizonVisibilityService _horizonVisibilityService;
 
   ObservationWindowCalculation calculate({
     required CatalogObject object,
@@ -98,12 +103,18 @@ class ObservationWindowCalculator {
 
     final visiblePoints = trajectory.points.where((point) {
       return settings.isAltitudeInRange(point.altitude) &&
-          settings.isAzimuthInRange(point.azimuth);
+          settings.isAzimuthInRange(point.azimuth) &&
+          _horizonVisibilityService.isVisible(
+            profile: context.horizonProfile,
+            azimuth: point.azimuth,
+            altitude: point.altitude,
+          );
     }).toList();
 
     if (visiblePoints.isEmpty) {
-      final anyAlt = trajectory.points
-          .any((point) => settings.isAltitudeInRange(point.altitude));
+      final anyAlt = trajectory.points.any(
+        (point) => settings.isAltitudeInRange(point.altitude),
+      );
       return ObservationWindowCalculation(
         window: null,
         exclusion: anyAlt
@@ -113,30 +124,17 @@ class ObservationWindowCalculator {
       );
     }
 
-    final recommendStart = visiblePoints.first.time;
-    final observationEnd = visiblePoints.last.time;
-    final totalMinutes =
-        observationEnd.difference(recommendStart).inMinutes + 10;
+    final horizonStart = visiblePoints.first.time;
+    final horizonEnd = visiblePoints.last.time;
+    final horizonSpanMinutes =
+        horizonEnd.difference(horizonStart).inMinutes + 10;
 
-    if (totalMinutes < minimumExposure.inMinutes) {
+    if (horizonSpanMinutes < minimumExposure.inMinutes) {
       return ObservationWindowCalculation(
         window: null,
         exclusion: ObservationWindowExclusion.insufficientDuration,
         moonSeparation: moonSeparation,
       );
-    }
-
-    final effectiveReference = referenceTime.isBefore(recommendStart)
-        ? recommendStart
-        : referenceTime;
-    final remainingVisibleMinutes = observationEnd
-            .difference(effectiveReference)
-            .inMinutes +
-        10;
-
-    var latestStart = observationEnd.subtract(recommendedExposure);
-    if (latestStart.isBefore(recommendStart)) {
-      latestStart = recommendStart;
     }
 
     final peakPoint = visiblePoints.reduce(
@@ -191,8 +189,8 @@ class ObservationWindowCalculator {
       );
       slotScores[slotStart] = score;
 
-      final inSiteWindow = siteWindow == null ||
-          siteWindow.containsTime(point.time);
+      final inSiteWindow =
+          siteWindow == null || siteWindow.containsTime(point.time);
       if (inSiteWindow && score > bestScore) {
         bestScore = score;
         bestPoint = point;
@@ -224,11 +222,21 @@ class ObservationWindowCalculator {
       );
     }
 
-    final allowedSlots =
-        FeasibleSlotContinuity.slotsInRangesAtLeast(slotScores.keys).toSet();
+    final allowedSlots = FeasibleSlotContinuity.slotsInRangesAtLeast(
+      slotScores.keys,
+    ).toSet();
     final filteredScores = Map<DateTime, double>.fromEntries(
       slotScores.entries.where((entry) => allowedSlots.contains(entry.key)),
     );
+
+    if (FeasibleSlotContinuity.longestContiguousMinutes(filteredScores.keys) <
+        minimumExposure.inMinutes) {
+      return ObservationWindowCalculation(
+        window: null,
+        exclusion: ObservationWindowExclusion.insufficientDuration,
+        moonSeparation: moonSeparation,
+      );
+    }
 
     bestScore = -1.0;
     bestPoint = null;
@@ -251,19 +259,37 @@ class ObservationWindowCalculator {
     }
 
     final optimalPoint = bestPoint;
+    final feasibleStarts = filteredScores.keys.toList()..sort();
+    final recommendStart = feasibleStarts.first;
+    final observationEnd = feasibleStarts.last;
+    final totalMinutes = feasibleStarts.length * _slotDuration.inMinutes;
+    final remainingVisibleMinutes =
+        feasibleStarts.where((slot) => !slot.isBefore(referenceTime)).length *
+        _slotDuration.inMinutes;
+    var latestStart = observationEnd
+        .add(_slotDuration)
+        .subtract(recommendedExposure);
+    if (latestStart.isBefore(recommendStart)) latestStart = recommendStart;
     final moonSafeMinutes = _calculateMoonSafeMinutes(
       object: object,
       context: context,
       visiblePoints: visiblePoints,
     );
 
-    final isCurrentlyVisible = referenceTime.isAfter(session.start) &&
+    final isCurrentlyVisible =
+        referenceTime.isAfter(session.start) &&
         referenceTime.isBefore(session.end) &&
         settings.isAltitudeInRange(referenceAltAz.altitude) &&
-        settings.isAzimuthInRange(referenceAltAz.azimuth);
+        settings.isAzimuthInRange(referenceAltAz.azimuth) &&
+        _horizonVisibilityService.isVisible(
+          profile: context.horizonProfile,
+          azimuth: referenceAltAz.azimuth,
+          altitude: referenceAltAz.altitude,
+        );
 
-    final feasibleRanges =
-        FeasibleWindowFormatter.mergeSlotTimes(filteredScores.keys);
+    final feasibleRanges = FeasibleWindowFormatter.mergeSlotTimes(
+      filteredScores.keys,
+    );
     final bestRange = FeasibleWindowFormatter.bestScoringRange(
       slotScores: filteredScores,
       focusTime: optimalPoint.time,
@@ -351,8 +377,7 @@ class ObservationWindowCalculator {
       ObservationFeasibilityReason.cloudTooHigh ||
       ObservationFeasibilityReason.rainProbability ||
       ObservationFeasibilityReason.visibilityTooLow ||
-      ObservationFeasibilityReason.windTooStrong =>
-        true,
+      ObservationFeasibilityReason.windTooStrong => true,
       _ => false,
     };
   }

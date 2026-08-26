@@ -1,6 +1,8 @@
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
+import 'package:astro_journal/data/models/horizon_point.dart';
+import 'package:astro_journal/data/models/site_horizon_profile.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
@@ -34,11 +36,7 @@ void main() {
     }
 
     test('uses quality-based optimal time within altitude constraints', () {
-      final object = buildObject(
-        id: 'm8',
-        ra: '18h 03m',
-        dec: '-24° 23m',
-      );
+      final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
       final profile = profileProvider.profileFor(object);
       final minimum = exposurePolicy.calculateMinimumExposure(
         bortle: 2,
@@ -64,7 +62,9 @@ void main() {
         observationEnd: session.end,
         currentTime: session.start,
       );
-      final settings = RecommendationSettings.defaults.copyWith(maxAltitude: 75);
+      final settings = RecommendationSettings.defaults.copyWith(
+        maxAltitude: 75,
+      );
 
       final result = calculator.calculate(
         object: object,
@@ -87,20 +87,56 @@ void main() {
       expect(result.window?.slotObservationScores, isNotEmpty);
     });
 
-    test('excludes target when observable window is shorter than minimum exposure', () {
-      final object = buildObject(
-        id: 'm8',
-        ra: '18h 03m',
-        dec: '-24° 23m',
-      );
+    test(
+      'excludes target when observable window is shorter than minimum exposure',
+      () {
+        final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
+        final profile = profileProvider.profileFor(object);
+        final session = TonightObservationSession(
+          start: DateTime(2026, 7, 20, 21, 0),
+          end: DateTime(2026, 7, 20, 21, 20),
+        );
+        final context = ObservationContext(
+          latitude: 37.5,
+          longitude: 127.0,
+          bortle: 2,
+          moonIllumination: 0.1,
+          moonAltitude: -10,
+          moonAzimuth: 180,
+          cloudCover: 0,
+          observationStart: session.start,
+          observationEnd: session.end,
+          currentTime: session.start,
+        );
+
+        final result = calculator.calculate(
+          object: object,
+          profile: profile,
+          context: context,
+          settings: RecommendationSettings.defaults,
+          session: session,
+          referenceTime: session.start,
+          minimumExposure: const Duration(hours: 2),
+          recommendedExposure: const Duration(hours: 3),
+        );
+
+        expect(
+          result.exclusion,
+          ObservationWindowExclusion.insufficientDuration,
+        );
+      },
+    );
+
+    test('site horizon excludes a target below the physical skyline', () {
+      final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
       final profile = profileProvider.profileFor(object);
       final session = TonightObservationSession(
-        start: DateTime(2026, 7, 20, 21, 0),
-        end: DateTime(2026, 7, 20, 21, 20),
+        start: DateTime(2026, 7, 20, 21),
+        end: DateTime(2026, 7, 21, 5),
       );
       final context = ObservationContext(
         latitude: 37.5,
-        longitude: 127.0,
+        longitude: 127,
         bortle: 2,
         moonIllumination: 0.1,
         moonAltitude: -10,
@@ -109,6 +145,16 @@ void main() {
         observationStart: session.start,
         observationEnd: session.end,
         currentTime: session.start,
+        horizonProfile: const SiteHorizonProfile(
+          points: [
+            HorizonPoint(
+              id: 'all-sky-wall',
+              observationSiteId: 'site',
+              azimuth: 0,
+              minAltitude: 90,
+            ),
+          ],
+        ),
       );
 
       final result = calculator.calculate(
@@ -118,11 +164,70 @@ void main() {
         settings: RecommendationSettings.defaults,
         session: session,
         referenceTime: session.start,
-        minimumExposure: const Duration(hours: 2),
-        recommendedExposure: const Duration(hours: 3),
+        minimumExposure: const Duration(minutes: 10),
+        recommendedExposure: const Duration(minutes: 30),
       );
 
-      expect(result.exclusion, ObservationWindowExclusion.insufficientDuration);
+      expect(result.window, isNull);
+      expect(result.exclusion, ObservationWindowExclusion.azimuth);
+    });
+
+    test('site horizon shortens the target visible slots', () {
+      final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
+      final profile = profileProvider.profileFor(object);
+      final session = TonightObservationSession(
+        start: DateTime(2026, 7, 20, 21),
+        end: DateTime(2026, 7, 21, 5),
+      );
+      ObservationContext context([SiteHorizonProfile? horizon]) =>
+          ObservationContext(
+            latitude: 37.5,
+            longitude: 127,
+            bortle: 2,
+            moonIllumination: 0.1,
+            moonAltitude: -10,
+            moonAzimuth: 180,
+            cloudCover: 0,
+            observationStart: session.start,
+            observationEnd: session.end,
+            currentTime: session.start,
+            horizonProfile: horizon ?? const SiteHorizonProfile(),
+          );
+
+      ObservationWindowCalculation calculate(ObservationContext value) =>
+          calculator.calculate(
+            object: object,
+            profile: profile,
+            context: value,
+            settings: RecommendationSettings.defaults,
+            session: session,
+            referenceTime: session.start,
+            minimumExposure: const Duration(minutes: 10),
+            recommendedExposure: const Duration(minutes: 30),
+          );
+
+      final unrestricted = calculate(context());
+      final restricted = calculate(
+        context(
+          const SiteHorizonProfile(
+            points: [
+              HorizonPoint(
+                id: 'urban-horizon',
+                observationSiteId: 'site',
+                azimuth: 0,
+                minAltitude: 25,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(unrestricted.window, isNotNull);
+      expect(restricted.window, isNotNull);
+      expect(
+        restricted.window!.slotObservationScores.length,
+        lessThan(unrestricted.window!.slotObservationScores.length),
+      );
     });
   });
 }

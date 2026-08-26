@@ -7,6 +7,8 @@ import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/observation_feasibility_reason.dart';
 import 'package:astro_journal/data/models/observation_feasibility_result.dart';
 import 'package:astro_journal/data/models/observation_status.dart';
+import 'package:astro_journal/data/models/horizon_point.dart';
+import 'package:astro_journal/data/models/site_horizon_profile.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
@@ -374,6 +376,42 @@ void main() {
         poorFit.recommendations.single.score,
         lessThan(baseline.recommendations.single.score),
       );
+    });
+
+    test('site horizon applies equally to Alt-Az and EQ planning', () async {
+      final context = buildContext().copyWith(
+        horizonProfile: const SiteHorizonProfile(
+          points: [
+            HorizonPoint(
+              id: 'closed-horizon',
+              observationSiteId: 'site',
+              azimuth: 0,
+              minAltitude: 90,
+            ),
+          ],
+        ),
+      );
+      final catalog = [
+        buildObject(
+          id: 'm8',
+          number: 8,
+          ra: '18h 03m',
+          dec: '-24° 23m',
+          type: '발광성운',
+        ),
+      ];
+
+      for (final trackingMode in [TrackingMode.altAz, TrackingMode.eq]) {
+        final result = await engine.build(
+          catalog: catalog,
+          settings: RecommendationSettings.defaults,
+          context: context,
+          session: buildSession(),
+          trackingMode: trackingMode,
+        );
+        expect(result.recommendations, isEmpty);
+        expect(result.scheduleItems, isEmpty);
+      }
     });
   });
 }

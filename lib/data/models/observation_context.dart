@@ -2,6 +2,7 @@ import 'catalog_object.dart';
 import 'observation_feasibility_result.dart';
 import 'observation_status.dart';
 import 'shooting_record.dart';
+import 'site_horizon_profile.dart';
 import 'weather_data.dart';
 import 'weather_forecast_slot.dart';
 import '../../services/observation_score_service.dart';
@@ -33,6 +34,7 @@ class ObservationContext {
     this.statusUserMessage,
     this.catalog = const [],
     this.shootingRecords = const [],
+    this.horizonProfile = const SiteHorizonProfile(),
   });
 
   final double latitude;
@@ -57,6 +59,7 @@ class ObservationContext {
   final String? statusUserMessage;
   final List<CatalogObject> catalog;
   final List<ShootingRecord> shootingRecords;
+  final SiteHorizonProfile horizonProfile;
 
   ObservationContext copyWith({
     double? latitude,
@@ -81,6 +84,7 @@ class ObservationContext {
     String? statusUserMessage,
     List<CatalogObject>? catalog,
     List<ShootingRecord>? shootingRecords,
+    SiteHorizonProfile? horizonProfile,
   }) {
     return ObservationContext(
       latitude: latitude ?? this.latitude,
@@ -105,6 +109,7 @@ class ObservationContext {
       statusUserMessage: statusUserMessage ?? this.statusUserMessage,
       catalog: catalog ?? this.catalog,
       shootingRecords: shootingRecords ?? this.shootingRecords,
+      horizonProfile: horizonProfile ?? this.horizonProfile,
     );
   }
 }

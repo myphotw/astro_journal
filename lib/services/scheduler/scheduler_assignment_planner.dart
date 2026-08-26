@@ -5,10 +5,7 @@ import '../../data/models/scored_observation_target.dart';
 import '../scheduler_engine.dart';
 
 class _TargetAssignmentPlan {
-  const _TargetAssignmentPlan({
-    required this.target,
-    required this.priority,
-  });
+  const _TargetAssignmentPlan({required this.target, required this.priority});
 
   final ScoredObservationTarget target;
   final double priority;
@@ -25,15 +22,16 @@ abstract final class SchedulerAssignmentPlanner {
     final occupied = <DateTime>{};
     final items = <ScheduleItem>[];
 
-    final plans = targets
-        .map(
-          (target) => _TargetAssignmentPlan(
-            target: target,
-            priority: target.schedulerPriority,
-          ),
-        )
-        .toList()
-      ..sort((a, b) => b.priority.compareTo(a.priority));
+    final plans =
+        targets
+            .map(
+              (target) => _TargetAssignmentPlan(
+                target: target,
+                priority: target.schedulerPriority,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.priority.compareTo(a.priority));
 
     for (final plan in plans) {
       final target = plan.target;
@@ -44,6 +42,7 @@ abstract final class SchedulerAssignmentPlanner {
 
       final minSlots = _slotCountFor(target.minimumExposure);
       final recSlots = _slotCountFor(target.recommendedExposure);
+      final targetSlotStarts = window.slotObservationScores.keys.toSet();
 
       final candidateCenters = _rankCandidateCenters(
         window: window,
@@ -52,6 +51,7 @@ abstract final class SchedulerAssignmentPlanner {
         recommendStart: recommendStart,
         observationEnd: observationEnd,
         siteSlotScores: siteSlotScores,
+        targetSlotStarts: targetSlotStarts,
       );
 
       List<ScheduleSlot>? selected;
@@ -66,6 +66,7 @@ abstract final class SchedulerAssignmentPlanner {
           optimalTime: center.time,
           minSlots: minSlots,
           maxSlots: recSlots,
+          targetSlotStarts: targetSlotStarts,
         );
         if (block.length >= minSlots) {
           selected = block;
@@ -129,6 +130,7 @@ abstract final class SchedulerAssignmentPlanner {
     required DateTime recommendStart,
     required DateTime observationEnd,
     Map<DateTime, double>? siteSlotScores,
+    required Set<DateTime> targetSlotStarts,
   }) {
     final windowEnd = observationEnd.add(SchedulerEngine.slotDuration);
     final candidates = <({DateTime time, double score})>[];
@@ -136,11 +138,14 @@ abstract final class SchedulerAssignmentPlanner {
     for (final slot in slots) {
       if (slot.start.isBefore(recommendStart) ||
           !slot.end.isBefore(windowEnd) ||
-          occupied.contains(slot.start)) {
+          occupied.contains(slot.start) ||
+          (targetSlotStarts.isNotEmpty &&
+              !targetSlotStarts.contains(slot.start))) {
         continue;
       }
 
-      final score = window.slotObservationScores[slot.start] ??
+      final score =
+          window.slotObservationScores[slot.start] ??
           siteSlotScores?[slot.start] ??
           window.bestObservationScore;
       candidates.add((time: slot.start, score: score));
@@ -158,6 +163,7 @@ abstract final class SchedulerAssignmentPlanner {
     required DateTime optimalTime,
     required int minSlots,
     required int maxSlots,
+    required Set<DateTime> targetSlotStarts,
   }) {
     final windowEnd = observationEnd.add(SchedulerEngine.slotDuration);
     final freeInWindow = slots
@@ -165,7 +171,9 @@ abstract final class SchedulerAssignmentPlanner {
           (slot) =>
               !slot.start.isBefore(recommendStart) &&
               slot.end.isBefore(windowEnd) &&
-              !occupied.contains(slot.start),
+              !occupied.contains(slot.start) &&
+              (targetSlotStarts.isEmpty ||
+                  targetSlotStarts.contains(slot.start)),
         )
         .toList();
 

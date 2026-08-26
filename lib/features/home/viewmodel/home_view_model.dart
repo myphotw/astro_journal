@@ -613,6 +613,7 @@ class HomeViewModel extends ChangeNotifier {
       observationStart: session.start,
       observationEnd: session.end,
       moonIllumination: moonIllumination ?? context.moonIllumination,
+      horizonProfile: _activeObservationSiteViewModel.active.horizonProfile,
     );
 
     final allEquipment = await _equipmentRepository.getAll(activeOnly: true);

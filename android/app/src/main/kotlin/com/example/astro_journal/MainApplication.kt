@@ -36,7 +36,12 @@ class MainApplication : Application() {
 
         try {
 
-            MapsInitializer.initialize(this)
+            MapsInitializer.initialize(
+                this,
+                MapsInitializer.Renderer.LATEST,
+            ) { renderer ->
+                Log.i(GoogleMapsApiKeyHolder.LOG_TAG, "Maps renderer=$renderer")
+            }
 
         } catch (error: Exception) {
 

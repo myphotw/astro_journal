@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/constants/catalog_type.dart';
+
 /// Dashboard KPI 요약.
 class StatsKpiSummary {
   const StatsKpiSummary({
@@ -102,6 +104,22 @@ class ObjectTypeBreakdown {
   final int count;
   final double ratio;
   final Color color;
+}
+
+/// Catalog별 전체 대상 대비 촬영 완료 대상 진행률.
+class CatalogCategoryProgress {
+  const CatalogCategoryProgress({
+    required this.type,
+    required this.total,
+    required this.captured,
+  });
+
+  final CatalogType type;
+  final int total;
+  final int captured;
+
+  double get progress => total == 0 ? 0 : captured / total;
+  double get progressPercent => progress * 100;
 }
 
 /// 올해의 성과.

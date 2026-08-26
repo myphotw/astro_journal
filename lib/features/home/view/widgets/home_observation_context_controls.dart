@@ -44,12 +44,15 @@ class HomeObservationContextControls extends StatelessWidget {
   final bool isWeatherLoading;
   final int? currentLocationBortle;
 
+  static const double _selectorCardHeight = 58;
+
   @override
   Widget build(BuildContext context) {
     final siteSelector = ActiveObservationSiteSelector(
       viewModel: siteViewModel,
       equipmentName: selectedEquipmentName,
       embedded: true,
+      selectorHeight: _selectorCardHeight,
       onSelectCurrentLocation: onSelectCurrentLocation,
       onSelectSite: onSelectSite,
       onOpenDetail: onOpenSiteDetail,
@@ -140,7 +143,9 @@ class _EquipmentSelector extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Container(
+          key: const Key('home-equipment-card'),
           width: double.infinity,
+          height: HomeObservationContextControls._selectorCardHeight,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: AppColors.background.withValues(alpha: 0.7),

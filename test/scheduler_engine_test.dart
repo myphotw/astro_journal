@@ -47,6 +47,7 @@ void main() {
       int windowMinutes = 180,
       Duration minimumExposure = const Duration(minutes: 30),
       Duration recommendedExposure = const Duration(minutes: 90),
+      Map<DateTime, double> slotObservationScores = const {},
     }) {
       const object = CatalogObject(
         id: 'm42',
@@ -74,6 +75,7 @@ void main() {
           peakAltitudeTime: optimal,
           observationEndTime: start.add(Duration(minutes: windowMinutes - 10)),
           totalObservableMinutes: windowMinutes,
+          slotObservationScores: slotObservationScores,
         ),
         profile: ObjectImagingProfile(
           objectType: ObjectType.emissionNebula,
@@ -178,9 +180,7 @@ void main() {
       final end = DateTime(2026, 7, 2, 2, 0);
       final session = buildSession(start: start, end: end);
       final context = buildContext(start: start, end: end);
-      final target1 = buildTarget(
-        optimalTime: DateTime(2026, 7, 1, 21, 0),
-      );
+      final target1 = buildTarget(optimalTime: DateTime(2026, 7, 1, 21, 0));
       const object2 = CatalogObject(
         id: 'm8',
         number: 8,
@@ -230,10 +230,79 @@ void main() {
       if (result.items.length == 2) {
         final first = result.items.first;
         final second = result.items.last;
-        final overlaps = first.startTime.isBefore(second.endTime) &&
+        final overlaps =
+            first.startTime.isBefore(second.endTime) &&
             second.startTime.isBefore(first.endTime);
         expect(overlaps, isFalse);
       }
+    });
+
+    test('uses only target-visible horizon slots and never bridges a gap', () {
+      final start = DateTime(2026, 7, 1, 20);
+      final end = DateTime(2026, 7, 2, 0, 30);
+      final session = buildSession(start: start, end: end);
+      final context = buildContext(start: start, end: end);
+      final allowed = <DateTime, double>{
+        DateTime(2026, 7, 1, 21, 0): 60,
+        DateTime(2026, 7, 1, 21, 10): 65,
+        DateTime(2026, 7, 1, 21, 20): 70,
+        DateTime(2026, 7, 1, 22, 0): 80,
+        DateTime(2026, 7, 1, 22, 10): 90,
+        DateTime(2026, 7, 1, 22, 20): 85,
+      };
+      final target = buildTarget(
+        optimalTime: DateTime(2026, 7, 1, 22, 10),
+        minimumExposure: const Duration(minutes: 30),
+        recommendedExposure: const Duration(minutes: 30),
+        slotObservationScores: allowed,
+      );
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: context,
+          session: session,
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: start,
+        ),
+      );
+
+      expect(result.items, hasLength(1));
+      final item = result.items.single;
+      for (
+        var slot = item.startTime;
+        slot.isBefore(item.endTime);
+        slot = slot.add(SchedulerEngine.slotDuration)
+      ) {
+        expect(allowed, contains(slot));
+      }
+    });
+
+    test('excludes target when horizon leaves too little usable time', () {
+      final start = DateTime(2026, 7, 1, 20);
+      final end = DateTime(2026, 7, 2, 0, 30);
+      final session = buildSession(start: start, end: end);
+      final context = buildContext(start: start, end: end);
+      final target = buildTarget(
+        minimumExposure: const Duration(minutes: 30),
+        recommendedExposure: const Duration(minutes: 30),
+        slotObservationScores: {
+          DateTime(2026, 7, 1, 22, 0): 80,
+          DateTime(2026, 7, 1, 22, 10): 90,
+        },
+      );
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: context,
+          session: session,
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: start,
+        ),
+      );
+
+      expect(result.items, isEmpty);
     });
   });
 }

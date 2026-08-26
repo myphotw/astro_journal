@@ -24,6 +24,7 @@ class StatsViewModel extends ChangeNotifier {
   StatsDashboardData? _dashboard;
   List<ShootingRecord> _records = const [];
   Map<String, CatalogObject> _catalogById = const {};
+  List<CatalogCategoryProgress> _categoryProgress = const [];
   int _selectedAchievementYear = DateTime.now().year;
 
   bool get isLoading => _isLoading;
@@ -41,6 +42,7 @@ class StatsViewModel extends ChangeNotifier {
   List<TopTargetStat> get topTargets => _dashboard?.topTargets ?? const [];
   List<ObjectTypeBreakdown> get typeBreakdown =>
       _dashboard?.typeBreakdown ?? const [];
+  List<CatalogCategoryProgress> get categoryProgress => _categoryProgress;
 
   List<int> get availableAchievementYears =>
       _statsAnalyticsService.listAchievementYears(_records);
@@ -84,6 +86,10 @@ class StatsViewModel extends ChangeNotifier {
         records: records,
         catalogById: catalogById,
       );
+      _categoryProgress = _statsAnalyticsService.buildCategoryProgress(
+        records: records,
+        catalog: catalog,
+      );
       _syncAchievementYear();
       _hasLoaded = true;
     } catch (error) {
@@ -91,6 +97,7 @@ class StatsViewModel extends ChangeNotifier {
       _dashboard = null;
       _records = const [];
       _catalogById = const {};
+      _categoryProgress = const [];
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -102,7 +109,8 @@ class StatsViewModel extends ChangeNotifier {
     if (available.contains(_selectedAchievementYear)) return;
 
     final currentYear = DateTime.now().year;
-    _selectedAchievementYear =
-        available.contains(currentYear) ? currentYear : available.first;
+    _selectedAchievementYear = available.contains(currentYear)
+        ? currentYear
+        : available.first;
   }
 }

@@ -1,5 +1,6 @@
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/observation_site.dart';
+import '../../../data/models/site_horizon_profile.dart';
 
 enum ActiveObservationSiteKind { currentLocation, savedSite }
 
@@ -55,6 +56,10 @@ class ActiveObservationSite {
       temporaryTrackingOverride ?? site?.trackingMode ?? TrackingMode.altAz;
   String? get effectiveEquipmentId =>
       temporaryEquipmentOverrideId ?? site?.defaultEquipmentId;
+  SiteHorizonProfile get horizonProfile => SiteHorizonProfile(
+    points: site?.horizonPoints ?? const [],
+    blockedRanges: site?.blockedAzimuthRanges ?? const [],
+  );
 
   ActiveObservationSite copyWithCurrentLocation({
     required double latitude,

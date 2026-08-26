@@ -360,6 +360,7 @@ class RecommendationEngine {
       observationStatus: ObservationStatus.good,
       catalog: context.catalog,
       shootingRecords: context.shootingRecords,
+      horizonProfile: context.horizonProfile,
     );
   }
 

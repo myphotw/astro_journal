@@ -96,6 +96,12 @@ void main() {
     expect(result.stats.kpi?.totalShootCount, 1);
     expect(result.stats.kpi?.totalTargetCount, 1);
     expect(result.stats.kpi?.totalIntegrationSeconds, 600);
+    expect(
+      result.stats.categoryProgress
+          .firstWhere((item) => item.type == CatalogType.messier)
+          .captured,
+      1,
+    );
   });
 
   test('remote-only record is included without a local projection', () async {
@@ -108,6 +114,12 @@ void main() {
     expect(result.stats.kpi?.totalShootCount, 1);
     expect(result.stats.kpi?.totalTargetCount, 1);
     expect(result.stats.topTargets.single.objectId, 'M54');
+    expect(
+      result.stats.categoryProgress
+          .firstWhere((item) => item.type == CatalogType.messier)
+          .captured,
+      1,
+    );
   });
 
   test(
@@ -138,6 +150,18 @@ void main() {
       expect(result.stats.monthlyStats[7].integrationSeconds, 1800);
       expect(result.stats.topTargets.first.objectId, 'NGC7293');
       expect(result.stats.topTargets.first.integrationSeconds, 1200);
+      expect(
+        result.stats.categoryProgress
+            .firstWhere((item) => item.type == CatalogType.messier)
+            .captured,
+        1,
+      );
+      expect(
+        result.stats.categoryProgress
+            .firstWhere((item) => item.type == CatalogType.ngc)
+            .captured,
+        1,
+      );
     },
   );
 
@@ -161,6 +185,10 @@ void main() {
     expect(result.stats.kpi?.totalShootCount, 0);
     expect(result.stats.kpi?.totalTargetCount, 0);
     expect(result.stats.kpi?.totalIntegrationSeconds, 0);
+    expect(
+      result.stats.categoryProgress.every((item) => item.captured == 0),
+      isTrue,
+    );
   });
 }
 

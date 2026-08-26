@@ -17,6 +17,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
     this.onSaveCurrentLocation,
     this.equipmentName,
     this.embedded = false,
+    this.selectorHeight,
     this.activeWeather,
     this.isWeatherLoading = false,
     this.currentLocationBortle,
@@ -32,6 +33,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
   final VoidCallback? onSaveCurrentLocation;
   final String? equipmentName;
   final bool embedded;
+  final double? selectorHeight;
   final WeatherData? activeWeather;
   final bool isWeatherLoading;
   final int? currentLocationBortle;
@@ -77,6 +79,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
             Container(
               key: const Key('active-observation-site-card'),
               width: double.infinity,
+              height: selectorHeight,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: AppColors.background.withValues(alpha: 0.7),

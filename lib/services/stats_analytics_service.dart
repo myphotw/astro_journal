@@ -1,18 +1,37 @@
 import 'package:flutter/material.dart';
 
+import '../core/constants/catalog_type.dart';
 import '../core/constants/object_type.dart';
 import '../data/models/catalog_object.dart';
 import '../data/models/shooting_record.dart';
 import 'exposure_duration_parser.dart';
+import 'catalog_capture_projection_service.dart';
+import 'catalog_search_service.dart';
 import 'stats_models.dart';
 
 /// 촬영 기록 기반 통계 Dashboard 집계 (SSOT).
 class StatsAnalyticsService {
   StatsAnalyticsService({
     ExposureDurationParser? exposureParser,
-  }) : _exposureParser = exposureParser ?? const ExposureDurationParser();
+    CatalogCaptureIdentityResolver? identityResolver,
+  }) : _exposureParser = exposureParser ?? const ExposureDurationParser(),
+       _identityResolver =
+           identityResolver ??
+           CatalogCaptureIdentityResolver(CatalogSearchService());
 
   final ExposureDurationParser _exposureParser;
+  final CatalogCaptureIdentityResolver _identityResolver;
+
+  static const categoryProgressOrder = <CatalogType>[
+    CatalogType.messier,
+    CatalogType.ngc,
+    CatalogType.ic,
+    CatalogType.caldwell,
+    CatalogType.sh2,
+    CatalogType.star,
+    CatalogType.solar,
+    CatalogType.milky,
+  ];
 
   static const _typePalette = <Color>[
     Color(0xFF7986CB),
@@ -35,8 +54,7 @@ class StatsAnalyticsService {
     final currentMonth = reference.month;
 
     final integrationByRecord = <String, double>{
-      for (final record in records)
-        record.id: _integrationSecondsFor(record),
+      for (final record in records) record.id: _integrationSecondsFor(record),
     };
 
     final totalIntegration = integrationByRecord.values.fold<double>(
@@ -44,23 +62,25 @@ class StatsAnalyticsService {
       (sum, value) => sum + value,
     );
     final shootCount = records.length;
-    final targetCount =
-        records.map((record) => record.celestialObjectId).toSet().length;
+    final targetCount = records
+        .map((record) => record.celestialObjectId)
+        .toSet()
+        .length;
 
     final kpi = StatsKpiSummary(
       totalShootCount: shootCount,
       totalTargetCount: targetCount,
       totalIntegrationSeconds: totalIntegration,
-      averageIntegrationSeconds:
-          shootCount == 0 ? 0 : totalIntegration / shootCount,
+      averageIntegrationSeconds: shootCount == 0
+          ? 0
+          : totalIntegration / shootCount,
     );
 
     final monthlyStats = List.generate(12, (index) {
       final month = index + 1;
       final monthRecords = records.where(
         (record) =>
-            record.capturedAt.year == year &&
-            record.capturedAt.month == month,
+            record.capturedAt.year == year && record.capturedAt.month == month,
       );
       final integration = monthRecords.fold<double>(
         0,
@@ -88,8 +108,9 @@ class StatsAnalyticsService {
     final currentMonthHighlight = MonthlyHighlight(
       shootCount: thisMonthCount,
       integrationSeconds: thisMonthIntegration,
-      averageIntegrationSeconds:
-          thisMonthCount == 0 ? 0 : thisMonthIntegration / thisMonthCount,
+      averageIntegrationSeconds: thisMonthCount == 0
+          ? 0
+          : thisMonthIntegration / thisMonthCount,
     );
 
     final topTargets = _buildTopTargets(
@@ -133,6 +154,49 @@ class StatsAnalyticsService {
     return sorted;
   }
 
+  /// 기존 Home 진행률의 Catalog 순서·분모를 유지하되, 촬영 완료 여부는
+  /// 현재 canonical shooting record set과 공통 Catalog identity resolver로
+  /// 계산한다. 따라서 remote-only/pending local은 포함되고 Reset 후에는 0이다.
+  List<CatalogCategoryProgress> buildCategoryProgress({
+    required List<ShootingRecord> records,
+    required List<CatalogObject> catalog,
+  }) {
+    final visibleCatalog = catalog
+        .where((object) => !object.isDeleted)
+        .toList(growable: false);
+    final exactByLowerId = {
+      for (final object in visibleCatalog) object.id.toLowerCase(): object,
+    };
+    final capturedPrimaryIds = <String>{};
+    for (final record in records) {
+      final canonical = _identityResolver.resolve(
+        record.celestialObjectId,
+        visibleCatalog,
+        exactByLowerId: exactByLowerId,
+      );
+      if (canonical != null) capturedPrimaryIds.add(canonical.id);
+    }
+
+    return categoryProgressOrder
+        .map((type) {
+          final objects = visibleCatalog
+              .where((object) => object.catalog == type)
+              .toList(growable: false);
+          final captured = objects
+              .where(
+                (object) =>
+                    capturedPrimaryIds.contains(object.effectivePrimaryId),
+              )
+              .length;
+          return CatalogCategoryProgress(
+            type: type,
+            total: objects.length,
+            captured: captured,
+          );
+        })
+        .toList(growable: false);
+  }
+
   /// 특정 연도의 성과 요약.
   YearAchievementSummary buildYearAchievement({
     required List<ShootingRecord> records,
@@ -140,8 +204,7 @@ class StatsAnalyticsService {
     required int year,
   }) {
     final integrationByRecord = <String, double>{
-      for (final record in records)
-        record.id: _integrationSecondsFor(record),
+      for (final record in records) record.id: _integrationSecondsFor(record),
     };
     return _buildYearAchievement(
       records: records,
@@ -159,8 +222,7 @@ class StatsAnalyticsService {
     required int month,
   }) {
     final integrationByRecord = <String, double>{
-      for (final record in records)
-        record.id: _integrationSecondsFor(record),
+      for (final record in records) record.id: _integrationSecondsFor(record),
     };
 
     final monthRecords = records
@@ -191,9 +253,7 @@ class StatsAnalyticsService {
         .toSet()
         .where((id) {
           final first = firstCaptureByTarget[id];
-          return first != null &&
-              first.year == year &&
-              first.month == month;
+          return first != null && first.year == year && first.month == month;
         })
         .length;
 
@@ -203,7 +263,8 @@ class StatsAnalyticsService {
       final id = record.celestialObjectId;
       countByTarget[id] = (countByTarget[id] ?? 0) + 1;
       integrationByTarget[id] =
-          (integrationByTarget[id] ?? 0) + (integrationByRecord[record.id] ?? 0);
+          (integrationByTarget[id] ?? 0) +
+          (integrationByRecord[record.id] ?? 0);
     }
 
     String? mostShot;
@@ -241,8 +302,9 @@ class StatsAnalyticsService {
       totalIntegrationSeconds: totalIntegration,
       shootCount: shootCount,
       newTargetCount: newTargetCount,
-      averageIntegrationSeconds:
-          shootCount == 0 ? 0 : totalIntegration / shootCount,
+      averageIntegrationSeconds: shootCount == 0
+          ? 0
+          : totalIntegration / shootCount,
       mostShotTarget: mostShot,
       longestIntegrationTarget: longestIntegration,
       topThreeTargets: topThreeNames,
@@ -268,7 +330,8 @@ class StatsAnalyticsService {
     for (final record in records) {
       final id = record.celestialObjectId;
       integrationByTarget[id] =
-          (integrationByTarget[id] ?? 0) + (integrationByRecord[record.id] ?? 0);
+          (integrationByTarget[id] ?? 0) +
+          (integrationByRecord[record.id] ?? 0);
       countByTarget[id] = (countByTarget[id] ?? 0) + 1;
     }
 
@@ -323,8 +386,9 @@ class StatsAnalyticsService {
     required Map<String, CatalogObject> catalogById,
     required int year,
   }) {
-    final yearRecords =
-        records.where((record) => record.capturedAt.year == year).toList();
+    final yearRecords = records
+        .where((record) => record.capturedAt.year == year)
+        .toList();
 
     final firstCaptureByTarget = <String, DateTime>{};
     for (final record in records) {
@@ -350,7 +414,8 @@ class StatsAnalyticsService {
       final id = record.celestialObjectId;
       countByTarget[id] = (countByTarget[id] ?? 0) + 1;
       integrationByTarget[id] =
-          (integrationByTarget[id] ?? 0) + (integrationByRecord[record.id] ?? 0);
+          (integrationByTarget[id] ?? 0) +
+          (integrationByRecord[record.id] ?? 0);
     }
 
     String? mostShot;

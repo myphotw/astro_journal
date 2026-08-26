@@ -10,9 +10,11 @@ import '../../../data/models/equipment.dart';
 import '../../../data/models/horizon_point.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/observation_site.dart';
+import '../../../data/models/site_horizon_profile.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/geocoding_service.dart';
+import '../../../services/horizon_visibility_service.dart';
 import '../../../services/location_service.dart';
 import '../../../services/observation_site_validator.dart';
 import '../../horizon_scan/view/horizon_scan_screen.dart';
@@ -44,8 +46,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
   late final TextEditingController _longitude;
   late final TextEditingController _bortle;
   late final TextEditingController _sqm;
-  late final TextEditingController _minAltitude;
-  late final TextEditingController _maxAltitude;
   late final TextEditingController _preferredStart;
   late final TextEditingController _preferredEnd;
   late final TextEditingController _memo;
@@ -72,12 +72,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     );
     _bortle = TextEditingController(text: site?.bortle?.toString());
     _sqm = TextEditingController(text: site?.sqm?.toString());
-    _minAltitude = TextEditingController(
-      text: (site?.defaultMinAltitude ?? 20).toString(),
-    );
-    _maxAltitude = TextEditingController(
-      text: site?.defaultMaxAltitude?.toString(),
-    );
     _preferredStart = TextEditingController(text: site?.preferredStart);
     _preferredEnd = TextEditingController(text: site?.preferredEnd);
     _memo = TextEditingController(text: site?.memo);
@@ -110,8 +104,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
       _longitude,
       _bortle,
       _sqm,
-      _minAltitude,
-      _maxAltitude,
       _preferredStart,
       _preferredEnd,
       _memo,
@@ -308,6 +300,59 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     });
   }
 
+  SiteHorizonProfile get _horizonProfile =>
+      SiteHorizonProfile(points: _points, blockedRanges: _blockedRanges);
+
+  double _directionAltitude(double azimuth) {
+    return const HorizonVisibilityService().minimumVisibleAltitude(
+      _horizonProfile,
+      azimuth,
+    );
+  }
+
+  void _setDirectionAltitude(double azimuth, double altitude) {
+    setState(() {
+      if (_points.isEmpty) {
+        for (final direction in _horizonDirections) {
+          _points.add(
+            HorizonPoint(
+              id: _uuid.v4(),
+              observationSiteId: _siteId,
+              azimuth: direction.$1,
+              minAltitude: 0,
+              sortOrder: _points.length,
+            ),
+          );
+        }
+      }
+
+      final index = _points.indexWhere(
+        (point) => (point.azimuth - azimuth).abs() < 1e-9,
+      );
+      if (index == -1) {
+        _points.add(
+          HorizonPoint(
+            id: _uuid.v4(),
+            observationSiteId: _siteId,
+            azimuth: azimuth,
+            minAltitude: altitude,
+            sortOrder: _points.length,
+          ),
+        );
+      } else {
+        _points[index] = _points[index].copyWith(minAltitude: altitude);
+      }
+      _points.sort((a, b) => a.azimuth.compareTo(b.azimuth));
+    });
+  }
+
+  void _clearHorizon() {
+    setState(() {
+      _points.clear();
+      _blockedRanges.clear();
+    });
+  }
+
   Future<void> _editBlockedRange([BlockedAzimuthRange? existing]) async {
     var start = existing?.startAzimuth.toString() ?? '';
     var end = existing?.endAzimuth.toString() ?? '';
@@ -400,8 +445,10 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
       isFavorite: _favorite,
       trackingMode: _trackingMode,
       defaultEquipmentId: _defaultEquipmentId,
-      defaultMinAltitude: _double(_minAltitude) ?? double.nan,
-      defaultMaxAltitude: _double(_maxAltitude),
+      // v32 legacy columns are preserved for existing installations. Actual
+      // visibility is now owned by the direction-based Horizon profile.
+      defaultMinAltitude: widget.site?.defaultMinAltitude ?? 20,
+      defaultMaxAltitude: widget.site?.defaultMaxAltitude,
       preferredStart: _optional(_preferredStart),
       preferredEnd: _optional(_preferredEnd),
       memo: _memo.text.trim(),
@@ -588,13 +635,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
             ),
             Row(
               children: [
-                Expanded(child: _numberField(_minAltitude, '기본 최소 고도 (°)')),
-                const SizedBox(width: 8),
-                Expanded(child: _numberField(_maxAltitude, '기본 최대 고도 (선택)')),
-              ],
-            ),
-            Row(
-              children: [
                 Expanded(child: _textField(_preferredStart, '선호 시작 (HH:mm)')),
                 const SizedBox(width: 8),
                 Expanded(child: _textField(_preferredEnd, '선호 종료 (HH:mm)')),
@@ -602,6 +642,39 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
             ),
             _textField(_memo, '메모', maxLines: 3),
             _sectionTitle('촬영 가능 시야'),
+            Text(
+              _horizonProfile.hasRestrictions ? '실제 시야: 등록됨' : '실제 시야: 제한 없음',
+              key: const Key('horizon-registration-status'),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '건물·산·나무 때문에 가려지는 높이를 대표 방향별로 대략 설정합니다. '
+              '방향 사이는 자동으로 이어집니다.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            ..._horizonDirections.map(
+              (direction) => _HorizonDirectionSlider(
+                key: Key('horizon-direction-${direction.$1.toInt()}'),
+                azimuth: direction.$1,
+                direction: direction.$2,
+                altitude: _directionAltitude(direction.$1),
+                onChanged: (value) =>
+                    _setDirectionAltitude(direction.$1, value),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const Key('clear-horizon'),
+                onPressed: _horizonProfile.hasRestrictions
+                    ? _clearHorizon
+                    : null,
+                icon: const Icon(Icons.clear_all),
+                label: const Text('시야 제한 없음'),
+              ),
+            ),
             OutlinedButton.icon(
               key: const Key('start-horizon-scan'),
               onPressed: _openHorizonScan,
@@ -636,14 +709,14 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               label: const Text('막힌 방향 추가'),
             ),
             const SizedBox(height: 16),
-            Text('방향별 최소/최대 고도', style: Theme.of(context).textTheme.titleSmall),
+            Text('세부 방향 지점', style: Theme.of(context).textTheme.titleSmall),
             ..._points.map(
               (point) => ListTile(
                 key: Key('horizon-point-${point.id}'),
                 contentPadding: EdgeInsets.zero,
                 title: Text('방향 ${point.azimuth}°'),
                 subtitle: Text(
-                  '아래 ${point.minAltitude}°까지 가림 · 위 ${point.maxAltitude?.toString() ?? '제한 없음'}',
+                  '최소 가시 고도 ${point.minAltitude.toStringAsFixed(0)}°',
                 ),
                 onTap: () => _editHorizonPoint(point),
                 trailing: IconButton(
@@ -747,4 +820,54 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
       ),
     );
   }
+}
+
+const _horizonDirections = <(double, String)>[
+  (0, '북'),
+  (45, '북동'),
+  (90, '동'),
+  (135, '남동'),
+  (180, '남'),
+  (225, '남서'),
+  (270, '서'),
+  (315, '북서'),
+];
+
+class _HorizonDirectionSlider extends StatelessWidget {
+  const _HorizonDirectionSlider({
+    super.key,
+    required this.azimuth,
+    required this.direction,
+    required this.altitude,
+    required this.onChanged,
+  });
+
+  final double azimuth;
+  final String direction;
+  final double altitude;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 70,
+        child: Text('$direction ${azimuth.toStringAsFixed(0)}°'),
+      ),
+      Expanded(
+        child: Slider(
+          value: altitude.clamp(0, 90),
+          min: 0,
+          max: 90,
+          divisions: 18,
+          label: '${altitude.round()}°',
+          onChanged: onChanged,
+        ),
+      ),
+      SizedBox(
+        width: 36,
+        child: Text('${altitude.round()}°', textAlign: TextAlign.end),
+      ),
+    ],
+  );
 }

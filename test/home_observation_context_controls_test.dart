@@ -161,6 +161,12 @@ void main() {
     expect(find.textContaining('Bortle 8'), findsOneWidget);
     expect(find.textContaining('흐림 38% · 27°C'), findsOneWidget);
     expect(find.byKey(const Key('manage-observation-sites')), findsNothing);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('active-observation-site-card')))
+          .height,
+      tester.getSize(find.byKey(const Key('home-equipment-card'))).height,
+    );
     await tester.tap(find.byKey(const Key('active-observation-site-selector')));
     await tester.pumpAndSettle();
     expect(
@@ -183,6 +189,12 @@ void main() {
       find.byType(SegmentedButton<TrackingMode>),
     );
     expect(segmented.expandedInsets, EdgeInsets.zero);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('active-observation-site-card')))
+          .height,
+      tester.getSize(find.byKey(const Key('home-equipment-card'))).height,
+    );
     expect(tester.takeException(), isNull);
   });
 

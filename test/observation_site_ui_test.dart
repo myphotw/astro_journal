@@ -148,6 +148,8 @@ void main() {
     expect(find.byKey(const Key('add-blocked-range')), findsOneWidget);
     expect(find.byKey(const Key('add-horizon-point')), findsOneWidget);
     expect(find.byKey(const Key('start-horizon-scan')), findsOneWidget);
+    expect(find.textContaining('기본 최소 고도'), findsNothing);
+    expect(find.textContaining('기본 최대 고도'), findsNothing);
 
     await tester.tap(find.byKey(const Key('add-blocked-range')));
     await tester.pumpAndSettle();
@@ -183,7 +185,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('horizon-min-altitude')), '30');
     await tester.tap(find.widgetWithText(FilledButton, '적용'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('아래 30.0°까지 가림'), findsOneWidget);
+    expect(find.textContaining('최소 가시 고도 30°'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const Key('save-observation-site')));
     await tester.tap(find.byKey(const Key('save-observation-site')));
@@ -195,6 +197,59 @@ void main() {
     expect(repository.sites.single.horizonPoints.single.minAltitude, 30);
     expect(repository.sites.single.blockedAzimuthRanges, isEmpty);
     expect(find.text('테스트 관측지'), findsOneWidget);
+  });
+
+  testWidgets('quick horizon controls save eight directions and can reset', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _FakeObservationSiteRepository();
+    await tester.pumpWidget(_app(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('add-observation-site')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('site-name')), '빠른 시야');
+    await tester.enterText(find.byKey(const Key('site-latitude')), '37.5');
+    await tester.enterText(find.byKey(const Key('site-longitude')), '127');
+
+    final northSlider = tester.widget<Slider>(
+      find.descendant(
+        of: find.byKey(const Key('horizon-direction-0')),
+        matching: find.byType(Slider),
+      ),
+    );
+    northSlider.onChanged!(25);
+    await tester.pump();
+    expect(find.text('실제 시야: 등록됨'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('save-observation-site')));
+    await tester.tap(find.byKey(const Key('save-observation-site')));
+    await tester.pumpAndSettle();
+    expect(repository.sites.single.horizonPoints, hasLength(8));
+    expect(
+      repository.sites.single.horizonPoints
+          .firstWhere((point) => point.azimuth == 0)
+          .minAltitude,
+      25,
+    );
+
+    await tester.tap(find.text('빠른 시야'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-observation-site-detail')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('clear-horizon')));
+    await tester.tap(find.byKey(const Key('clear-horizon')));
+    await tester.pump();
+    expect(find.text('실제 시야: 제한 없음'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('save-observation-site')));
+    await tester.tap(find.byKey(const Key('save-observation-site')));
+    await tester.pumpAndSettle();
+    expect(repository.sites.single.horizonPoints, isEmpty);
+    expect(repository.sites.single.blockedAzimuthRanges, isEmpty);
   });
 
   testWidgets('shows validation error for an empty site name', (tester) async {

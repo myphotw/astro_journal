@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../data/models/blocked_azimuth_range.dart';
 import '../../../data/models/observation_site.dart';
+import '../../../data/models/site_horizon_profile.dart';
+import '../../../services/horizon_visibility_service.dart';
 
 class ObservationSiteHorizonSummary extends StatelessWidget {
   const ObservationSiteHorizonSummary({super.key, required this.site});
@@ -10,20 +12,11 @@ class ObservationSiteHorizonSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final minimums = <double>[
-      site.defaultMinAltitude,
-      ...site.horizonPoints.map((point) => point.minAltitude),
-    ];
-    final maximums = <double>[
-      if (site.defaultMaxAltitude != null) site.defaultMaxAltitude!,
-      ...site.horizonPoints
-          .where((point) => point.maxAltitude != null)
-          .map((point) => point.maxAltitude!),
-    ];
-    final min = minimums.reduce((a, b) => a < b ? a : b);
-    final max = maximums.isEmpty
-        ? null
-        : maximums.reduce((a, b) => a > b ? a : b);
+    final profile = SiteHorizonProfile(
+      points: site.horizonPoints,
+      blockedRanges: site.blockedAzimuthRanges,
+    );
+    const visibility = HorizonVisibilityService();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,14 +27,14 @@ class ObservationSiteHorizonSummary extends StatelessWidget {
           children: [
             Expanded(
               child: _Metric(
-                label: '최소 고도',
-                value: '${min.toStringAsFixed(0)}°',
+                label: '실제 시야',
+                value: profile.hasRestrictions ? '등록됨' : '제한 없음',
               ),
             ),
             Expanded(
               child: _Metric(
-                label: '최대 고도',
-                value: max == null ? '제한 없음' : '${max.toStringAsFixed(0)}°',
+                label: '방향 지점',
+                value: '${site.horizonPoints.length}개',
               ),
             ),
             Expanded(
@@ -55,6 +48,33 @@ class ObservationSiteHorizonSummary extends StatelessWidget {
         const SizedBox(height: 12),
         _AzimuthBar(site: site),
         const SizedBox(height: 6),
+        if (site.horizonPoints.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children:
+                const <(double, String)>[
+                  (0, '북'),
+                  (45, '북동'),
+                  (90, '동'),
+                  (135, '남동'),
+                  (180, '남'),
+                  (225, '남서'),
+                  (270, '서'),
+                  (315, '북서'),
+                ].map((direction) {
+                  final altitude = visibility.minimumVisibleAltitude(
+                    profile,
+                    direction.$1,
+                  );
+                  return Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text('${direction.$2} ${altitude.round()}°'),
+                  );
+                }).toList(),
+          ),
+          const SizedBox(height: 6),
+        ],
         const Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -75,7 +95,7 @@ class ObservationSiteHorizonSummary extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           site.horizonPoints.isEmpty
-              ? '기본 고도 기준을 사용합니다.'
+              ? '방향별 고도 제한이 없습니다.'
               : '방향별 고도 ${site.horizonPoints.length}개가 저장되어 있습니다.',
           style: Theme.of(context).textTheme.bodySmall,
         ),

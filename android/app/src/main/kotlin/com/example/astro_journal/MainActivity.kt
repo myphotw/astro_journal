@@ -100,8 +100,8 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        GoogleMapsApiKeyHolder.applyBuildConfiguredKey(applicationContext)
         super.onCreate(savedInstanceState)
+        GoogleMapsApiKeyHolder.applyBuildConfiguredKey(applicationContext)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
