@@ -128,7 +128,6 @@ class _HomeBodyState extends State<_HomeBody> {
 
   Future<void> _selectCurrentSite() async {
     await viewModel.activeObservationSiteViewModel.selectCurrentLocation();
-    await viewModel.refreshForActiveSite();
   }
 
   Future<void> _selectSavedSite(String id) async {
@@ -136,7 +135,6 @@ class _HomeBodyState extends State<_HomeBody> {
     for (final site in activeViewModel.sites) {
       if (site.id != id) continue;
       await activeViewModel.selectSavedSite(site);
-      await viewModel.refreshForActiveSite();
       return;
     }
   }

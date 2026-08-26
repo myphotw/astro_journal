@@ -16,8 +16,10 @@ import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/horizon_visibility_service.dart';
 import '../../../services/location_service.dart';
+import '../../../services/observation_condition_service.dart';
 import '../../../services/observation_site_validator.dart';
 import '../../horizon_scan/view/horizon_scan_screen.dart';
+import '../widgets/observation_location_search_sheet.dart';
 
 class ObservationSiteEditScreen extends StatefulWidget {
   const ObservationSiteEditScreen({
@@ -46,8 +48,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
   late final TextEditingController _longitude;
   late final TextEditingController _bortle;
   late final TextEditingController _sqm;
-  late final TextEditingController _preferredStart;
-  late final TextEditingController _preferredEnd;
   late final TextEditingController _memo;
   late TrackingMode _trackingMode;
   String? _defaultEquipmentId;
@@ -56,6 +56,9 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
   late List<BlockedAzimuthRange> _blockedRanges;
   List<Equipment> _equipment = const [];
   bool _saving = false;
+  bool _derivingSkyQuality = false;
+  double? _lastDerivedLatitude;
+  double? _lastDerivedLongitude;
 
   @override
   void initState() {
@@ -72,8 +75,10 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     );
     _bortle = TextEditingController(text: site?.bortle?.toString());
     _sqm = TextEditingController(text: site?.sqm?.toString());
-    _preferredStart = TextEditingController(text: site?.preferredStart);
-    _preferredEnd = TextEditingController(text: site?.preferredEnd);
+    if (site?.bortle != null && site?.sqm != null) {
+      _lastDerivedLatitude = site?.latitude;
+      _lastDerivedLongitude = site?.longitude;
+    }
     _memo = TextEditingController(text: site?.memo);
     _trackingMode = site?.trackingMode ?? TrackingMode.altAz;
     _defaultEquipmentId = site?.defaultEquipmentId;
@@ -81,6 +86,13 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     _points = List.of(site?.horizonPoints ?? const []);
     _blockedRanges = List.of(site?.blockedAzimuthRanges ?? const []);
     unawaited(_loadEquipment());
+    final initialLatitude = _double(_latitude);
+    final initialLongitude = _double(_longitude);
+    if (site == null && initialLatitude != null && initialLongitude != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_deriveSkyQuality(initialLatitude, initialLongitude));
+      });
+    }
   }
 
   Future<void> _loadEquipment() async {
@@ -104,8 +116,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
       _longitude,
       _bortle,
       _sqm,
-      _preferredStart,
-      _preferredEnd,
       _memo,
     ]) {
       controller.dispose();
@@ -130,30 +140,44 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
 
   Future<void> _useCurrentLocation() async {
     try {
-      final location = await context
-          .read<LocationService>()
-          .getCurrentLocation();
-      if (!mounted) return;
-      _latitude.text = location.latitude.toStringAsFixed(6);
-      _longitude.text = location.longitude.toStringAsFixed(6);
-      final info = await context.read<GeocodingService>().getLocationInfo(
+      final locationService = context.read<LocationService>();
+      final geocodingService = context.read<GeocodingService>();
+      final conditionService = context.read<ObservationConditionService>();
+      setState(() => _derivingSkyQuality = true);
+      final location = await locationService.getCurrentLocation();
+      final info = await geocodingService.getLocationInfo(
         location.latitude,
         location.longitude,
       );
-      if (mounted && info != null) {
-        _address.text = info.address.isNotEmpty
-            ? info.address
-            : info.locationName;
+      final condition = await conditionService.getConditionAt(
+        location.latitude,
+        location.longitude,
+      );
+      if (condition.bortle == null || condition.sqm == null) {
+        throw StateError('현재 위치의 Bortle/SQM을 계산할 수 없습니다.');
       }
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {
+        _address.text = info == null
+            ? '현재 위치'
+            : (info.address.isNotEmpty ? info.address : info.locationName);
+        _latitude.text = location.latitude.toStringAsFixed(6);
+        _longitude.text = location.longitude.toStringAsFixed(6);
+        _bortle.text = condition.bortle.toString();
+        _sqm.text = condition.sqm!.toStringAsFixed(2);
+        _lastDerivedLatitude = location.latitude;
+        _lastDerivedLongitude = location.longitude;
+      });
     } catch (error) {
       if (mounted) _showError(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _derivingSkyQuality = false);
     }
   }
 
   Future<void> _openHorizonScan() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    await Navigator.of(context).push<bool>(
+    final points = await Navigator.of(context).push<List<HorizonPoint>>(
       MaterialPageRoute(
         builder: (_) => HorizonScanScreen(
           observationSiteId: _siteId,
@@ -163,42 +187,30 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
         ),
       ),
     );
+    if (!mounted || points == null) return;
+    setState(() {
+      _points = points;
+    });
   }
 
   Future<void> _searchAddress() async {
-    final query = _address.text.trim();
-    if (query.length < 2) {
-      _showError('검색할 주소를 두 글자 이상 입력해 주세요.');
-      return;
-    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    final geocoding = context.read<GeocodingService>();
+    final selected = await ObservationLocationSearchSheet.show(
+      context,
+      geocodingService: geocoding,
+    );
+    if (!mounted || selected == null) return;
+    await _applyLocationSelection(geocoding, selected);
+  }
+
+  Future<void> _applyLocationSelection(
+    GeocodingService geocoding,
+    LocationSearchSuggestion selected,
+  ) async {
+    final conditionService = context.read<ObservationConditionService>();
+    setState(() => _derivingSkyQuality = true);
     try {
-      final geocoding = context.read<GeocodingService>();
-      final suggestions = await geocoding.autocompleteLocations(query);
-      if (!mounted) return;
-      if (suggestions.isEmpty) {
-        _showError('주소 검색 결과가 없습니다.');
-        return;
-      }
-      final selected = await showModalBottomSheet<LocationSearchSuggestion>(
-        context: context,
-        builder: (context) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: suggestions
-                .map(
-                  (suggestion) => ListTile(
-                    title: Text(suggestion.mainText),
-                    subtitle: suggestion.secondaryText == null
-                        ? null
-                        : Text(suggestion.secondaryText!),
-                    onTap: () => Navigator.pop(context, suggestion),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-      );
-      if (!mounted || selected == null) return;
       GeocodeForwardResult? result;
       if (selected.hasCoordinates) {
         result = GeocodeForwardResult(
@@ -210,14 +222,59 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
       } else if (selected.hasPlaceId) {
         result = await geocoding.getPlaceDetails(selected.placeId!);
       }
-      if (!mounted || result == null) return;
-      _address.text = result.displayLabel;
-      _latitude.text = result.latitude.toStringAsFixed(6);
-      _longitude.text = result.longitude.toStringAsFixed(6);
-      setState(() {});
+      if (result == null) throw StateError('선택한 장소의 좌표를 찾을 수 없습니다.');
+      final condition = await conditionService.getConditionAt(
+        result.latitude,
+        result.longitude,
+      );
+      if (condition.bortle == null || condition.sqm == null) {
+        throw StateError('선택한 위치의 Bortle/SQM을 계산할 수 없습니다.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _address.text = result!.displayLabel;
+        _latitude.text = result.latitude.toStringAsFixed(6);
+        _longitude.text = result.longitude.toStringAsFixed(6);
+        _bortle.text = condition.bortle?.toString() ?? '';
+        _sqm.text = condition.sqm?.toStringAsFixed(2) ?? '';
+        _lastDerivedLatitude = result.latitude;
+        _lastDerivedLongitude = result.longitude;
+      });
     } catch (_) {
-      if (mounted) _showError('주소 검색에 실패했습니다.');
+      if (mounted) _showError('위치 정보를 적용하지 못했습니다. 기존 위치는 유지됩니다.');
+    } finally {
+      if (mounted) setState(() => _derivingSkyQuality = false);
     }
+  }
+
+  Future<void> _deriveSkyQuality(double latitude, double longitude) async {
+    if (!mounted) return;
+    ObservationConditionService service;
+    try {
+      service = context.read<ObservationConditionService>();
+    } on ProviderNotFoundException {
+      return;
+    }
+    setState(() => _derivingSkyQuality = true);
+    try {
+      final condition = await service.getConditionAt(latitude, longitude);
+      if (!mounted) return;
+      _bortle.text = condition.bortle?.toString() ?? '';
+      _sqm.text = condition.sqm?.toStringAsFixed(2) ?? '';
+      _lastDerivedLatitude = latitude;
+      _lastDerivedLongitude = longitude;
+    } finally {
+      if (mounted) setState(() => _derivingSkyQuality = false);
+    }
+  }
+
+  Future<void> _resolveLocationContextBeforeSave() async {
+    var latitude = _double(_latitude);
+    var longitude = _double(_longitude);
+    if (latitude == null || longitude == null) return;
+    final needsDerivation =
+        _lastDerivedLatitude != latitude || _lastDerivedLongitude != longitude;
+    if (needsDerivation) await _deriveSkyQuality(latitude, longitude);
   }
 
   Future<void> _editHorizonPoint([HorizonPoint? existing]) async {
@@ -432,6 +489,17 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await _resolveLocationContextBeforeSave();
+    } catch (error) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError('위치 기반 하늘 품질을 계산하지 못했습니다: ${_message(error)}');
+      }
+      return;
+    }
+    if (!mounted) return;
     final now = DateTime.now();
     final site = ObservationSite(
       id: _siteId,
@@ -449,8 +517,9 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
       // visibility is now owned by the direction-based Horizon profile.
       defaultMinAltitude: widget.site?.defaultMinAltitude ?? 20,
       defaultMaxAltitude: widget.site?.defaultMaxAltitude,
-      preferredStart: _optional(_preferredStart),
-      preferredEnd: _optional(_preferredEnd),
+      // Legacy storage columns are retained, but no longer affect runtime.
+      preferredStart: widget.site?.preferredStart,
+      preferredEnd: widget.site?.preferredEnd,
       memo: _memo.text.trim(),
       createdAt: widget.site?.createdAt ?? now,
       updatedAt: now,
@@ -460,7 +529,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     );
     try {
       ObservationSiteValidator.validate(site);
-      setState(() => _saving = true);
       final repository = context.read<ObservationSiteRepository>();
       if (widget.site == null) {
         await repository.create(site);
@@ -542,14 +610,26 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               required: true,
               key: const Key('site-name'),
             ),
-            _textField(_address, '주소/위치'),
+            TextFormField(
+              key: const Key('site-location-selection'),
+              controller: _address,
+              readOnly: true,
+              onTap: _saving ? null : _searchAddress,
+              decoration: const InputDecoration(
+                labelText: '관측 위치',
+                hintText: '주소 또는 장소 검색',
+                prefixIcon: Icon(Icons.place_outlined),
+                suffixIcon: Icon(Icons.search),
+              ),
+            ),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _searchAddress,
                     icon: const Icon(Icons.search),
-                    label: const Text('주소 검색'),
+                    label: const Text('위치 검색'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -583,11 +663,27 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
             ),
             Row(
               children: [
-                Expanded(child: _numberField(_bortle, 'Bortle (1~9)')),
+                Expanded(
+                  child: _numberField(
+                    _bortle,
+                    'Bortle (자동)',
+                    key: const Key('site-bortle'),
+                    readOnly: true,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _numberField(_sqm, 'SQM')),
+                Expanded(
+                  child: _numberField(
+                    _sqm,
+                    'SQM (자동)',
+                    key: const Key('site-sqm'),
+                    readOnly: true,
+                  ),
+                ),
               ],
             ),
+            if (_derivingSkyQuality)
+              const LinearProgressIndicator(key: Key('sky-quality-progress')),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('즐겨찾기'),
@@ -633,13 +729,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               ],
               onChanged: (value) => setState(() => _defaultEquipmentId = value),
             ),
-            Row(
-              children: [
-                Expanded(child: _textField(_preferredStart, '선호 시작 (HH:mm)')),
-                const SizedBox(width: 8),
-                Expanded(child: _textField(_preferredEnd, '선호 종료 (HH:mm)')),
-              ],
-            ),
             _textField(_memo, '메모', maxLines: 3),
             _sectionTitle('촬영 가능 시야'),
             Text(
@@ -654,6 +743,21 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
+            FilledButton.icon(
+              key: const Key('start-horizon-scan'),
+              onPressed: _openHorizonScan,
+              icon: const Icon(Icons.panorama_horizontal_select_outlined),
+              label: const Text('카메라로 시야 자동 스캔'),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 6, bottom: 12),
+              child: Text(
+                '한 바퀴 천천히 돌면 자동 측정값을 먼저 만들고 아래에서 미리보기를 확인합니다.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
+            Text('필요 시 수동 보정', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
             ..._horizonDirections.map(
               (direction) => _HorizonDirectionSlider(
                 key: Key('horizon-direction-${direction.$1.toInt()}'),
@@ -673,19 +777,6 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
                     : null,
                 icon: const Icon(Icons.clear_all),
                 label: const Text('시야 제한 없음'),
-              ),
-            ),
-            OutlinedButton.icon(
-              key: const Key('start-horizon-scan'),
-              onPressed: _openHorizonScan,
-              icon: const Icon(Icons.panorama_horizontal_select_outlined),
-              label: const Text('시야 자동 측정'),
-            ),
-            const Padding(
-              padding: EdgeInsets.only(top: 6, bottom: 12),
-              child: Text(
-                '카메라로 주변 방향과 기울기를 확인합니다.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
             ),
             Text('막힌 방향', style: Theme.of(context).textTheme.titleSmall),
@@ -785,12 +876,14 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     TextEditingController controller,
     String label, {
     Key? key,
+    bool readOnly = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
         key: key,
         controller: controller,
+        readOnly: readOnly,
         keyboardType: const TextInputType.numberWithOptions(
           decimal: true,
           signed: true,

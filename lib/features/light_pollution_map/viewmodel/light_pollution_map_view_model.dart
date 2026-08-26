@@ -21,6 +21,7 @@ import '../../../services/geocoding_service.dart';
 import '../../../services/light_pollution_tile_preload_service.dart';
 import '../../../services/observation_condition_service.dart';
 import '../../../services/observation_engine.dart';
+import '../../../services/observation_score_service.dart';
 import '../../../services/recommendation_engine.dart';
 import '../../../services/recommendation_settings_service.dart';
 import '../../../services/weather_service.dart';
@@ -984,24 +985,5 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
   static ({DateTime nightStart, DateTime nightEnd}) _estimateNightWindow(
     DateTime now,
-  ) {
-    const sunsetH = [17, 17, 18, 19, 19, 19, 19, 19, 18, 17, 17, 17];
-    const sunriseH = [7, 7, 6, 6, 5, 5, 5, 5, 6, 6, 7, 7];
-
-    final m = now.month - 1;
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-
-    final sunset = DateTime(today.year, today.month, today.day, sunsetH[m], 30);
-    final sunrise = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      sunriseH[m],
-      30,
-    );
-
-    final nightStart = sunset.add(const Duration(minutes: 80));
-    return (nightStart: nightStart, nightEnd: sunrise);
-  }
+  ) => ObservationScoreService.estimatedNightWindow(now);
 }

@@ -1,16 +1,25 @@
+import '../../core/services/observation_context_invalidator.dart';
+import '../../core/services/performance_probe.dart';
 import '../datasources/equipment_local_datasource.dart';
 import '../models/equipment.dart';
 import 'equipment_repository.dart';
 
 class EquipmentRepositoryImpl implements EquipmentRepository {
-  EquipmentRepositoryImpl({EquipmentLocalDataSource? dataSource})
-      : _dataSource = dataSource ?? EquipmentLocalDataSource();
+  EquipmentRepositoryImpl({
+    EquipmentLocalDataSource? dataSource,
+    this.contextInvalidator,
+  }) : _dataSource = dataSource ?? EquipmentLocalDataSource();
 
   final EquipmentLocalDataSource _dataSource;
+  final ObservationContextInvalidator? contextInvalidator;
 
   @override
   Future<List<Equipment>> getAll({bool activeOnly = false}) =>
-      _dataSource.getAll(activeOnly: activeOnly);
+      PerformanceProbe.measureAsync(
+        'db.equipment.list',
+        () => _dataSource.getAll(activeOnly: activeOnly),
+        state: 'active_only=$activeOnly',
+      );
 
   @override
   Future<Equipment?> getById(String id) => _dataSource.getById(id);
@@ -23,8 +32,12 @@ class EquipmentRepositoryImpl implements EquipmentRepository {
     } else {
       await _dataSource.update(equipment);
     }
+    await contextInvalidator?.invalidate(ObservationContextChange.equipment);
   }
 
   @override
-  Future<void> delete(String id) => _dataSource.delete(id);
+  Future<void> delete(String id) async {
+    await _dataSource.delete(id);
+    await contextInvalidator?.invalidate(ObservationContextChange.equipment);
+  }
 }

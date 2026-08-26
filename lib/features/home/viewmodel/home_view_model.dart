@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/catalog_type.dart';
+import '../../../core/services/observation_context_invalidator.dart';
+import '../../../core/services/performance_probe.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/observation_quality_component.dart';
 import '../../../data/models/observation_quality_index.dart';
@@ -220,8 +222,11 @@ class HomeViewModel extends ChangeNotifier {
     this._equipmentRepository,
     this._equipmentRecommendationService,
     this._schedulerEngine,
-    this._activeObservationSiteViewModel,
-  );
+    this._activeObservationSiteViewModel, [
+    this._contextInvalidator,
+  ]) {
+    _contextInvalidator?.bind(_handleContextInvalidation);
+  }
 
   final CatalogRepository _catalogRepository;
   final WeatherService _weatherService;
@@ -236,6 +241,7 @@ class HomeViewModel extends ChangeNotifier {
   final EquipmentRecommendationService _equipmentRecommendationService;
   final SchedulerEngine _schedulerEngine;
   final ActiveObservationSiteViewModel _activeObservationSiteViewModel;
+  final ObservationContextInvalidator? _contextInvalidator;
 
   bool _isLoading = false;
   bool _isWeatherLoading = false;
@@ -303,8 +309,12 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> setTrackingMode(TrackingMode mode) async {
     if (_trackingMode == mode) return;
     _trackingMode = mode;
-    _activeObservationSiteViewModel.setTemporaryTrackingOverride(mode);
+    await _activeObservationSiteViewModel.setTemporaryTrackingOverride(mode);
     notifyListeners();
+
+    if (_contextInvalidator != null) {
+      return;
+    }
 
     if (_cachedAllObjects.isEmpty || _nightStart == null || _nightEnd == null) {
       return;
@@ -325,8 +335,14 @@ class HomeViewModel extends ChangeNotifier {
         equipmentId) {
       return;
     }
-    _activeObservationSiteViewModel.setTemporaryEquipmentOverride(equipmentId);
+    await _activeObservationSiteViewModel.setTemporaryEquipmentOverride(
+      equipmentId,
+    );
     notifyListeners();
+
+    if (_contextInvalidator != null) {
+      return;
+    }
 
     if (_cachedAllObjects.isEmpty || _nightStart == null || _nightEnd == null) {
       return;
@@ -562,26 +578,7 @@ class HomeViewModel extends ChangeNotifier {
 
   static ({DateTime nightStart, DateTime nightEnd}) _estimateNightWindow(
     DateTime now,
-  ) {
-    const sunsetH = [17, 17, 18, 19, 19, 19, 19, 19, 18, 17, 17, 17];
-    const sunriseH = [7, 7, 6, 6, 5, 5, 5, 5, 6, 6, 7, 7];
-
-    final m = now.month - 1;
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-
-    final sunset = DateTime(today.year, today.month, today.day, sunsetH[m], 30);
-    final sunrise = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      sunriseH[m],
-      30,
-    );
-
-    final nightStart = sunset.add(const Duration(minutes: 80));
-    return (nightStart: nightStart, nightEnd: sunrise);
-  }
+  ) => ObservationScoreService.estimatedNightWindow(now);
 
   Future<void> _applyRecommendations({
     required List<CatalogObject> allObjects,
@@ -599,14 +596,19 @@ class HomeViewModel extends ChangeNotifier {
       end: _nightEnd!,
     );
 
-    final context = await _observationEngine.buildContext(
-      latitude: _latitude,
-      longitude: _longitude,
-      currentTime: now,
-      weather: _observationCondition?.weather,
-      forecasts: _cachedForecasts,
-      session: session,
-      catalog: allObjects,
+    final revision = _contextInvalidator?.revision ?? 0;
+    final context = await PerformanceProbe.measureAsync(
+      'observation_context.build',
+      () => _observationEngine.buildContext(
+        latitude: _latitude,
+        longitude: _longitude,
+        currentTime: now,
+        weather: _observationCondition?.weather,
+        forecasts: _cachedForecasts,
+        session: session,
+        catalog: allObjects,
+      ),
+      state: 'revision=$revision',
     );
 
     final sessionContext = context.copyWith(
@@ -614,32 +616,51 @@ class HomeViewModel extends ChangeNotifier {
       observationEnd: session.end,
       moonIllumination: moonIllumination ?? context.moonIllumination,
       horizonProfile: _activeObservationSiteViewModel.active.horizonProfile,
+      trackingMode: _trackingMode,
     );
 
-    final allEquipment = await _equipmentRepository.getAll(activeOnly: true);
+    final allEquipment = await PerformanceProbe.measureAsync(
+      'repository.equipment.active_list',
+      () => _equipmentRepository.getAll(activeOnly: true),
+      state: 'revision=$revision',
+    );
     _activeEquipment = allEquipment;
-    final preferredEquipmentId =
+    var preferredEquipmentId =
         _activeObservationSiteViewModel.active.effectiveEquipmentId;
-    final equipment = preferredEquipmentId == null
-        ? allEquipment
+    if (preferredEquipmentId != null &&
+        !allEquipment.any((item) => item.id == preferredEquipmentId)) {
+      preferredEquipmentId = allEquipment.firstOrNull?.id;
+      _activeObservationSiteViewModel.reconcileEquipmentSelection(
+        preferredEquipmentId,
+      );
+    }
+    final preferredEquipment = preferredEquipmentId == null
+        ? null
         : allEquipment
               .where((item) => item.id == preferredEquipmentId)
               .toList();
-    final result = await _recommendationEngine.build(
-      catalog: allObjects,
-      settings: _recommendationSettings,
-      context: sessionContext,
-      session: session,
-      limit: allLimit,
-      windSpeed: windSpeed,
-      referenceTime: now,
-      trackingMode: _trackingMode,
-      equipmentFitResolver: (object, window) => _equipmentFitFor(
-        object: object,
-        window: window,
-        equipment: equipment,
+    final equipment = preferredEquipment == null || preferredEquipment.isEmpty
+        ? allEquipment
+        : preferredEquipment;
+    final result = await PerformanceProbe.measureAsync(
+      'recommendation.build',
+      () => _recommendationEngine.build(
+        catalog: allObjects,
+        settings: _recommendationSettings,
         context: sessionContext,
+        session: session,
+        limit: allLimit,
+        windSpeed: windSpeed,
+        referenceTime: now,
+        trackingMode: sessionContext.trackingMode,
+        equipmentFitResolver: (object, window) => _equipmentFitFor(
+          object: object,
+          window: window,
+          equipment: equipment,
+          context: sessionContext,
+        ),
       ),
+      state: 'revision=$revision',
     );
 
     _exclusionReasons = result.exclusionReasons;
@@ -1100,6 +1121,41 @@ class HomeViewModel extends ChangeNotifier {
     await _fetchWeather();
   }
 
+  Future<void> _handleContextInvalidation(
+    ObservationContextChange change,
+  ) async {
+    final refreshSiteCache =
+        change == ObservationContextChange.observationSite ||
+        change == ObservationContextChange.horizon;
+    if (refreshSiteCache) {
+      await _activeObservationSiteViewModel.load(force: true);
+    }
+
+    final changesLocation =
+        refreshSiteCache || change == ObservationContextChange.activeSite;
+    if (changesLocation) {
+      _celestialPositionService.clearCache();
+      _applyActiveSiteDefaults();
+    }
+
+    if (_cachedAllObjects.isNotEmpty &&
+        _nightStart != null &&
+        _nightEnd != null) {
+      await _applyRecommendations(
+        allObjects: _cachedAllObjects,
+        now: DateTime.now(),
+        cloudCoverage: _observationCondition?.cloudCover ?? 0,
+        windSpeed: _observationCondition?.windSpeed ?? 0,
+        moonIllumination: _observationCondition?.moon.illumination,
+      );
+      notifyListeners();
+    }
+
+    if (changesLocation) {
+      unawaited(_fetchWeather());
+    }
+  }
+
   void _applyActiveSiteDefaults() {
     final active = _activeObservationSiteViewModel.active;
     _trackingMode = active.effectiveTrackingMode;
@@ -1317,6 +1373,13 @@ class HomeViewModel extends ChangeNotifier {
       return '위치 권한이 필요합니다';
     }
     return '날씨 정보를 불러올 수 없습니다';
+  }
+
+  @override
+  void dispose() {
+    _weatherRequestGeneration += 1;
+    _contextInvalidator?.unbind();
+    super.dispose();
   }
 }
 

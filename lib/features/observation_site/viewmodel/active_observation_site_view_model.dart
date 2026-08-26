@@ -1,14 +1,16 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/services/observation_context_invalidator.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/repositories/observation_site_repository.dart';
 import '../models/active_observation_site.dart';
 
 class ActiveObservationSiteViewModel extends ChangeNotifier {
-  ActiveObservationSiteViewModel(this._repository);
+  ActiveObservationSiteViewModel(this._repository, {this.contextInvalidator});
 
   final ObservationSiteRepository _repository;
+  final ObservationContextInvalidator? contextInvalidator;
   ActiveObservationSite _active = const ActiveObservationSite.currentLocation();
   List<ObservationSite> _sites = const [];
   bool _loaded = false;
@@ -48,6 +50,7 @@ class ActiveObservationSiteViewModel extends ChangeNotifier {
   Future<void> selectCurrentLocation() async {
     _active = const ActiveObservationSite.currentLocation();
     notifyListeners();
+    await contextInvalidator?.invalidate(ObservationContextChange.activeSite);
   }
 
   Future<void> selectSavedSite(ObservationSite site) async {
@@ -57,6 +60,7 @@ class ActiveObservationSiteViewModel extends ChangeNotifier {
     _replaceSite(selected);
     _active = ActiveObservationSite.saved(selected);
     notifyListeners();
+    await contextInvalidator?.invalidate(ObservationContextChange.activeSite);
   }
 
   void updateCurrentLocation({
@@ -87,15 +91,25 @@ class ActiveObservationSiteViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTemporaryTrackingOverride(TrackingMode mode) {
+  Future<void> setTemporaryTrackingOverride(TrackingMode mode) async {
     _active = _active.copyWithOverrides(trackingMode: mode);
     notifyListeners();
+    await contextInvalidator?.invalidate(ObservationContextChange.trackingMode);
   }
 
-  void setTemporaryEquipmentOverride(String? equipmentId) {
+  Future<void> setTemporaryEquipmentOverride(String? equipmentId) async {
     _active = _active.copyWithOverrides(
       equipmentId: equipmentId,
       clearEquipment: equipmentId == null,
+    );
+    notifyListeners();
+    await contextInvalidator?.invalidate(ObservationContextChange.equipment);
+  }
+
+  void reconcileEquipmentSelection(String? fallbackEquipmentId) {
+    _active = _active.copyWithOverrides(
+      equipmentId: fallbackEquipmentId,
+      clearEquipment: fallbackEquipmentId == null,
     );
     notifyListeners();
   }

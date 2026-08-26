@@ -1,4 +1,5 @@
 import 'catalog_object.dart';
+import 'imaging_suitability_assessment.dart';
 import 'observation_feasibility_result.dart';
 import 'observation_status.dart';
 import 'shooting_record.dart';
@@ -35,6 +36,7 @@ class ObservationContext {
     this.catalog = const [],
     this.shootingRecords = const [],
     this.horizonProfile = const SiteHorizonProfile(),
+    this.trackingMode = TrackingMode.altAz,
   });
 
   final double latitude;
@@ -60,6 +62,7 @@ class ObservationContext {
   final List<CatalogObject> catalog;
   final List<ShootingRecord> shootingRecords;
   final SiteHorizonProfile horizonProfile;
+  final TrackingMode trackingMode;
 
   ObservationContext copyWith({
     double? latitude,
@@ -85,6 +88,7 @@ class ObservationContext {
     List<CatalogObject>? catalog,
     List<ShootingRecord>? shootingRecords,
     SiteHorizonProfile? horizonProfile,
+    TrackingMode? trackingMode,
   }) {
     return ObservationContext(
       latitude: latitude ?? this.latitude,
@@ -110,6 +114,7 @@ class ObservationContext {
       catalog: catalog ?? this.catalog,
       shootingRecords: shootingRecords ?? this.shootingRecords,
       horizonProfile: horizonProfile ?? this.horizonProfile,
+      trackingMode: trackingMode ?? this.trackingMode,
     );
   }
 }

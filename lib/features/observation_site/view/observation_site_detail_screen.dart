@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/equipment.dart';
+import '../../../data/models/horizon_point.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/repositories/equipment_repository.dart';
@@ -62,16 +63,13 @@ class _ObservationSiteDetailScreenState
     if (site != null && activate && !_activated) {
       _activated = true;
       await widget.activeViewModel?.selectSavedSite(site);
-      await widget.homeViewModel?.refreshForActiveSite();
     }
   }
 
   Future<void> _updateSite(ObservationSite updated) async {
     await context.read<ObservationSiteRepository>().update(updated);
-    widget.activeViewModel?.updateSavedSite(updated, clearOverrides: true);
     if (!mounted) return;
     setState(() => _site = updated);
-    await widget.homeViewModel?.refreshForActiveSite();
   }
 
   Future<void> _changeTracking(TrackingMode? mode) async {
@@ -102,31 +100,29 @@ class _ObservationSiteDetailScreenState
     );
     if (changed == true && mounted) {
       await _load(activate: false);
-      final refreshed = _site;
-      if (refreshed != null) {
-        widget.activeViewModel?.updateSavedSite(
-          refreshed,
-          clearOverrides: true,
-        );
-      }
-      await widget.homeViewModel?.refreshForActiveSite();
     }
   }
 
-  void _openScan() {
+  Future<void> _openScan() async {
     if (widget.onOpenHorizonScan != null) {
       widget.onOpenHorizonScan!();
       return;
     }
     final site = _site;
     if (site == null) return;
-    Navigator.of(context).push<void>(
+    final points = await Navigator.of(context).push<List<HorizonPoint>>(
       MaterialPageRoute(
         builder: (_) => HorizonScanScreen(
           observationSiteId: site.id,
           observationSiteName: site.name,
+          latitude: site.latitude,
+          longitude: site.longitude,
         ),
       ),
+    );
+    if (!mounted || points == null) return;
+    await _updateSite(
+      site.copyWith(horizonPoints: points, updatedAt: DateTime.now()),
     );
   }
 

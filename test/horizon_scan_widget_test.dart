@@ -8,6 +8,7 @@ import 'package:astro_journal/features/horizon_scan/services/device_orientation_
 import 'package:astro_journal/features/horizon_scan/services/horizon_camera_service.dart';
 import 'package:astro_journal/features/horizon_scan/view/horizon_scan_screen.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,7 +22,7 @@ class _FakeOrientationService implements DeviceOrientationService {
   Future<void> start({double? latitude, double? longitude}) async {}
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() => SynchronousFuture<void>(null);
 }
 
 class _FakeCameraService implements HorizonCameraService {
@@ -54,7 +55,10 @@ class _FakeCameraService implements HorizonCameraService {
   ) async {}
 
   @override
-  Future<void> pause() async => pauses++;
+  Future<void> pause() {
+    pauses++;
+    return SynchronousFuture<void>(null);
+  }
 
   @override
   Future<void> dispose() async => pauses++;
@@ -158,7 +162,10 @@ void main() {
     for (var index = 0; index < 72; index++) {
       controller.recordSampleForTest(_sample(index * 5, index * 500000000));
     }
-    await tester.pumpAndSettle();
+    expect(controller.session.status, HorizonScanStatus.processing);
+    await tester.runAsync(controller.waitForCompletion);
+    await tester.pump();
+    expect(controller.session.status, HorizonScanStatus.completed);
 
     expect(controller.session.status, HorizonScanStatus.completed);
     expect(find.byKey(const Key('horizon-scan-summary')), findsOneWidget);

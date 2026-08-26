@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/datasources/gallery_record_link_datasource.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
@@ -14,6 +12,8 @@ import 'package:astro_journal/features/stats/viewmodel/stats_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
 import 'package:astro_journal/services/stats_analytics_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/source_text_helper.dart';
 
 void main() {
   const catalog = [
@@ -43,7 +43,7 @@ void main() {
   final capturedAt = DateTime(2026, 8, 20, 22);
 
   test('production StatsViewModel uses the canonical Gallery adapter', () {
-    final providers = File('lib/core/di/app_providers.dart').readAsStringSync();
+    final providers = readSourceText('lib/core/di/app_providers.dart');
     expect(
       providers,
       contains(

@@ -4,12 +4,15 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../data/models/horizon_point.dart';
+import '../../../core/services/performance_probe.dart';
 import '../models/horizon_scan_sample.dart';
 import '../models/horizon_scan_session.dart';
 import '../services/camera_intrinsics_service.dart';
 import '../services/device_orientation_service.dart';
 import '../services/horizon_camera_service.dart';
 import '../services/horizon_scan_sampler.dart';
+import '../services/horizon_scan_processor.dart';
 
 class HorizonScanController extends ChangeNotifier {
   HorizonScanController({
@@ -20,6 +23,7 @@ class HorizonScanController extends ChangeNotifier {
     required this.orientationService,
     required this.cameraService,
     this.intrinsicsService = const EstimatedCameraIntrinsicsService(),
+    this.processor = const HorizonScanProcessor(),
   }) {
     _createSession();
   }
@@ -31,16 +35,21 @@ class HorizonScanController extends ChangeNotifier {
   final DeviceOrientationService orientationService;
   final HorizonCameraService cameraService;
   final CameraIntrinsicsService intrinsicsService;
+  final HorizonScanProcessor processor;
 
   late HorizonScanSession _session;
   late HorizonScanSampler _sampler;
   StreamSubscription<OrientationSample>? _orientationSubscription;
   OrientationSample? _latestOrientation;
   bool _initializing = false;
+  bool _resourcesActive = false;
   bool _closed = false;
   bool _disposed = false;
+  Future<void>? _completionFuture;
+  int _cameraFrameCallbacks = 0;
   String? _errorMessage;
   bool _permissionPermanentlyDenied = false;
+  List<HorizonPoint> _horizonPoints = const [];
 
   HorizonScanSession get session => _session;
   CameraController? get cameraController => cameraService.cameraController;
@@ -53,6 +62,10 @@ class HorizonScanController extends ChangeNotifier {
       _session.coverageFraction(HorizonScanSampler.totalBins);
   List<int> get missingBins =>
       _session.missingBins(HorizonScanSampler.totalBins);
+  List<HorizonPoint> get horizonPoints => List.unmodifiable(_horizonPoints);
+
+  @visibleForTesting
+  Future<void> waitForCompletion() => _completionFuture ?? Future.value();
 
   Future<void> initialize() async {
     if (_initializing || isScanning || _disposed) return;
@@ -68,7 +81,8 @@ class HorizonScanController extends ChangeNotifier {
             permission == HorizonCameraPermissionState.permanentlyDenied;
         throw StateError('카메라 권한이 필요합니다.');
       }
-      await _startResources();
+      final started = await _startResources();
+      if (!started) return;
       _session.status = HorizonScanStatus.scanning;
       _notify();
     } on Object catch (error) {
@@ -78,11 +92,20 @@ class HorizonScanController extends ChangeNotifier {
     }
   }
 
-  Future<void> _startResources() async {
+  Future<bool> _startResources() async {
     await cameraService.initialize();
+    _resourcesActive = true;
+    if (_closed || _disposed) {
+      await _stopResources();
+      return false;
+    }
     final camera = cameraService.cameraController;
     if (camera == null) throw StateError('카메라를 초기화할 수 없습니다.');
     final intrinsics = await intrinsicsService.resolve(camera);
+    if (_closed || _disposed) {
+      await _stopResources();
+      return false;
+    }
     _session.cameraInformation = HorizonScanCameraInformation(
       cameraName: intrinsics.cameraName,
       previewWidth: intrinsics.previewWidth,
@@ -94,13 +117,22 @@ class HorizonScanController extends ChangeNotifier {
       intrinsicsConfidence: intrinsics.confidence.name,
     );
     await cameraService.startImageStream(_onCameraImage);
+    if (_closed || _disposed) {
+      await _stopResources();
+      return false;
+    }
     await orientationService.start(latitude: latitude, longitude: longitude);
+    if (_closed || _disposed) {
+      await _stopResources();
+      return false;
+    }
     _orientationSubscription = orientationService.samples.listen(
       handleOrientationSample,
       onError: (Object error, StackTrace stackTrace) {
         unawaited(_fail(error));
       },
     );
+    return true;
   }
 
   @visibleForTesting
@@ -112,14 +144,16 @@ class HorizonScanController extends ChangeNotifier {
   }
 
   void _onCameraImage(CameraImage image) {
+    if (_disposed) return;
+    _cameraFrameCallbacks++;
     final orientation = _latestOrientation;
-    if (!isScanning || orientation == null || _disposed) return;
+    if (!isScanning || orientation == null) return;
     if (!_sampler.needsSample(orientation.azimuth)) return;
     try {
       final frame = HorizonScanSampler.downsampleLuma(image);
       _sampler.recordSample(orientation, frame: frame);
       if (_sampler.isComplete) {
-        unawaited(_complete());
+        _requestCompletion();
       } else {
         _notify();
       }
@@ -139,22 +173,42 @@ class HorizonScanController extends ChangeNotifier {
     _sampler.updateOrientation(sample);
     _sampler.recordSample(sample, frame: frame);
     if (_sampler.isComplete) {
-      unawaited(_complete());
+      _requestCompletion();
     } else {
       _notify();
     }
   }
 
-  Future<void> _complete() async {
-    if (_session.status == HorizonScanStatus.completed) {
-      await _stopResources();
-      _notify();
+  void _requestCompletion() {
+    if (_completionFuture != null || !isScanning || _closed || _disposed) {
       return;
     }
-    _session.status = HorizonScanStatus.completed;
+    _session.status = HorizonScanStatus.processing;
     _session.completedAt = DateTime.now();
-    await _stopResources();
     _notify();
+    _completionFuture = _finishCompletion();
+  }
+
+  Future<void> _finishCompletion() async {
+    try {
+      await _stopResources();
+      if (_closed || _disposed) return;
+      _horizonPoints = PerformanceProbe.measure(
+        'horizon.process',
+        () => processor.process(_session),
+        state: 'samples=${_session.sampleCount}',
+      );
+      if (_horizonPoints.isEmpty) {
+        _session.addWarning('영상에서 지평선 경계를 찾지 못했습니다.');
+      }
+      if (_session.coveredBins.length < HorizonScanSampler.totalBins) {
+        _session.addWarning('일부 방향의 측정값이 부족합니다.');
+      }
+      _session.status = HorizonScanStatus.completed;
+      _notify();
+    } on Object catch (error) {
+      if (!_closed && !_disposed) await _fail(error);
+    }
   }
 
   Future<void> pause() async {
@@ -167,7 +221,8 @@ class HorizonScanController extends ChangeNotifier {
   Future<void> resume() async {
     if (_session.status != HorizonScanStatus.paused || _disposed) return;
     try {
-      await _startResources();
+      final started = await _startResources();
+      if (!started) return;
       _session.status = HorizonScanStatus.scanning;
       _notify();
     } on Object catch (error) {
@@ -199,10 +254,20 @@ class HorizonScanController extends ChangeNotifier {
   }
 
   Future<void> _stopResources() async {
-    await _orientationSubscription?.cancel();
+    final subscription = _orientationSubscription;
     _orientationSubscription = null;
-    await orientationService.stop();
-    await cameraService.pause();
+    if (!_resourcesActive && subscription == null) return;
+    _resourcesActive = false;
+    await PerformanceProbe.measureAsync(
+      'horizon.resources.stop',
+      () async {
+        await subscription?.cancel();
+        await orientationService.stop();
+        await cameraService.pause();
+      },
+      state:
+          'status=${_session.status.name} frames=$_cameraFrameCallbacks samples=${_session.sampleCount}',
+    );
   }
 
   Future<void> _fail(Object error) async {
@@ -226,6 +291,10 @@ class HorizonScanController extends ChangeNotifier {
     _latestOrientation = null;
     _errorMessage = null;
     _closed = false;
+    _resourcesActive = false;
+    _completionFuture = null;
+    _cameraFrameCallbacks = 0;
+    _horizonPoints = const [];
   }
 
   void _notify() {

@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:astro_journal/data/models/blocked_azimuth_range.dart';
 import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/observation_site.dart';
+import 'package:astro_journal/data/models/observation_condition.dart';
 import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
+import 'package:astro_journal/data/repositories/bortle_repository.dart';
 import 'package:astro_journal/core/constants/equipment_kind.dart';
 import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/data/repositories/observation_site_repository.dart';
 import 'package:astro_journal/features/settings/view/observation_site_list_screen.dart';
+import 'package:astro_journal/services/geocoding_service.dart';
+import 'package:astro_journal/services/location_service.dart';
+import 'package:astro_journal/services/observation_condition_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -90,15 +97,104 @@ class _FakeEquipmentRepository implements EquipmentRepository {
   Future<void> save(Equipment equipment) async {}
 }
 
+class _UnusedBortleRepository implements BortleRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeObservationConditionService extends ObservationConditionService {
+  _FakeObservationConditionService()
+    : super(LocationService(), _UnusedBortleRepository());
+
+  @override
+  Future<ObservationCondition> getConditionAt(
+    double latitude,
+    double longitude,
+  ) async => ObservationCondition(
+    latitude: latitude,
+    longitude: longitude,
+    brightness: 1.5,
+    bortle: 6,
+    sqm: 20.42,
+    createdAt: DateTime(2026),
+  );
+}
+
+class _FakeGeocodingService extends GeocodingService {
+  final List<String> autocompleteQueries = [];
+
+  @override
+  Future<List<LocationSearchSuggestion>> autocompleteLocations(
+    String query, [
+    String? legacyApiKey,
+  ]) async {
+    autocompleteQueries.add(query);
+    return const [
+      LocationSearchSuggestion(
+        mainText: '서울 천문대',
+        secondaryText: '서울특별시 테스트구',
+        latitude: 37.55,
+        longitude: 126.98,
+      ),
+    ];
+  }
+
+  @override
+  Future<GeocodeForwardResult?> geocodeAddress(
+    String query, [
+    String? legacyApiKey,
+  ]) async => const GeocodeForwardResult(
+    latitude: 37.55,
+    longitude: 126.98,
+    formattedAddress: '서울특별시 테스트구',
+    placeName: '서울 천문대',
+  );
+}
+
+class _RacingGeocodingService extends GeocodingService {
+  final Map<String, Completer<List<LocationSearchSuggestion>>> requests = {};
+
+  @override
+  Future<List<LocationSearchSuggestion>> autocompleteLocations(
+    String query, [
+    String? legacyApiKey,
+  ]) => requests
+      .putIfAbsent(query, () => Completer<List<LocationSearchSuggestion>>())
+      .future;
+}
+
+class _FailingDetailsGeocodingService extends GeocodingService {
+  @override
+  Future<List<LocationSearchSuggestion>> autocompleteLocations(
+    String query, [
+    String? legacyApiKey,
+  ]) async => const [
+    LocationSearchSuggestion(placeId: 'failed', mainText: '실패 장소'),
+  ];
+
+  @override
+  Future<GeocodeForwardResult?> getPlaceDetails(
+    String placeId, [
+    String? legacyApiKey,
+  ]) async => throw StateError('details failed');
+}
+
 Widget _app(
   _FakeObservationSiteRepository repository, {
   List<Equipment> equipment = const [],
+  GeocodingService? geocodingService,
 }) {
   return MultiProvider(
     providers: [
       Provider<ObservationSiteRepository>.value(value: repository),
       Provider<EquipmentRepository>.value(
         value: _FakeEquipmentRepository(equipment),
+      ),
+      Provider<GeocodingService>.value(
+        value: geocodingService ?? _FakeGeocodingService(),
+      ),
+      Provider<ObservationConditionService>.value(
+        value: _FakeObservationConditionService(),
       ),
     ],
     child: const MaterialApp(home: ObservationSiteListScreen()),
@@ -197,6 +293,170 @@ void main() {
     expect(repository.sites.single.horizonPoints.single.minAltitude, 30);
     expect(repository.sites.single.blockedAzimuthRanges, isEmpty);
     expect(find.text('테스트 관측지'), findsOneWidget);
+  });
+
+  testWidgets('address selection derives coordinates, Bortle, and SQM', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _FakeObservationSiteRepository();
+    await tester.pumpWidget(_app(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('add-observation-site')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('site-name')), '자동 관측지');
+    await tester.tap(find.byKey(const Key('site-location-selection')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('location-search-field')),
+      '서울',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    await tester.tap(find.text('서울 천문대'));
+    await tester.pumpAndSettle();
+
+    String fieldText(Key key) =>
+        tester.widget<TextFormField>(find.byKey(key)).controller!.text;
+    expect(fieldText(const Key('site-latitude')), '37.550000');
+    expect(fieldText(const Key('site-longitude')), '126.980000');
+    expect(fieldText(const Key('site-bortle')), '6');
+    expect(fieldText(const Key('site-sqm')), '20.42');
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const Key('site-location-selection')),
+          )
+          .controller!
+          .text,
+      '서울 천문대 · 서울특별시 테스트구',
+    );
+
+    await tester.ensureVisible(find.byKey(const Key('save-observation-site')));
+    await tester.tap(find.byKey(const Key('save-observation-site')));
+    await tester.pumpAndSettle();
+    expect(repository.sites.single.latitude, 37.55);
+    expect(repository.sites.single.longitude, 126.98);
+    expect(repository.sites.single.bortle, 6);
+    expect(repository.sites.single.sqm, 20.42);
+
+    await tester.tap(find.text('자동 관측지'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-observation-site-detail')));
+    await tester.pumpAndSettle();
+    expect(fieldText(const Key('site-latitude')), '37.55');
+    expect(fieldText(const Key('site-longitude')), '126.98');
+    expect(fieldText(const Key('site-bortle')), '6');
+    expect(fieldText(const Key('site-sqm')), '20.42');
+  });
+
+  testWidgets('location search ignores empty input and stale responses', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final geocoding = _RacingGeocodingService();
+    await tester.pumpWidget(
+      _app(_FakeObservationSiteRepository(), geocodingService: geocoding),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-observation-site')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('site-location-selection')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('location-search-field')), '서');
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(geocoding.requests, isEmpty);
+
+    await tester.enterText(
+      find.byKey(const Key('location-search-field')),
+      '서울',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(geocoding.requests, contains('서울'));
+    await tester.enterText(
+      find.byKey(const Key('location-search-field')),
+      '부산',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(geocoding.requests, contains('부산'));
+
+    geocoding.requests['부산']!.complete(const [
+      LocationSearchSuggestion(
+        mainText: '부산 천문대',
+        latitude: 35.1,
+        longitude: 129,
+      ),
+    ]);
+    await tester.pump();
+    expect(find.text('부산 천문대'), findsOneWidget);
+
+    geocoding.requests['서울']!.complete(const [
+      LocationSearchSuggestion(
+        mainText: '서울 천문대',
+        latitude: 37.5,
+        longitude: 127,
+      ),
+    ]);
+    await tester.pump();
+    expect(find.text('부산 천문대'), findsOneWidget);
+    expect(find.text('서울 천문대'), findsNothing);
+  });
+
+  testWidgets('failed location details preserve the existing location', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _FakeObservationSiteRepository()
+      ..sites.add(
+        ObservationSite(
+          id: 'site-existing',
+          name: '기존 위치',
+          address: '기존 주소',
+          latitude: 37.5,
+          longitude: 127,
+          bortle: 7,
+          sqm: 19.5,
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      );
+    await tester.pumpWidget(
+      _app(repository, geocodingService: _FailingDetailsGeocodingService()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('기존 위치'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-observation-site-detail')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('site-location-selection')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('location-search-field')),
+      '실패',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    await tester.tap(find.text('실패 장소'));
+    await tester.pumpAndSettle();
+
+    String fieldText(Key key) =>
+        tester.widget<TextFormField>(find.byKey(key)).controller!.text;
+    expect(fieldText(const Key('site-latitude')), '37.5');
+    expect(fieldText(const Key('site-longitude')), '127.0');
+    expect(fieldText(const Key('site-bortle')), '7');
+    expect(fieldText(const Key('site-sqm')), '19.5');
+    expect(find.textContaining('기존 위치는 유지됩니다'), findsOneWidget);
   });
 
   testWidgets('quick horizon controls save eight directions and can reset', (

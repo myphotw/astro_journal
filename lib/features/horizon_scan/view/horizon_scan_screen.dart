@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/horizon_point.dart';
 import '../controller/horizon_scan_controller.dart';
 import '../models/horizon_scan_sample.dart';
 import '../models/horizon_scan_session.dart';
@@ -102,7 +103,7 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
     if (_closing) return;
     _closing = true;
     await _controller.cancel();
-    if (mounted) Navigator.of(context).pop(false);
+    if (mounted) Navigator.of(context).pop<List<HorizonPoint>>();
   }
 
   @override
@@ -140,6 +141,9 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
   }
 
   Widget _cameraLayer() {
+    if (_controller.session.status != HorizonScanStatus.scanning) {
+      return const ColoredBox(color: Colors.black);
+    }
     final camera = _controller.cameraController;
     if (camera == null || !camera.value.isInitialized) {
       return const ColoredBox(color: Colors.black);
@@ -223,6 +227,11 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
         title: '측정이 일시 중지되었습니다.',
         subtitle: '앱으로 돌아오면 자동으로 계속합니다.',
       ),
+      HorizonScanStatus.processing => _messageCard(
+        key: const Key('horizon-scan-processing'),
+        icon: const CircularProgressIndicator(),
+        title: '카메라와 센서를 정리하고 측정 결과를 만들고 있습니다.',
+      ),
       HorizonScanStatus.completed => _summaryPanel(),
       HorizonScanStatus.error => _errorPanel(),
       HorizonScanStatus.cancelled => const SizedBox.shrink(),
@@ -243,6 +252,12 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const Text(
+            '휴대폰을 세운 상태로 천천히 한 바퀴 돌아주세요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -338,6 +353,7 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
           ),
           _summaryRow('샘플', '${session.sampleCount} / 72'),
           _summaryRow('방향 센서', _accuracyLabel(accuracy)),
+          _summaryRow('생성된 시야 지점', '${_controller.horizonPoints.length}개'),
           _summaryRow(
             '평균 회전 속도',
             '${session.averageSpeed.toStringAsFixed(1)}°/초',
@@ -348,6 +364,24 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
               '일부 방향의 측정값이 부족합니다. 그래도 계속할 수 있습니다.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.amber),
+            ),
+          ],
+          if (_controller.horizonPoints.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              key: const Key('horizon-scan-preview'),
+              spacing: 6,
+              runSpacing: 6,
+              children: _previewPoints(_controller.horizonPoints)
+                  .map(
+                    (point) => Chip(
+                      visualDensity: VisualDensity.compact,
+                      label: Text(
+                        '${_directionLabel(point.azimuth)} ${point.minAltitude.round()}°',
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
           ],
           const SizedBox(height: 16),
@@ -364,15 +398,19 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
               Expanded(
                 child: FilledButton(
                   key: const Key('finish-horizon-scan'),
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('완료'),
+                  onPressed: _controller.horizonPoints.isEmpty
+                      ? null
+                      : () => Navigator.of(
+                          context,
+                        ).pop(_controller.horizonPoints),
+                  child: const Text('적용'),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           const Text(
-            'Phase C-1 측정값은 아직 Horizon 데이터에 저장되지 않습니다.',
+            '완료하면 측정값이 관측지의 실제 시야 미리보기에 반영됩니다.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
@@ -473,4 +511,17 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
     HorizonSensorAccuracy.low => '낮음',
     HorizonSensorAccuracy.unknown => '알 수 없음',
   };
+
+  List<HorizonPoint> _previewPoints(List<HorizonPoint> points) => [
+    for (var azimuth = 0; azimuth < 360; azimuth += 45)
+      points.reduce(
+        (a, b) =>
+            (a.azimuth - azimuth).abs() <= (b.azimuth - azimuth).abs() ? a : b,
+      ),
+  ];
+
+  String _directionLabel(double azimuth) {
+    const labels = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
+    return labels[((azimuth + 22.5) ~/ 45) % labels.length];
+  }
 }

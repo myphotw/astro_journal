@@ -1,3 +1,4 @@
+import '../core/services/performance_probe.dart';
 import '../data/models/observation_status.dart';
 import '../data/models/scheduler_models.dart';
 import '../data/models/scored_observation_target.dart';
@@ -9,9 +10,9 @@ import 'scheduler/scheduler_priority_calculator.dart';
 
 /// Builds a 10-minute slot grid and assigns targets to shooting blocks.
 class SchedulerEngine {
-  const SchedulerEngine({
-    SchedulerPriorityCalculator? priorityCalculator,
-  }) : _priorityCalculator = priorityCalculator ?? const SchedulerPriorityCalculator();
+  const SchedulerEngine({SchedulerPriorityCalculator? priorityCalculator})
+    : _priorityCalculator =
+          priorityCalculator ?? const SchedulerPriorityCalculator();
 
   static const slotDuration = Duration(minutes: 10);
 
@@ -33,7 +34,14 @@ class SchedulerEngine {
     return slots;
   }
 
-  ScheduleResult buildSchedule(SchedulerInput input) {
+  ScheduleResult buildSchedule(SchedulerInput input) =>
+      PerformanceProbe.measure(
+        'scheduler.build',
+        () => _buildSchedule(input),
+        state: 'targets=${input.targets.length}',
+      );
+
+  ScheduleResult _buildSchedule(SchedulerInput input) {
     // 관측 불가여도 기상 무시 슬롯으로 스케줄은 계속 계산한다.
     final slots = _generateFeasibleSlots(input);
     final prioritizedTargets = _applySchedulerPriorities(input);
@@ -78,13 +86,16 @@ class SchedulerEngine {
     final feasibleStarts = slots
         .where((slot) => feasibility[slot.start]?.canObserve ?? false)
         .map((slot) => slot.start);
-    final allowed =
-        FeasibleSlotContinuity.slotsInRangesAtLeast(feasibleStarts).toSet();
+    final allowed = FeasibleSlotContinuity.slotsInRangesAtLeast(
+      feasibleStarts,
+    ).toSet();
 
     return slots.where((slot) => allowed.contains(slot.start)).toList();
   }
 
-  List<ScoredObservationTarget> _applySchedulerPriorities(SchedulerInput input) {
+  List<ScoredObservationTarget> _applySchedulerPriorities(
+    SchedulerInput input,
+  ) {
     return input.targets.map((target) {
       final priority = _priorityCalculator.calculate(
         target: target,

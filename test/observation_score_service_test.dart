@@ -44,6 +44,17 @@ void main() {
       );
       expect(window.nightStart.hour, 20);
       expect(window.nightStart.minute, 0);
+      expect(window.nightEnd, DateTime(2026, 6, 25, 4));
+    });
+
+    test('pre-dawn window ends before astronomical dawn', () {
+      final window = ObservationScoreService.observationNightWindow(
+        now: DateTime(2026, 6, 24, 2),
+        sunrise: DateTime(2026, 6, 24, 5, 30),
+        sunset: DateTime(2026, 6, 24, 19, 30),
+      );
+      expect(window.nightStart, DateTime(2026, 6, 23, 20));
+      expect(window.nightEnd, DateTime(2026, 6, 24, 4));
     });
   });
 
@@ -61,11 +72,15 @@ void main() {
     test('heavily penalizes high cloud cover nonlinearly', () {
       final clear = qualityService.computeSlotQuality(
         forecast: buildForecast(cloud: 10),
-        moon: ObservationScoreService.computeMoonInfo(DateTime(2026, 6, 24, 22)),
+        moon: ObservationScoreService.computeMoonInfo(
+          DateTime(2026, 6, 24, 22),
+        ),
       );
       final cloudy = qualityService.computeSlotQuality(
         forecast: buildForecast(cloud: 75),
-        moon: ObservationScoreService.computeMoonInfo(DateTime(2026, 6, 24, 22)),
+        moon: ObservationScoreService.computeMoonInfo(
+          DateTime(2026, 6, 24, 22),
+        ),
       );
 
       expect(clear.oqi, greaterThan(80));
@@ -79,7 +94,9 @@ void main() {
       );
       final index = qualityService.computeSlotQuality(
         forecast: buildForecast(cloud: 88, wind: 1),
-        moon: ObservationScoreService.computeMoonInfo(DateTime(2026, 6, 24, 22)),
+        moon: ObservationScoreService.computeMoonInfo(
+          DateTime(2026, 6, 24, 22),
+        ),
         feasibility: feasibility,
       );
 
@@ -200,21 +217,9 @@ void main() {
 
     test('selects highest average OQI window', () {
       final slots = [
-        makeSlot(
-          target: DateTime(2026, 6, 24, 21),
-          cloud: 90,
-          oqi: 12,
-        ),
-        makeSlot(
-          target: DateTime(2026, 6, 24, 22),
-          cloud: 10,
-          oqi: 85,
-        ),
-        makeSlot(
-          target: DateTime(2026, 6, 24, 23),
-          cloud: 15,
-          oqi: 88,
-        ),
+        makeSlot(target: DateTime(2026, 6, 24, 21), cloud: 90, oqi: 12),
+        makeSlot(target: DateTime(2026, 6, 24, 22), cloud: 10, oqi: 85),
+        makeSlot(target: DateTime(2026, 6, 24, 23), cloud: 15, oqi: 88),
       ];
 
       final window = ObservationScoreService.findObservationWindow(slots);
@@ -225,8 +230,18 @@ void main() {
 
   group('calculateStability', () {
     test('rewards low score variance', () {
-      final stable = ObservationScoreService.calculateStability([90, 91, 89, 90]);
-      final volatile = ObservationScoreService.calculateStability([95, 30, 98, 20]);
+      final stable = ObservationScoreService.calculateStability([
+        90,
+        91,
+        89,
+        90,
+      ]);
+      final volatile = ObservationScoreService.calculateStability([
+        95,
+        30,
+        98,
+        20,
+      ]);
 
       expect(stable.starCount, greaterThan(volatile.starCount));
       expect(stable.score, greaterThan(volatile.score));

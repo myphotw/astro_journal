@@ -37,7 +37,7 @@ void main() {
   });
 
   group('coverage and completion', () {
-    test('completes a clockwise 360 scan with all 5 degree bins', () {
+    test('recognizes a clockwise 360 scan with all 5 degree bins', () {
       final sampler = _sampler();
       for (var index = 0; index < HorizonScanSampler.totalBins; index++) {
         final sample = _sample(index * 5, index * 500000000);
@@ -46,8 +46,9 @@ void main() {
       }
       expect(sampler.session.coveredBins, hasLength(72));
       expect(sampler.session.direction, HorizonScanDirection.clockwise);
-      expect(sampler.session.status, HorizonScanStatus.completed);
       expect(sampler.isComplete, isTrue);
+      expect(sampler.session.status, HorizonScanStatus.scanning);
+      expect(sampler.session.completedAt, isNull);
     });
 
     test('completes a counter-clockwise 360 scan', () {
@@ -59,6 +60,19 @@ void main() {
         sampler.recordSample(sample);
       }
       expect(sampler.session.direction, HorizonScanDirection.counterClockwise);
+      expect(sampler.isComplete, isTrue);
+    });
+
+    test('full unique-bin coverage completes despite orientation drift', () {
+      final sampler = _sampler();
+      sampler.updateOrientation(_sample(180, 0));
+      for (var index = 0; index < HorizonScanSampler.totalBins; index++) {
+        sampler.recordSample(_sample(index * 5, index * 500000000));
+      }
+
+      expect(sampler.session.sampleCount, HorizonScanSampler.totalBins);
+      expect(sampler.session.coverageFraction(HorizonScanSampler.totalBins), 1);
+      expect(sampler.session.cumulativeRotation, 0);
       expect(sampler.isComplete, isTrue);
     });
 

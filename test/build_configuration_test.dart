@@ -1,10 +1,10 @@
-import 'dart:io';
-
 import 'package:astro_journal/core/config/app_build_config.dart';
 import 'package:astro_journal/services/tc_backend_auth_service.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'helpers/source_text_helper.dart';
 
 void main() {
   test(
@@ -37,11 +37,9 @@ void main() {
   });
 
   test('release Maps build contract uses one generated Android resource', () {
-    final script = File('scripts/build_app.ps1').readAsStringSync();
-    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
-    final manifest = File(
-      'android/app/src/main/AndroidManifest.xml',
-    ).readAsStringSync();
+    final script = readSourceText('scripts/build_app.ps1');
+    final gradle = readSourceText('android/app/build.gradle.kts');
+    final manifest = readSourceText('android/app/src/main/AndroidManifest.xml');
 
     expect(script, contains(r"$env:GOOGLE_MAPS_API_KEY"));
     expect(script, contains('MAPS_RESOURCE_CONFIGURED=true'));
@@ -56,10 +54,8 @@ void main() {
   });
 
   test('debug and release use the same masked local build helper', () {
-    final script = File('scripts/build_app.ps1').readAsStringSync();
-    final config = File(
-      'lib/core/config/app_build_config.dart',
-    ).readAsStringSync();
+    final script = readSourceText('scripts/build_app.ps1');
+    final config = readSourceText('lib/core/config/app_build_config.dart');
 
     expect(script, contains("[ValidateSet('Debug', 'Release')]"));
     expect(script, contains('flutter build apk "--\$variant"'));

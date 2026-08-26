@@ -12,6 +12,7 @@ class HorizonScanSampler {
   static const double binSizeDegrees = 5;
   static const int totalBins = 72;
   static const double minimumCoverage = 0.90;
+  static const int minimumSampleCount = 65;
   static const double minimumRotation = 330;
   static const double startHeadingTolerance = 15;
   static const double directionDetectionDegrees = 10;
@@ -113,17 +114,12 @@ class HorizonScanSampler {
         frame: frame,
       ),
     );
-    if (isComplete) {
-      session.status = HorizonScanStatus.completed;
-      session.completedAt ??= DateTime.now();
-      if (session.coveredBins.length < totalBins) {
-        session.addWarning('일부 방향의 측정값이 부족합니다.');
-      }
-    }
     return true;
   }
 
   bool get isComplete {
+    if (session.sampleCount < minimumSampleCount) return false;
+    if (session.coveredBins.length >= totalBins) return true;
     final start = session.startAzimuth;
     final current = session.currentAzimuth;
     if (start == null || current == null) return false;

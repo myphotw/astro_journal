@@ -122,7 +122,8 @@ class TonightObservationSlot {
   double? get observationScore => qualityIndex.oqi;
 
   CondensationRisk get condensationRisk {
-    final spread = forecast.temperature -
+    final spread =
+        forecast.temperature -
         ObservationScoreService.dewPointCelsius(
           forecast.temperature,
           forecast.humidity,
@@ -173,10 +174,7 @@ class TonightObservationSummary {
 }
 
 class SiteSlotData {
-  const SiteSlotData({
-    required this.scores,
-    required this.feasibility,
-  });
+  const SiteSlotData({required this.scores, required this.feasibility});
 
   final Map<DateTime, double> scores;
   final Map<DateTime, ObservationFeasibilityResult> feasibility;
@@ -279,11 +277,8 @@ class ObservationScoreService {
     required MoonPhaseInfo moon,
   }) {
     return _qualityService
-        .computeSlotQuality(
-          forecast: forecast,
-          moon: moon,
-        )
-        .oqi ??
+            .computeSlotQuality(forecast: forecast, moon: moon)
+            .oqi ??
         0;
   }
 
@@ -301,7 +296,8 @@ class ObservationScoreService {
 
   static double weightedSiteScore(SlotScoreComponents components) {
     return (components.moon * ObservationScoreWeights.siteMoon +
-            components.lightPollution * ObservationScoreWeights.siteLightPollution +
+            components.lightPollution *
+                ObservationScoreWeights.siteLightPollution +
             components.weather * ObservationScoreWeights.siteWeather)
         .clamp(0.0, 100.0);
   }
@@ -312,40 +308,41 @@ class ObservationScoreService {
     WeatherForecastSlot? forecast,
     ObservationFeasibilityResult? feasibility,
   }) {
-    final resolved = forecast ??
+    final resolved =
+        forecast ??
         (context.forecasts.isEmpty
             ? null
             : resolveForecastAt(time, context.forecasts));
     if (resolved == null) {
       final moon = computeMoonInfo(time);
       return _qualityService
-          .computeSlotQuality(
-            forecast: WeatherForecastSlot(
-              time: time,
-              temperature: context.weather?.temperature ?? 10,
-              humidity: context.weather?.humidity ?? 50,
-              windSpeed: context.weather?.windSpeed ?? 0,
-              cloudCoverage: context.cloudCover,
-              visibility: context.weather?.visibility ?? 10000,
-              pop: 0,
-              description: '',
-              icon: '',
-            ),
-            moon: moon,
-            feasibility: feasibility,
-          )
-          .oqi ??
+              .computeSlotQuality(
+                forecast: WeatherForecastSlot(
+                  time: time,
+                  temperature: context.weather?.temperature ?? 10,
+                  humidity: context.weather?.humidity ?? 50,
+                  windSpeed: context.weather?.windSpeed ?? 0,
+                  cloudCoverage: context.cloudCover,
+                  visibility: context.weather?.visibility ?? 10000,
+                  pop: 0,
+                  description: '',
+                  icon: '',
+                ),
+                moon: moon,
+                feasibility: feasibility,
+              )
+              .oqi ??
           0;
     }
 
     final moon = computeMoonInfo(time);
     return _qualityService
-        .computeSlotQuality(
-          forecast: resolved,
-          moon: moon,
-          feasibility: feasibility,
-        )
-        .oqi ??
+            .computeSlotQuality(
+              forecast: resolved,
+              moon: moon,
+              feasibility: feasibility,
+            )
+            .oqi ??
         0;
   }
 
@@ -358,8 +355,11 @@ class ObservationScoreService {
     required CelestialPositionService positionService,
     ObservationWeather? weather,
   }) {
-    final slotWeather = weather ??
-        context.sessionWeather?.weatherAt(_alignToTenMinuteSlot(evaluationTime));
+    final slotWeather =
+        weather ??
+        context.sessionWeather?.weatherAt(
+          _alignToTenMinuteSlot(evaluationTime),
+        );
 
     final altitudeScore = _altitudeScore(altitude);
     final scoringContext = context.copyWith(currentTime: evaluationTime);
@@ -375,29 +375,29 @@ class ObservationScoreService {
     );
     final weatherScore = slotWeather != null
         ? _qualityService
-            .computeSlotQuality(
-              forecast: slotWeather.toForecastSlot(),
-              moon: computeMoonInfo(evaluationTime),
-            )
-            .oqi ??
-            0
+                  .computeSlotQuality(
+                    forecast: slotWeather.toForecastSlot(),
+                    moon: computeMoonInfo(evaluationTime),
+                  )
+                  .oqi ??
+              0
         : _qualityService
-            .computeSlotQuality(
-              forecast: WeatherForecastSlot(
-                time: evaluationTime,
-                temperature: context.weather?.temperature ?? 10,
-                humidity: context.weather?.humidity ?? 50,
-                windSpeed: context.weather?.windSpeed ?? 0,
-                cloudCoverage: context.cloudCover,
-                visibility: context.weather?.visibility ?? 10000,
-                pop: 0,
-                description: '',
-                icon: '',
-              ),
-              moon: computeMoonInfo(evaluationTime),
-            )
-            .oqi ??
-            0;
+                  .computeSlotQuality(
+                    forecast: WeatherForecastSlot(
+                      time: evaluationTime,
+                      temperature: context.weather?.temperature ?? 10,
+                      humidity: context.weather?.humidity ?? 50,
+                      windSpeed: context.weather?.windSpeed ?? 0,
+                      cloudCoverage: context.cloudCover,
+                      visibility: context.weather?.visibility ?? 10000,
+                      pop: 0,
+                      description: '',
+                      icon: '',
+                    ),
+                    moon: computeMoonInfo(evaluationTime),
+                  )
+                  .oqi ??
+              0;
 
     return (altitudeScore * ObservationScoreWeights.altitude +
             moon * ObservationScoreWeights.moon +
@@ -470,8 +470,7 @@ class ObservationScoreService {
     if (remainder == 0 && time.second == 0 && time.millisecond == 0) {
       return time;
     }
-    final addMinutes =
-        remainder == 0 ? slotMinutes : slotMinutes - remainder;
+    final addMinutes = remainder == 0 ? slotMinutes : slotMinutes - remainder;
     return time
         .add(Duration(minutes: addMinutes))
         .copyWith(second: 0, millisecond: 0, microsecond: 0);
@@ -507,7 +506,8 @@ class ObservationScoreService {
     }
 
     final mean = _average(scores);
-    final variance = scores
+    final variance =
+        scores
             .map((s) => math.pow(s - mean, 2).toDouble())
             .reduce((a, b) => a + b) /
         scores.length;
@@ -573,7 +573,6 @@ class ObservationScoreService {
     return contributions;
   }
 
-
   static int recommendationStarCount(int score) {
     if (score >= 90) return 5;
     if (score >= 75) return 4;
@@ -594,8 +593,7 @@ class ObservationScoreService {
     final days =
         time.toUtc().difference(_referenceNewMoon).inMilliseconds / 86400000.0;
     final age = days % _synodicPeriod;
-    final illumination =
-        (1 - math.cos(2 * math.pi * age / _synodicPeriod)) / 2;
+    final illumination = (1 - math.cos(2 * math.pi * age / _synodicPeriod)) / 2;
 
     String phaseName;
     String phaseEmoji;
@@ -735,6 +733,42 @@ class ObservationScoreService {
     );
   }
 
+  static DateTime observationEndTime(DateTime sunrise) {
+    return truncateToHour(
+      sunrise.toLocal().subtract(
+        const Duration(minutes: astronomicalTwilightMinutes),
+      ),
+    );
+  }
+
+  static ({DateTime nightStart, DateTime nightEnd}) estimatedNightWindow(
+    DateTime now,
+  ) {
+    const sunsetHours = [17, 17, 18, 19, 19, 19, 19, 19, 18, 17, 17, 17];
+    const sunriseHours = [7, 7, 6, 6, 5, 5, 5, 5, 6, 6, 7, 7];
+    final monthIndex = now.month - 1;
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final sunset = DateTime(
+      today.year,
+      today.month,
+      today.day,
+      sunsetHours[monthIndex],
+      30,
+    );
+    final sunrise = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      sunriseHours[monthIndex],
+      30,
+    );
+    return (
+      nightStart: observationStartTime(sunset),
+      nightEnd: observationEndTime(sunrise),
+    );
+  }
+
   static ({DateTime nightStart, DateTime nightEnd}) observationNightWindow({
     required DateTime now,
     required DateTime sunrise,
@@ -749,25 +783,27 @@ class ObservationScoreService {
       final nightStart = observationStartTime(
         DateTime(yday.year, yday.month, yday.day, sunset.hour, sunset.minute),
       );
-      final nightEnd = DateTime(
+      final sunriseForToday = DateTime(
         today.year,
         today.month,
         today.day,
         sr.hour,
         sr.minute,
       );
+      final nightEnd = observationEndTime(sunriseForToday);
       return (nightStart: nightStart, nightEnd: nightEnd);
     }
 
     final nightStart = observationStart;
     final tomorrow = today.add(const Duration(days: 1));
-    final nightEnd = DateTime(
+    final sunriseTomorrow = DateTime(
       tomorrow.year,
       tomorrow.month,
       tomorrow.day,
       sr.hour,
       sr.minute,
     );
+    final nightEnd = observationEndTime(sunriseTomorrow);
     return (nightStart: nightStart, nightEnd: nightEnd);
   }
 
@@ -805,7 +841,8 @@ class ObservationScoreService {
 
   static double _lerp(double a, double b, double t) => a + (b - a) * t;
 
-  static int _lerpInt(int a, int b, double t) => _lerp(a.toDouble(), b.toDouble(), t).round();
+  static int _lerpInt(int a, int b, double t) =>
+      _lerp(a.toDouble(), b.toDouble(), t).round();
 
   static WeatherForecastSlot? resolveForecastAt(
     DateTime target,
@@ -816,7 +853,8 @@ class ObservationScoreService {
     final sorted = [...forecasts]..sort((a, b) => a.time.compareTo(b.time));
     if (sorted.length == 1) return sorted.first;
 
-    if (target.isBefore(sorted.first.time) || target.isAfter(sorted.last.time)) {
+    if (target.isBefore(sorted.first.time) ||
+        target.isAfter(sorted.last.time)) {
       return findClosestForecast(forecasts, target);
     }
 
@@ -919,8 +957,9 @@ class ObservationScoreService {
     );
     if (slots.isEmpty) return null;
 
-    final feasibleSlots =
-        slots.where((s) => s.canObserve && s.observationScore != null).toList();
+    final feasibleSlots = slots
+        .where((s) => s.canObserve && s.observationScore != null)
+        .toList();
 
     if (feasibleSlots.isEmpty) {
       final primaryReason = ObservationFeasibilityPolicy.aggregatePrimaryReason(
@@ -929,8 +968,8 @@ class ObservationScoreService {
       );
       final userMessage =
           ObservationQualityService.formatInfeasibleMessageFromReason(
-        primaryReason,
-      );
+            primaryReason,
+          );
 
       return TonightObservationSummary(
         finalScore: 0,
@@ -949,10 +988,9 @@ class ObservationScoreService {
           slots.map((s) => s.moon.illumination),
         ),
         averagePrecipitationPop: _average(slots.map((s) => s.forecast.pop)),
-        averageVisibilityMeters:
-            _average(
-              slots.map((s) => s.forecast.visibility.toDouble()),
-            ).round(),
+        averageVisibilityMeters: _average(
+          slots.map((s) => s.forecast.visibility.toDouble()),
+        ).round(),
         isObservationFeasible: false,
         primaryInfeasibleReason: primaryReason,
         infeasibleUserMessage: userMessage,
@@ -962,12 +1000,15 @@ class ObservationScoreService {
     final observationWindow = findObservationWindow(slots);
     if (observationWindow == null) return null;
 
-    final nightAverage = _average(feasibleSlots.map((s) => s.observationScore!));
-    final finalScore = (nightAverage * ObservationScoreWeights.nightAverageWeight +
-            observationWindow.averageScore *
-                ObservationScoreWeights.windowAverageWeight)
-        .round()
-        .clamp(0, 100);
+    final nightAverage = _average(
+      feasibleSlots.map((s) => s.observationScore!),
+    );
+    final finalScore =
+        (nightAverage * ObservationScoreWeights.nightAverageWeight +
+                observationWindow.averageScore *
+                    ObservationScoreWeights.windowAverageWeight)
+            .round()
+            .clamp(0, 100);
 
     final averageQuality = computeAverageQuality(slots);
 
@@ -979,16 +1020,21 @@ class ObservationScoreService {
       averageCloudCoverage: _average(
         feasibleSlots.map((s) => s.forecast.cloudCoverage.toDouble()),
       ),
-      averageWindSpeed: _average(feasibleSlots.map((s) => s.forecast.windSpeed)),
-      averageTemperature: _average(feasibleSlots.map((s) => s.forecast.temperature)),
+      averageWindSpeed: _average(
+        feasibleSlots.map((s) => s.forecast.windSpeed),
+      ),
+      averageTemperature: _average(
+        feasibleSlots.map((s) => s.forecast.temperature),
+      ),
       averageMoonIllumination: _average(
         feasibleSlots.map((s) => s.moon.illumination),
       ),
-      averagePrecipitationPop: _average(feasibleSlots.map((s) => s.forecast.pop)),
-      averageVisibilityMeters:
-          _average(
-            feasibleSlots.map((s) => s.forecast.visibility.toDouble()),
-          ).round(),
+      averagePrecipitationPop: _average(
+        feasibleSlots.map((s) => s.forecast.pop),
+      ),
+      averageVisibilityMeters: _average(
+        feasibleSlots.map((s) => s.forecast.visibility.toDouble()),
+      ).round(),
       observationWindow: observationWindow,
     );
   }
@@ -1039,8 +1085,9 @@ class ObservationScoreService {
   }
 
   static TonightObservationSlot? bestSlot(List<TonightObservationSlot> slots) {
-    final feasible =
-        slots.where((s) => s.canObserve && s.observationScore != null).toList();
+    final feasible = slots
+        .where((s) => s.canObserve && s.observationScore != null)
+        .toList();
     if (feasible.isEmpty) return null;
     return feasible.reduce(
       (a, b) => a.observationScore! >= b.observationScore! ? a : b,
@@ -1061,7 +1108,8 @@ class ObservationScoreService {
   ) {
     if (slots.isEmpty) return [];
 
-    final sorted = [...slots]..sort((a, b) => a.targetTime.compareTo(b.targetTime));
+    final sorted = [...slots]
+      ..sort((a, b) => a.targetTime.compareTo(b.targetTime));
     final groups = <List<TonightObservationSlot>>[];
     var current = <TonightObservationSlot>[sorted.first];
 
@@ -1106,12 +1154,8 @@ class ObservationScoreService {
       reasons.add('풍속 안정');
     }
 
-    final windowMoon = _average(
-      windowSlots.map((s) => s.moon.illumination),
-    );
-    final allMoon = _average(
-      allSlots.map((s) => s.moon.illumination),
-    );
+    final windowMoon = _average(windowSlots.map((s) => s.moon.illumination));
+    final allMoon = _average(allSlots.map((s) => s.moon.illumination));
     if (windowMoon <= allMoon - 0.05 || windowMoon <= 0.25) {
       reasons.add('달 영향 적음');
     }
@@ -1119,7 +1163,9 @@ class ObservationScoreService {
     final windowVis = _average(
       windowSlots.map((s) => s.forecast.visibility.toDouble()),
     );
-    final allVis = _average(allSlots.map((s) => s.forecast.visibility.toDouble()));
+    final allVis = _average(
+      allSlots.map((s) => s.forecast.visibility.toDouble()),
+    );
     if (windowVis >= 8000 || windowVis >= allVis + 1000) {
       reasons.add('가시거리 우수');
     }
@@ -1144,11 +1190,13 @@ class ObservationScoreService {
   static ObservationWindow? findObservationWindow(
     List<TonightObservationSlot> slots,
   ) {
-    final feasible =
-        slots.where((s) => s.canObserve && s.observationScore != null).toList();
+    final feasible = slots
+        .where((s) => s.canObserve && s.observationScore != null)
+        .toList();
     if (feasible.isEmpty) return null;
 
-    final sorted = [...feasible]..sort((a, b) => a.targetTime.compareTo(b.targetTime));
+    final sorted = [...feasible]
+      ..sort((a, b) => a.targetTime.compareTo(b.targetTime));
     List<TonightObservationSlot>? bestGroup;
     var bestAverage = -1.0;
 

@@ -18,7 +18,7 @@ class ObservationEngine {
     this._celestialPositionService, {
     ObservationStatusService? observationStatusService,
   }) : _observationStatusService =
-            observationStatusService ?? const ObservationStatusService();
+           observationStatusService ?? const ObservationStatusService();
 
   final ObservationConditionService _observationConditionService;
   final CelestialPositionService _celestialPositionService;
@@ -128,10 +128,7 @@ class ObservationEngine {
     TonightObservationSession? session,
   }) {
     if (session != null) {
-      return (
-        observationStart: session.start,
-        observationEnd: session.end,
-      );
+      return (observationStart: session.start, observationEnd: session.end);
     }
 
     if (weather != null) {
@@ -146,41 +143,10 @@ class ObservationEngine {
       );
     }
 
-    final estimated = _estimateNightWindow(currentTime);
+    final estimated = ObservationScoreService.estimatedNightWindow(currentTime);
     return (
       observationStart: estimated.nightStart,
       observationEnd: estimated.nightEnd,
     );
-  }
-
-  ({DateTime nightStart, DateTime nightEnd}) _estimateNightWindow(
-    DateTime now,
-  ) {
-    const sunsetH = [17, 17, 18, 19, 19, 19, 19, 19, 18, 17, 17, 17];
-    const sunriseH = [7, 7, 6, 6, 5, 5, 5, 5, 6, 6, 7, 7];
-
-    final monthIndex = now.month - 1;
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-
-    final sunset = DateTime(
-      today.year,
-      today.month,
-      today.day,
-      sunsetH[monthIndex],
-      30,
-    );
-    final sunrise = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      sunriseH[monthIndex],
-      30,
-    );
-
-    final nightStart = sunset.add(
-      const Duration(minutes: ObservationScoreService.astronomicalTwilightMinutes),
-    );
-    return (nightStart: nightStart, nightEnd: sunrise);
   }
 }

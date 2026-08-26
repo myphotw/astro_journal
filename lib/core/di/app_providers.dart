@@ -88,17 +88,23 @@ import '../../services/tc_backend_astrojournal_reset_service.dart';
 import '../../services/astrojournal_capture_reset_coordinator.dart';
 import '../../services/astrojournal_local_capture_reset_service.dart';
 import '../navigation/app_navigation_notifier.dart';
+import '../services/observation_context_invalidator.dart';
 
 class AppProviders {
   AppProviders._();
 
   static List<SingleChildWidget> build(BuildContext context) {
+    final observationContextInvalidator = ObservationContextInvalidator();
     final bortleRepository = BortleRepositoryImpl();
     final catalogRepository = CatalogRepositoryImpl();
-    final equipmentRepository = EquipmentRepositoryImpl();
+    final equipmentRepository = EquipmentRepositoryImpl(
+      contextInvalidator: observationContextInvalidator,
+    );
     final shootingRecordRepository = ShootingRecordRepositoryImpl();
     final photoRepository = PhotoRepositoryImpl();
-    final observationSiteRepository = ObservationSiteRepositoryImpl();
+    final observationSiteRepository = ObservationSiteRepositoryImpl(
+      contextInvalidator: observationContextInvalidator,
+    );
     final photoObjectRepository = PhotoObjectRepositoryImpl();
     final exifService = ExifService();
     final photoService = PhotoService(photoRepository, exifService);
@@ -243,6 +249,7 @@ class AppProviders {
     final locationService = LocationService();
     final activeObservationSiteViewModel = ActiveObservationSiteViewModel(
       observationSiteRepository,
+      contextInvalidator: observationContextInvalidator,
     );
     final deviceOrientationService = NativeDeviceOrientationService();
     final recommendationSettingsService = RecommendationSettingsService();
@@ -294,6 +301,7 @@ class AppProviders {
       equipmentRecommendationService,
       schedulerEngine,
       activeObservationSiteViewModel,
+      observationContextInvalidator,
     );
 
     // Home/Catalog/Gallery/Stats 등은 AppStartupViewModel이 순차 preload한다.
@@ -389,6 +397,9 @@ class AppProviders {
       Provider<PhotoRepository>.value(value: photoRepository),
       Provider<ObservationSiteRepository>.value(
         value: observationSiteRepository,
+      ),
+      ChangeNotifierProvider<ObservationContextInvalidator>.value(
+        value: observationContextInvalidator,
       ),
       Provider<PhotoObjectRepository>.value(value: photoObjectRepository),
       Provider<PhotoService>.value(value: photoService),

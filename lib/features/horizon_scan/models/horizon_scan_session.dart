@@ -5,6 +5,7 @@ enum HorizonScanStatus {
   initializing,
   scanning,
   paused,
+  processing,
   completed,
   cancelled,
   error,

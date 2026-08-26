@@ -13,8 +13,6 @@ abstract final class ObservationSiteValidator {
       throw ArgumentError.value(site.bortle, 'bortle', 'Bortle은 1~9여야 합니다.');
     }
     _altitudes(site.defaultMinAltitude, site.defaultMaxAltitude);
-    _time(site.preferredStart, 'preferredStart');
-    _time(site.preferredEnd, 'preferredEnd');
 
     final azimuths = <double>{};
     for (final point in site.horizonPoints) {
@@ -75,13 +73,6 @@ abstract final class ObservationSiteValidator {
   ) {
     if (!value.isFinite || value < min || value > max) {
       throw ArgumentError.value(value, name, '$label 값의 범위가 올바르지 않습니다.');
-    }
-  }
-
-  static void _time(String? value, String name) {
-    if (value == null || value.isEmpty) return;
-    if (!RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(value)) {
-      throw ArgumentError.value(value, name, '시간은 HH:mm 형식이어야 합니다.');
     }
   }
 }
