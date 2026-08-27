@@ -257,7 +257,12 @@ def lookup_reference(obj: dict, lookup: dict[str, dict]) -> dict | None:
 
 
 def lookup_openngc(obj: dict, ngc_db, ic_db, messier_db) -> dict | None:
-    catalog = obj.get("catalog", "messier")
+    # A missing catalog must never imply Messier. The old fallback correlated
+    # solar_1..solar_10 with M1..M10 by number and polluted every moving target
+    # with unrelated DSO metadata (for example Uranus with M8/Lagoon Nebula).
+    catalog = obj.get("catalog")
+    if catalog not in {"messier", "ngc", "ic", "caldwell"}:
+        return None
     number = obj.get("number")
     if number is None:
         return None

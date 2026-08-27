@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/google_map_dark_style.dart';
+import '../../../core/services/performance_probe.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/observation_condition.dart';
@@ -10,6 +11,7 @@ import '../../../data/models/observation_site.dart';
 import '../../../shared/widgets/google_map_gate.dart';
 import '../viewmodel/light_pollution_map_view_model.dart';
 import '../widgets/light_pollution_legend.dart';
+import '../widgets/light_pollution_favorite_name_dialog.dart';
 import '../widgets/light_pollution_location_card.dart';
 import '../widgets/light_pollution_map_search_bar.dart';
 
@@ -31,6 +33,7 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
   bool _showTileOverlay = true;
   LatLng? _lastCameraFocus;
   bool _mapMounted = false;
+  bool _favoriteMutationInProgress = false;
 
   static const _initialZoom = 11.0;
   static const _locationCardWidth = 188.0;
@@ -135,26 +138,36 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
     required ObservationCondition? condition,
     required bool isCurrent,
   }) async {
-    if (condition == null) return;
+    if (condition == null || _favoriteMutationInProgress) return;
+    _favoriteMutationInProgress = true;
+    try {
+      if (vm.isFavorited(latitude, longitude)) {
+        final confirmed = await _confirmDeleteFavorite();
+        if (!confirmed || !mounted) return;
+        await vm.removeFavoriteAt(latitude, longitude);
+        return;
+      }
 
-    if (vm.isFavorited(latitude, longitude)) {
-      final confirmed = await _confirmDeleteFavorite();
-      if (!confirmed || !mounted) return;
-      await vm.removeFavoriteAt(latitude, longitude);
-      return;
+      final name = await _showAddFavoriteNameDialog(
+        vm.defaultFavoriteName(isCurrent: isCurrent),
+      );
+      if (!mounted || name == null) return;
+
+      await vm.addFavorite(
+        name: name,
+        latitude: latitude,
+        longitude: longitude,
+        condition: condition,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('즐겨찾기를 저장하지 못했습니다.')),
+        );
+      }
+    } finally {
+      _favoriteMutationInProgress = false;
     }
-
-    final name = await _showAddFavoriteNameDialog(
-      vm.defaultFavoriteName(isCurrent: isCurrent),
-    );
-    if (!mounted || name == null) return;
-
-    await vm.addFavorite(
-      name: name,
-      latitude: latitude,
-      longitude: longitude,
-      condition: condition,
-    );
   }
 
   Future<void> _goToFavoriteLocation(
@@ -176,33 +189,12 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
   }
 
   Future<String?> _showAddFavoriteNameDialog(String defaultName) async {
-    final controller = TextEditingController(text: defaultName);
-    try {
-      return await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('즐겨찾기 이름'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: '관측지 이름'),
-            onSubmitted: (value) => Navigator.pop(dialogContext, value),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('취소'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text),
-              child: const Text('저장'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
+    return showDialog<String>(
+      context: context,
+      builder: (_) => LightPollutionFavoriteNameDialog(
+        defaultName: defaultName,
+      ),
+    );
   }
 
   Future<bool> _confirmDeleteFavorite() async {
@@ -233,6 +225,10 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event(
+      'widget.light_pollution_map.build',
+      state: 'active=${widget.isActive} mounted=$_mapMounted',
+    );
     final vm = context.watch<LightPollutionMapViewModel>();
 
     if (widget.isActive &&

@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SEED_DB = ROOT / "assets" / "database" / "catalog_seed.db"
 EXTENDED = ROOT / "assets" / "catalog" / "extended_catalogs.json"
 SEESTAR = ROOT / "assets" / "catalog" / "seestar_catalog.json"
+SOLAR = ROOT / "assets" / "catalog" / "solar.json"
 OPENNGC = ROOT / "tools" / "openngc" / "NGC.csv"
 
 sys.path.insert(0, str(ROOT / "tools"))
@@ -558,6 +559,7 @@ def fill_axes_to_angular(row: dict) -> bool:
 def extended_to_row(entry: dict) -> dict:
     aliases = entry.get("aliases") or []
     cross = entry.get("crossCatalogRefs") or []
+    tags = entry.get("tags") or []
     return {
         "id": entry["id"],
         "num": entry["number"],
@@ -579,9 +581,9 @@ def extended_to_row(entry: dict) -> dict:
         "object_type": entry.get("objectType") or entry.get("type") or "기타",
         "seestar_supported": 1 if entry.get("seestarSupported") else 0,
         "suffix": entry.get("suffix"),
-        "tags_json": None,
-        "peak_month": None,
-        "best_season": None,
+        "tags_json": encode_json_list(tags),
+        "peak_month": entry.get("peakMonth"),
+        "best_season": entry.get("bestSeason"),
         "angular_size": entry.get("angularSize"),
         "description": entry.get("description"),
         "search_keywords": None,
@@ -592,6 +594,35 @@ def extended_to_row(entry: dict) -> dict:
         "is_featured": 0,
         "display_priority": 9999,
     }
+
+
+def refresh_solar_metadata(rows: dict[str, dict]) -> dict[str, int]:
+    """Replace built-in moving-target metadata from its authoritative source."""
+    objects = json.loads(SOLAR.read_text(encoding="utf-8-sig"))
+    added = 0
+    refreshed = 0
+    owned_fields = (
+        "num", "catalog", "name", "type", "constellation", "ra", "dec",
+        "mag", "aliases_json", "cross_catalog_refs_json", "common_name",
+        "object_type", "seestar_supported", "suffix", "tags_json",
+        "peak_month", "best_season", "angular_size", "description",
+        "search_keywords", "major_axis", "minor_axis", "position_angle",
+        "data_source",
+    )
+    for obj in objects:
+        if obj.get("catalog") != "solar":
+            raise ValueError(f"Solar source has invalid catalog: {obj.get('id')}")
+        incoming = extended_to_row(obj)
+        object_id = incoming["id"]
+        existing = rows.get(object_id)
+        if existing is None:
+            rows[object_id] = incoming
+            added += 1
+            continue
+        for field in owned_fields:
+            existing[field] = incoming.get(field)
+        refreshed += 1
+    return {"added": added, "refreshed": refreshed}
 
 
 def refresh_catalog_owned_metadata(rows: dict[str, dict]) -> dict[str, int]:
@@ -769,6 +800,11 @@ def write_rows(conn: sqlite3.Connection, rows: dict[str, dict]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--report", action="store_true", help="변경 없이 감사만")
+    parser.add_argument(
+        "--solar-only",
+        action="store_true",
+        help="태양계 authoritative source만 seed에 반영",
+    )
     args = parser.parse_args()
 
     if not SEED_DB.is_file():
@@ -780,11 +816,25 @@ def main() -> int:
     rows = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM celestial_objects")}
 
     print(f"loaded {len(rows)} rows")
+    if args.solar_only:
+        solar_refresh = refresh_solar_metadata(rows)
+        print("solar metadata refresh:", solar_refresh)
+        if args.report:
+            conn.close()
+            return 0
+        write_rows(conn, rows)
+        conn.close()
+        print(f"written to {SEED_DB}")
+        return 0
+
     remapped, removed = remap_malformed_rows(rows)
     print(f"remapped catalogs: {remapped}, removed junk: {removed}")
 
     added = add_extended_entries(rows)
     print(f"added extended entries: {added}")
+
+    solar_refresh = refresh_solar_metadata(rows)
+    print("solar metadata refresh:", solar_refresh)
 
     identity_refresh = refresh_catalog_owned_metadata(rows)
     print("catalog identity refresh:", identity_refresh)

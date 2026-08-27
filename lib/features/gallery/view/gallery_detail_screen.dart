@@ -94,6 +94,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
   late TextEditingController _lngCtrl;
 
   bool _isGeocoding = false;
+  bool _isSaving = false;
   bool _controllersReady = false;
   late ShootingRecord _record;
 
@@ -183,16 +184,34 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
   }
 
   Future<void> _save(BuildContext context) async {
+    if (_isSaving) return;
     final viewModel = context.read<GalleryViewModel>();
     final detailVm = context.read<GalleryDetailViewModel>();
     final messenger = ScaffoldMessenger.of(context);
 
-    final lat = double.tryParse(_latCtrl.text.trim());
-    final lng = double.tryParse(_lngCtrl.text.trim());
+    final latText = _latCtrl.text.trim();
+    final lngText = _lngCtrl.text.trim();
+    final lat = double.tryParse(latText);
+    final lng = double.tryParse(lngText);
+    if ((latText.isNotEmpty && lat == null) ||
+        (lngText.isNotEmpty && lng == null) ||
+        (lat == null) != (lng == null) ||
+        (lat != null && (lat < -90 || lat > 90)) ||
+        (lng != null && (lng < -180 || lng > 180))) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('위도와 경도를 올바르게 입력해주세요.')),
+      );
+      return;
+    }
     final capturedAt = _capturedAt ?? _record.capturedAt;
-    final exposure =
-        MetadataFormat.formatMinutesInputToExposure(_exposureCtrl.text) ??
-        _exposureCtrl.text.trim();
+    final exposureText = _exposureCtrl.text.trim();
+    final exposure = MetadataFormat.formatMinutesInputToExposure(exposureText);
+    if (exposureText.isNotEmpty && exposure == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('적산시간을 0 이상의 분 단위 숫자로 입력해주세요.')),
+      );
+      return;
+    }
 
     final existing = _record.exif;
     final updatedExif = ExifInfo(
@@ -206,7 +225,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
       iso: existing?.iso ?? '',
       resolution: existing?.resolution ?? '',
       equipment: _equipmentCtrl.text.trim(),
-      exposure: exposure,
+      exposure: exposure ?? '',
       lat: lat,
       lng: lng,
       locationName: _locationNameCtrl.text.trim().isEmpty
@@ -230,19 +249,27 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
       location: _locationNameCtrl.text.trim().isEmpty
           ? null
           : _locationNameCtrl.text.trim(),
+      clearLocation: _locationNameCtrl.text.trim().isEmpty,
       exif: updatedExif,
     );
 
-    await viewModel.updateRecord(updatedRecord);
-    detailVm.updateRecord(updatedRecord);
-
-    if (mounted) {
-      setState(() {
-        _syncRecord(updatedRecord);
-        _editMode = false;
-      });
-      messenger.showSnackBar(const SnackBar(content: Text('저장되었습니다.')));
+    setState(() => _isSaving = true);
+    final saved = await viewModel.updateRecord(updatedRecord);
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+    if (!saved) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('저장하지 못했습니다. 기존 값은 유지됩니다.')),
+      );
+      return;
     }
+
+    detailVm.updateRecord(updatedRecord);
+    setState(() {
+      _syncRecord(updatedRecord);
+      _editMode = false;
+    });
+    messenger.showSnackBar(const SnackBar(content: Text('저장되었습니다.')));
   }
 
   Future<void> _reverseGeocode(BuildContext context) async {
@@ -338,16 +365,21 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
           ],
           if (_editMode) ...[
             TextButton(
-              onPressed: () => _save(context),
-              child: const Text(
-                '저장',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              onPressed: _isSaving ? null : () => _save(context),
+              child: _isSaving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text(
+                      '저장',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
             IconButton(
               icon: const Icon(Icons.close),
               tooltip: '편집 취소',
-              onPressed: _toggleEditMode,
+              onPressed: _isSaving ? null : _toggleEditMode,
             ),
           ] else
             PopupMenuButton<_Action>(
@@ -469,12 +501,14 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
   /// [record]에 대해 Plate Solve를 실행하고, 완료되면 상세 화면 상태를 갱신한다.
   Future<void> _runPlateSolveFor(ShootingRecord record) async {
     final plateSolveVm = context.read<PlateSolveViewModel>();
+    final galleryVm = context.read<GalleryViewModel>();
     final detailVm = context.read<GalleryDetailViewModel>();
 
-    final result = await plateSolveVm.solve(record);
+    await plateSolveVm.solve(record);
     if (!mounted) return;
 
-    final updated = record.copyWith(plateSolve: result);
+    final updated = galleryVm.recordForId(record.id);
+    if (updated == null) return;
     detailVm.updateRecord(updated);
     if (updated.id == _record.id) {
       setState(() => _syncRecord(updated));
@@ -708,34 +742,35 @@ class _ViewBody extends StatelessWidget {
         title: '촬영일시',
         content: _formatDateTime(record.capturedAt),
       ),
-      if (record.exif?.equipment.isNotEmpty == true) ...[
-        const SizedBox(height: 12),
-        _InfoCard(
-          icon: Icons.camera_alt_outlined,
-          title: '장비명',
-          content: record.exif!.equipment,
-        ),
-      ],
-      if ((record.exif?.stackNum != null) ||
-          (record.exif?.singleExpSec?.isNotEmpty == true) ||
-          (record.exif?.exposure.isNotEmpty == true) ||
-          (record.exif?.filter?.isNotEmpty == true)) ...[
-        const SizedBox(height: 12),
-        _MultiFieldCard(
-          icon: Icons.layers_outlined,
-          title: '스택 / 노출 정보',
-          rows: [
-            if (record.exif?.stackNum != null)
-              _FieldRow(label: '스택 수', value: '${record.exif!.stackNum!}장'),
-            if (record.exif?.singleExpSec?.isNotEmpty == true)
-              _FieldRow(label: '1장 노출', value: record.exif!.singleExpSec!),
-            if (record.exif?.exposure.isNotEmpty == true)
-              _FieldRow(label: '총 적분', value: record.exif!.exposure),
-            if (record.exif?.filter?.isNotEmpty == true)
-              _FieldRow(label: '필터', value: record.exif!.filter!),
-          ],
-        ),
-      ],
+      const SizedBox(height: 12),
+      _InfoCard(
+        key: const Key('gallery-detail-equipment'),
+        icon: Icons.camera_alt_outlined,
+        title: '촬영 장비',
+        content: record.exif?.equipment.trim().isNotEmpty == true
+            ? record.exif!.equipment
+            : '미입력',
+      ),
+      const SizedBox(height: 12),
+      _MultiFieldCard(
+        key: const Key('gallery-detail-integration'),
+        icon: Icons.layers_outlined,
+        title: '스택 / 노출 정보',
+        rows: [
+          _FieldRow(
+            label: '적산시간',
+            value: record.exif?.exposure.trim().isNotEmpty == true
+                ? record.exif!.exposure
+                : '미입력',
+          ),
+          if (record.exif?.stackNum != null)
+            _FieldRow(label: '스택 수', value: '${record.exif!.stackNum!}장'),
+          if (record.exif?.singleExpSec?.isNotEmpty == true)
+            _FieldRow(label: '1장 노출', value: record.exif!.singleExpSec!),
+          if (record.exif?.filter?.isNotEmpty == true)
+            _FieldRow(label: '필터', value: record.exif!.filter!),
+        ],
+      ),
       if ((record.exif?.iso.isNotEmpty == true) ||
           (record.exif?.fstop.isNotEmpty == true) ||
           (record.exif?.focal.isNotEmpty == true)) ...[
@@ -775,7 +810,7 @@ class _ViewBody extends StatelessWidget {
       ),
       if (shouldShowManualPlateSolve(record) && onRunPlateSolve != null) ...[
         const SizedBox(height: 12),
-        _PlateSolveSection(record: record, onRun: onRunPlateSolve!),
+        GalleryPlateSolveSection(record: record, onRun: onRunPlateSolve!),
       ],
       const SizedBox(height: 12),
       if (record.exif?.lat != null && record.exif?.lng != null)
@@ -787,6 +822,7 @@ class _ViewBody extends StatelessWidget {
         )
       else
         _NoLocationCard(
+          key: const Key('gallery-detail-location'),
           locationName: record.exif?.locationName ?? record.location,
           address: record.exif?.address,
         ),
@@ -836,8 +872,13 @@ class _ViewBody extends StatelessWidget {
 
 // ── Plate Solve (WCS) ────────────────────────────────────────────────────────
 
-class _PlateSolveSection extends StatelessWidget {
-  const _PlateSolveSection({required this.record, required this.onRun});
+@visibleForTesting
+class GalleryPlateSolveSection extends StatelessWidget {
+  const GalleryPlateSolveSection({
+    super.key,
+    required this.record,
+    required this.onRun,
+  });
 
   final ShootingRecord record;
   final VoidCallback onRun;
@@ -851,7 +892,9 @@ class _PlateSolveSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final runState = context.watch<PlateSolveViewModel>().stateFor(record.id);
-    final solved = record.plateSolve;
+    // BottomSheet가 열린 뒤 record snapshot은 바뀌지 않을 수 있으므로
+    // 실행 결과는 ViewModel의 최신 run state를 우선한다.
+    final solved = runState.result ?? record.plateSolve;
 
     return Container(
       width: double.infinity,
@@ -883,6 +926,7 @@ class _PlateSolveSection extends StatelessWidget {
           const SizedBox(height: 8),
           if (runState.isRunning)
             _PlateSolveProgressRow(
+              key: const Key('plate-solve-processing'),
               message: runState.message ?? 'Plate Solving...',
             )
           else if (solved != null && solved.success)
@@ -902,7 +946,7 @@ class _PlateSolveSection extends StatelessWidget {
 }
 
 class _PlateSolveProgressRow extends StatelessWidget {
-  const _PlateSolveProgressRow({required this.message});
+  const _PlateSolveProgressRow({super.key, required this.message});
 
   final String message;
 
@@ -2326,6 +2370,7 @@ class _OverlayControlButton extends StatelessWidget {
 
 class _InfoCard extends StatelessWidget {
   const _InfoCard({
+    super.key,
     required this.icon,
     required this.title,
     required this.content,
@@ -2554,7 +2599,7 @@ class _LocationMapCardState extends State<_LocationMapCard> {
 // ── _NoLocationCard ──────────────────────────────────────────────────────────
 
 class _NoLocationCard extends StatelessWidget {
-  const _NoLocationCard({this.locationName, this.address});
+  const _NoLocationCard({super.key, this.locationName, this.address});
 
   final String? locationName;
   final String? address;
@@ -2611,7 +2656,7 @@ class _NoLocationCard extends StatelessWidget {
               ),
           ] else
             Text(
-              '위치 정보 없음',
+              '미입력',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: AppColors.textSecondary,
               ),
@@ -2669,6 +2714,7 @@ enum _Action { edit, delete }
 
 class _MultiFieldCard extends StatelessWidget {
   const _MultiFieldCard({
+    super.key,
     required this.icon,
     required this.title,
     required this.rows,

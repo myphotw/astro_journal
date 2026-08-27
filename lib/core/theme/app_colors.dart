@@ -6,6 +6,7 @@ class AppColors {
   static const Color background = Color(0xFF080B14);
   static const Color surface = Color(0xFF0D1B3E);
   static const Color messier = Color(0xFF4FC3C8);
+  static const Color skyMapMessierLabel = Color(0xFFFFD166);
   static const Color ngc = Color(0xFFA78BFA);
   static const Color sh2 = Color(0xFFF97316);
   static const Color ic = Color(0xFF34D399);

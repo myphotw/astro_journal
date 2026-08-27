@@ -3,7 +3,9 @@ import '../../data/models/observation_feasibility_reason.dart';
 import '../../data/models/object_imaging_profile.dart';
 import '../../data/models/object_observation_window.dart';
 import '../../data/models/observation_context.dart';
+import '../../data/models/observation_weather.dart';
 import '../../data/models/tonight_observation_session.dart';
+import '../../core/services/performance_probe.dart';
 import '../celestial_position_service.dart';
 import '../horizon_visibility_service.dart';
 import '../observation_feasibility_policy.dart';
@@ -12,6 +14,7 @@ import '../recommendation/feasible_slot_continuity.dart';
 import '../recommendation/feasible_window_formatter.dart';
 import '../recommendation_settings_service.dart';
 import '../scoring/moon_score.dart';
+import '../scoring/light_pollution_score.dart';
 import '../scheduler_engine.dart';
 
 enum ObservationWindowExclusion {
@@ -61,7 +64,11 @@ class ObservationWindowCalculator {
     required DateTime referenceTime,
     required Duration minimumExposure,
     required Duration recommendedExposure,
+    ObservationWindowPerformance? performance,
+    ObservationWindowSharedCache? sharedCache,
   }) {
+    performance?.calls += 1;
+    performance?.astrometry.start();
     final latitude = context.latitude;
     final longitude = context.longitude;
     final raH = CelestialPositionService.parseRaHours(object.ra);
@@ -92,6 +99,7 @@ class ObservationWindowCalculator {
       start: session.start,
       end: session.end,
     );
+    performance?.astrometry.stop();
 
     if (trajectory.points.isEmpty) {
       return ObservationWindowCalculation(
@@ -101,6 +109,7 @@ class ObservationWindowCalculator {
       );
     }
 
+    performance?.visibility.start();
     final visiblePoints = trajectory.points.where((point) {
       return settings.isAltitudeInRange(point.altitude) &&
           settings.isAzimuthInRange(point.azimuth) &&
@@ -110,6 +119,8 @@ class ObservationWindowCalculator {
             altitude: point.altitude,
           );
     }).toList();
+    performance?.visiblePoints += visiblePoints.length;
+    performance?.visibility.stop();
 
     if (visiblePoints.isEmpty) {
       final anyAlt = trajectory.points.any(
@@ -147,18 +158,24 @@ class ObservationWindowCalculator {
 
     final siteWindow = context.observationWindow;
     final slotScores = <DateTime, double>{};
+    final pointBySlot = <DateTime, CelestialTimePoint>{};
+    final lightPollutionScore = const LightPollutionScore().calculate(
+      context: context,
+      profile: profile,
+    );
     var bestScore = -1.0;
     CelestialTimePoint? bestPoint;
     var hadLightPollutionFailure = false;
     var hadWeatherFailure = false;
 
+    performance?.slotScoring.start();
     for (final point in visiblePoints) {
       final slotStart = _alignToSlot(point.time);
-      final weatherObs = context.sessionWeather?.weatherAt(slotStart);
-      if (weatherObs != null) {
+      final weather = context.sessionWeather?.weatherAt(slotStart);
+      if (weather != null) {
         final feasibility = _feasibilityPolicy.evaluateTargetSlot(
           context: context,
-          forecast: weatherObs.toForecastSlot(),
+          forecast: weather.toForecastSlot(),
           settings: settings,
           profile: profile,
           altitude: point.altitude,
@@ -177,7 +194,15 @@ class ObservationWindowCalculator {
         }
       }
 
-      final weather = context.sessionWeather?.weatherAt(slotStart);
+      final targetWeatherScore = sharedCache?.targetWeatherScore(
+        context: context,
+        evaluationTime: point.time,
+        weather: weather,
+      );
+      final moonCoordinates = sharedCache?.moonCoordinates(
+        positionService: _positionService,
+        evaluationTime: point.time,
+      );
       final score = ObservationScoreService.calculateTargetSlotScore(
         object: object,
         profile: profile,
@@ -186,8 +211,14 @@ class ObservationWindowCalculator {
         altitude: point.altitude,
         positionService: _positionService,
         weather: weather,
+        raHours: raH,
+        declinationDeg: decD,
+        lightPollutionScore: lightPollutionScore,
+        targetWeatherScore: targetWeatherScore,
+        moonCoordinates: moonCoordinates,
       );
       slotScores[slotStart] = score;
+      pointBySlot.putIfAbsent(slotStart, () => point);
 
       final inSiteWindow =
           siteWindow == null || siteWindow.containsTime(point.time);
@@ -196,6 +227,8 @@ class ObservationWindowCalculator {
         bestPoint = point;
       }
     }
+    performance?.scoredSlots += slotScores.length;
+    performance?.slotScoring.stop();
 
     if (bestScore < 0) {
       if (hadLightPollutionFailure && !hadWeatherFailure) {
@@ -214,7 +247,12 @@ class ObservationWindowCalculator {
       );
     }
 
-    if (!FeasibleSlotContinuity.hasMinimumContinuousDuration(slotScores.keys)) {
+    performance?.continuity.start();
+    final continuity = FeasibleSlotContinuity.analyzeSorted(
+      slotScores.keys.toList(growable: false),
+    );
+    if (!continuity.hasMinimumContinuousDuration) {
+      performance?.continuity.stop();
       return ObservationWindowCalculation(
         window: null,
         exclusion: ObservationWindowExclusion.insufficientDuration,
@@ -222,15 +260,12 @@ class ObservationWindowCalculator {
       );
     }
 
-    final allowedSlots = FeasibleSlotContinuity.slotsInRangesAtLeast(
-      slotScores.keys,
-    ).toSet();
     final filteredScores = Map<DateTime, double>.fromEntries(
-      slotScores.entries.where((entry) => allowedSlots.contains(entry.key)),
+      continuity.allowedSlots.map((slot) => MapEntry(slot, slotScores[slot]!)),
     );
 
-    if (FeasibleSlotContinuity.longestContiguousMinutes(filteredScores.keys) <
-        minimumExposure.inMinutes) {
+    if (continuity.longestMinutes < minimumExposure.inMinutes) {
+      performance?.continuity.stop();
       return ObservationWindowCalculation(
         window: null,
         exclusion: ObservationWindowExclusion.insufficientDuration,
@@ -243,14 +278,12 @@ class ObservationWindowCalculator {
     for (final entry in filteredScores.entries) {
       if (entry.value > bestScore) {
         bestScore = entry.value;
-        bestPoint = visiblePoints.firstWhere(
-          (point) => _alignToSlot(point.time) == entry.key,
-          orElse: () => visiblePoints.first,
-        );
+        bestPoint = pointBySlot[entry.key] ?? visiblePoints.first;
       }
     }
 
     if (bestScore < 0 || bestPoint == null) {
+      performance?.continuity.stop();
       return ObservationWindowCalculation(
         window: null,
         exclusion: ObservationWindowExclusion.insufficientDuration,
@@ -259,7 +292,7 @@ class ObservationWindowCalculator {
     }
 
     final optimalPoint = bestPoint;
-    final feasibleStarts = filteredScores.keys.toList()..sort();
+    final feasibleStarts = continuity.allowedSlots;
     final recommendStart = feasibleStarts.first;
     final observationEnd = feasibleStarts.last;
     final totalMinutes = feasibleStarts.length * _slotDuration.inMinutes;
@@ -270,11 +303,16 @@ class ObservationWindowCalculator {
         .add(_slotDuration)
         .subtract(recommendedExposure);
     if (latestStart.isBefore(recommendStart)) latestStart = recommendStart;
+    performance?.continuity.stop();
+    performance?.moonSafety.start();
     final moonSafeMinutes = _calculateMoonSafeMinutes(
-      object: object,
       context: context,
       visiblePoints: visiblePoints,
+      raHours: raH,
+      declinationDeg: decD,
+      sharedCache: sharedCache,
     );
+    performance?.moonSafety.stop();
 
     final isCurrentlyVisible =
         referenceTime.isAfter(session.start) &&
@@ -287,12 +325,11 @@ class ObservationWindowCalculator {
           altitude: referenceAltAz.altitude,
         );
 
-    final feasibleRanges = FeasibleWindowFormatter.mergeSlotTimes(
-      filteredScores.keys,
-    );
+    final feasibleRanges = continuity.allowedRanges;
     final bestRange = FeasibleWindowFormatter.bestScoringRange(
       slotScores: filteredScores,
       focusTime: optimalPoint.time,
+      precomputedRanges: feasibleRanges,
     );
     final feasibleSummary = FeasibleWindowFormatter.buildSummary(
       feasibleRanges: feasibleRanges,
@@ -333,20 +370,27 @@ class ObservationWindowCalculator {
   }
 
   int _calculateMoonSafeMinutes({
-    required CatalogObject object,
     required ObservationContext context,
     required List<CelestialTimePoint> visiblePoints,
+    required double raHours,
+    required double declinationDeg,
+    ObservationWindowSharedCache? sharedCache,
   }) {
     const moonThreshold = 60.0;
     var bestRun = 0;
     var currentRun = 0;
 
     for (final point in visiblePoints) {
-      final moon = _moonScore.calculate(
-        object: object,
-        context: context.copyWith(currentTime: point.time),
+      final moon = _moonScore.calculateForCoordinates(
+        raHours: raHours,
+        decDeg: declinationDeg,
+        context: context,
         positionService: _positionService,
         evaluationTime: point.time,
+        moonCoordinates: sharedCache?.moonCoordinates(
+          positionService: _positionService,
+          evaluationTime: point.time,
+        ),
       );
       if (moon >= moonThreshold) {
         currentRun += 10;
@@ -380,5 +424,77 @@ class ObservationWindowCalculator {
       ObservationFeasibilityReason.windTooStrong => true,
       _ => false,
     };
+  }
+}
+
+/// Aggregated Debug-only timing for one recommendation pass.
+class ObservationWindowPerformance {
+  final Stopwatch astrometry = Stopwatch();
+  final Stopwatch visibility = Stopwatch();
+  final Stopwatch slotScoring = Stopwatch();
+  final Stopwatch continuity = Stopwatch();
+  final Stopwatch moonSafety = Stopwatch();
+  int calls = 0;
+  int visiblePoints = 0;
+  int scoredSlots = 0;
+
+  void report(String state) {
+    final detail =
+        '$state calls=$calls visible_points=$visiblePoints scored_slots=$scoredSlots';
+    PerformanceProbe.record(
+      'recommendation.window.astrometry',
+      astrometry.elapsed,
+      state: detail,
+    );
+    PerformanceProbe.record(
+      'recommendation.window.visibility',
+      visibility.elapsed,
+      state: detail,
+    );
+    PerformanceProbe.record(
+      'recommendation.window.slot_scoring',
+      slotScoring.elapsed,
+      state: detail,
+    );
+    PerformanceProbe.record(
+      'recommendation.window.continuity',
+      continuity.elapsed,
+      state: detail,
+    );
+    PerformanceProbe.record(
+      'recommendation.window.moon_safety',
+      moonSafety.elapsed,
+      state: detail,
+    );
+  }
+}
+
+class ObservationWindowSharedCache {
+  final Map<DateTime, double> _targetWeatherScores = {};
+  final Map<DateTime, EquatorialCoordinates> _moonCoordinates = {};
+
+  EquatorialCoordinates moonCoordinates({
+    required CelestialPositionService positionService,
+    required DateTime evaluationTime,
+  }) {
+    return _moonCoordinates.putIfAbsent(
+      evaluationTime,
+      () => positionService.getMoonEquatorial(evaluationTime),
+    );
+  }
+
+  double targetWeatherScore({
+    required ObservationContext context,
+    required DateTime evaluationTime,
+    required ObservationWeather? weather,
+  }) {
+    return _targetWeatherScores.putIfAbsent(
+      evaluationTime,
+      () => ObservationScoreService.calculateTargetWeatherScore(
+        context: context,
+        evaluationTime: evaluationTime,
+        weather: weather,
+      ),
+    );
   }
 }

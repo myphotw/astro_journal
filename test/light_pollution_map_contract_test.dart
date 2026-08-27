@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:astro_journal/features/light_pollution_map/view/light_pollution_map_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -61,6 +62,7 @@ void main() {
   });
 
   test('basemap fills the canvas and Bortle tiles stay optional', () {
+    expect(const LightPollutionMapScreen(isActive: false).isActive, isFalse);
     final googleMap = screen.indexOf('child: GoogleMap(');
     final positionedFill = screen.lastIndexOf('Positioned.fill(', googleMap);
     expect(googleMap, greaterThanOrEqualTo(0));

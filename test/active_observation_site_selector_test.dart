@@ -24,6 +24,8 @@ class _Repository implements ObservationSiteRepository {
   @override
   Future<void> create(ObservationSite site) async {}
   @override
+  Future<void> createFavorite(ObservationSite site) => create(site);
+  @override
   Future<void> update(ObservationSite site) async {}
   @override
   Future<void> delete(String id, {bool hard = false}) async {}

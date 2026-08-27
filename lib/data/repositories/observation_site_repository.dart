@@ -6,6 +6,7 @@ abstract class ObservationSiteRepository {
   Future<List<ObservationSite>> list({bool includeDeleted = false});
   Future<ObservationSite?> get(String id, {bool includeDeleted = false});
   Future<void> create(ObservationSite site);
+  Future<void> createFavorite(ObservationSite site);
   Future<void> update(ObservationSite site);
   Future<void> delete(String id, {bool hard = false});
   Future<void> setFavorite(String id, bool favorite);

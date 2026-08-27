@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../models/gallery_item.dart';
+import '../../services/app_logger.dart';
 import '../../services/tc_backend_auth_service.dart';
 
 class RemoteGalleryException implements Exception {
@@ -47,6 +48,46 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     final json = _object(
       await _get('/api/astro/gallery/${Uri.encodeComponent(recordId)}'),
     );
+    // Astro Gallery's `file_id` is the SHA-256 asset identity. Plate Solve
+    // requires the positive CommonFile database identity exposed as `file_id`
+    // by the canonical ObservationRecord API. Keep the two identities separate
+    // and only enrich a detail response when Gallery did not already provide
+    // `common_file_id`.
+    if (_positiveInt(json['common_file_id']) == null) {
+      AppLogger.info(
+        'RemoteGalleryDataSource',
+        'common_file_id recovery request '
+            'backend_record_id=$recordId source=ObservationRecord detail',
+      );
+      try {
+        final record = _object(
+          await _get('/api/astro/records/${Uri.encodeComponent(recordId)}'),
+        );
+        final hasFileId = record.containsKey('file_id');
+        final rawFileId = record['file_id'];
+        final commonFileId = _positiveInt(rawFileId);
+        AppLogger.info(
+          'RemoteGalleryDataSource',
+          'common_file_id recovery response '
+              'backend_record_id=$recordId http=success '
+              'file_id_present=$hasFileId '
+              'file_id_type=${rawFileId?.runtimeType ?? "null"} '
+              'parsed_common_file_id=${commonFileId ?? "null"}',
+        );
+        if (commonFileId != null) json['common_file_id'] = commonFileId;
+      } on RemoteGalleryException catch (error) {
+        AppLogger.info(
+          'RemoteGalleryDataSource',
+          'common_file_id recovery response '
+              'backend_record_id=$recordId http=failure '
+              'status_code=${error.statusCode ?? "transport_or_parse"} '
+              'file_id_present=unknown file_id_type=unknown '
+              'parsed_common_file_id=null',
+        );
+        // Gallery detail remains usable when identity recovery is unavailable.
+        // Plate Solve will retain its existing pre-upload/unlinked guard.
+      }
+    }
     return _item(json);
   }
 
@@ -116,5 +157,11 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     } on FormatException {
       throw const RemoteGalleryException('Gallery item is malformed.');
     }
+  }
+
+  int? _positiveInt(Object? value) {
+    if (value is num && value.toInt() > 0) return value.toInt();
+    final parsed = int.tryParse(value?.toString() ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 }

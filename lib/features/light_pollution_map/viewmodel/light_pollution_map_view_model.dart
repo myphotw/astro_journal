@@ -799,7 +799,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
       updatedAt: now,
     );
 
-    await _favoriteRepository.create(favorite);
+    await _favoriteRepository.createFavorite(favorite);
     await loadFavorites();
   }
 

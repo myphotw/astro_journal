@@ -1,4 +1,5 @@
 import '../../core/constants/catalog_type.dart';
+import '../../core/services/performance_probe.dart';
 import '../../services/celestial_position_service.dart';
 import '../../services/plate_solve_projection.dart';
 import '../datasources/catalog_local_datasource.dart';
@@ -15,7 +16,11 @@ class CatalogRepositoryImpl
 
   @override
   Future<List<CatalogObject>> getAll({bool listOnly = true}) =>
-      _dataSource.getAll(listOnly: listOnly);
+      PerformanceProbe.measureAsync(
+        'db.catalog.list',
+        () => _dataSource.getAll(listOnly: listOnly),
+        state: 'list_only=$listOnly',
+      );
 
   @override
   Future<CatalogObject?> getById(String id) => _dataSource.getById(id);

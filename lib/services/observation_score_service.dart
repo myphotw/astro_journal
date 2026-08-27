@@ -354,6 +354,11 @@ class ObservationScoreService {
     required double altitude,
     required CelestialPositionService positionService,
     ObservationWeather? weather,
+    double? raHours,
+    double? declinationDeg,
+    double? lightPollutionScore,
+    double? targetWeatherScore,
+    EquatorialCoordinates? moonCoordinates,
   }) {
     final slotWeather =
         weather ??
@@ -362,48 +367,64 @@ class ObservationScoreService {
         );
 
     final altitudeScore = _altitudeScore(altitude);
-    final scoringContext = context.copyWith(currentTime: evaluationTime);
-    final moon = _moonScore.calculate(
-      object: object,
-      context: scoringContext,
-      positionService: positionService,
-      evaluationTime: evaluationTime,
-    );
-    final lightPollution = _lightPollutionScore.calculate(
-      context: context,
-      profile: profile,
-    );
-    final weatherScore = slotWeather != null
-        ? _qualityService
-                  .computeSlotQuality(
-                    forecast: slotWeather.toForecastSlot(),
-                    moon: computeMoonInfo(evaluationTime),
-                  )
-                  .oqi ??
-              0
-        : _qualityService
-                  .computeSlotQuality(
-                    forecast: WeatherForecastSlot(
-                      time: evaluationTime,
-                      temperature: context.weather?.temperature ?? 10,
-                      humidity: context.weather?.humidity ?? 50,
-                      windSpeed: context.weather?.windSpeed ?? 0,
-                      cloudCoverage: context.cloudCover,
-                      visibility: context.weather?.visibility ?? 10000,
-                      pop: 0,
-                      description: '',
-                      icon: '',
-                    ),
-                    moon: computeMoonInfo(evaluationTime),
-                  )
-                  .oqi ??
-              0;
+    final moon = raHours == null || declinationDeg == null
+        ? _moonScore.calculate(
+            object: object,
+            context: context,
+            positionService: positionService,
+            evaluationTime: evaluationTime,
+          )
+        : _moonScore.calculateForCoordinates(
+            raHours: raHours,
+            decDeg: declinationDeg,
+            context: context,
+            positionService: positionService,
+            evaluationTime: evaluationTime,
+            moonCoordinates: moonCoordinates,
+          );
+    final lightPollution =
+        lightPollutionScore ??
+        _lightPollutionScore.calculate(context: context, profile: profile);
+    final weatherScore =
+        targetWeatherScore ??
+        calculateTargetWeatherScore(
+          context: context,
+          evaluationTime: evaluationTime,
+          weather: slotWeather,
+        );
 
     return (altitudeScore * ObservationScoreWeights.altitude +
             moon * ObservationScoreWeights.moon +
             lightPollution * ObservationScoreWeights.lightPollution +
             weatherScore * ObservationScoreWeights.weather)
         .clamp(0.0, 100.0);
+  }
+
+  static double calculateTargetWeatherScore({
+    required ObservationContext context,
+    required DateTime evaluationTime,
+    ObservationWeather? weather,
+  }) {
+    final forecast =
+        weather?.toForecastSlot() ??
+        WeatherForecastSlot(
+          time: evaluationTime,
+          temperature: context.weather?.temperature ?? 10,
+          humidity: context.weather?.humidity ?? 50,
+          windSpeed: context.weather?.windSpeed ?? 0,
+          cloudCoverage: context.cloudCover,
+          visibility: context.weather?.visibility ?? 10000,
+          pop: 0,
+          description: '',
+          icon: '',
+        );
+    return _qualityService
+            .computeSlotQuality(
+              forecast: forecast,
+              moon: computeMoonInfo(evaluationTime),
+            )
+            .oqi ??
+        0;
   }
 
   static Map<DateTime, double> buildSiteSlotIndex({

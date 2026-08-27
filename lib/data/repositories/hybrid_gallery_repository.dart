@@ -107,9 +107,16 @@ class HybridGalleryRepository implements GalleryRepository {
     final settings = await _settingsService.load();
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     final cached = await _cache.read(key);
-    if (!settings.enabled || baseUrl == null) return _cachedItem(cached);
-    if (!forceRefresh && _isFresh(cached, detailTtl)) {
-      return _cachedItem(cached);
+    final cachedItem = _cachedItem(cached);
+    if (!settings.enabled || baseUrl == null) return cachedItem;
+    // Older/current Gallery detail cache entries can legitimately lack the
+    // numeric CommonFile identity because Astro Gallery exposes only its
+    // SHA-256 `file_id`. Do not let a fresh but incomplete cache prevent the
+    // remote detail datasource from recovering the canonical record `file_id`.
+    if (!forceRefresh &&
+        cachedItem?.commonFileId != null &&
+        _isFresh(cached, detailTtl)) {
+      return cachedItem;
     }
     try {
       final fetched = await _remoteFactory(baseUrl).getDetail(backendRecordId);
@@ -117,7 +124,7 @@ class HybridGalleryRepository implements GalleryRepository {
       await _write(key, synced.toJson());
       return synced;
     } on RemoteGalleryException {
-      return _cachedItem(cached);
+      return cachedItem;
     }
   }
 
@@ -301,6 +308,12 @@ class HybridGalleryRepository implements GalleryRepository {
         ? fields['representative'] as bool?
         : null,
     memo: fields.containsKey('memo') ? fields['memo'] as String? : null,
+    location: fields['location_name'] as String?,
+    updateLocation: fields.containsKey('location_name'),
+    latitude: (fields['latitude'] as num?)?.toDouble(),
+    updateLatitude: fields.containsKey('latitude'),
+    longitude: (fields['longitude'] as num?)?.toDouble(),
+    updateLongitude: fields.containsKey('longitude'),
     syncState: revision == null ? 'QUEUED' : 'SYNCED',
   );
 

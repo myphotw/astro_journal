@@ -95,6 +95,26 @@ void main() {
       expect(star.total, 1);
       expect(star.captured, 1);
     });
+
+    test('record-only comet uses the existing Solar progress policy', () {
+      final result = service.buildCategoryProgress(
+        records: [_record('halley-record', 'solar_11')],
+        catalog: [
+          _object('solar_8', CatalogType.solar, 8),
+          _object(
+            'solar_11',
+            CatalogType.solar,
+            11,
+            tags: const ['record_only', 'dynamic_ephemeris'],
+          ),
+        ],
+      );
+
+      final solar = _of(result, CatalogType.solar);
+      expect(solar.total, 2);
+      expect(solar.captured, 1);
+      expect(solar.progressPercent, 50);
+    });
   });
 
   testWidgets('renders count, percent and responsive progress bars', (

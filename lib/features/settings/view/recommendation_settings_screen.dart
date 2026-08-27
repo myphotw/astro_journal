@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,7 +12,7 @@ import '../../../services/recommendation_settings_service.dart';
 
 /// 추천 대상 필터 설정 화면.
 ///
-/// 저장 시 [HomeViewModel.load]를 호출하여 추천 목록을 즉시 갱신한다.
+/// 저장 시 Home의 현재 결과를 유지한 채 추천·스케줄 재계산을 시작한다.
 class RecommendationSettingsScreen extends StatefulWidget {
   const RecommendationSettingsScreen({super.key});
 
@@ -29,6 +31,9 @@ class _RecommendationSettingsScreenState
     CatalogType.caldwell,
     CatalogType.rcw,
     CatalogType.vdb,
+    CatalogType.barnard,
+    CatalogType.ldn,
+    CatalogType.lbn,
     CatalogType.star,
   ];
 
@@ -78,9 +83,9 @@ class _RecommendationSettingsScreenState
       );
       await context.read<RecommendationSettingsService>().save(settings);
       if (!mounted) return;
-      // 홈 뷰모델 즉시 갱신
-      await context.read<HomeViewModel>().load();
-      if (!mounted) return;
+      unawaited(
+        context.read<HomeViewModel>().updateRecommendationSettings(settings),
+      );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('추천 설정이 저장되었습니다.')));
@@ -328,17 +333,16 @@ class _Section extends StatelessWidget {
           ),
         ],
         const SizedBox(height: AppTheme.spacingMd),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.spacingMd,
-            vertical: AppTheme.spacingSm,
+        Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingMd,
+              vertical: AppTheme.spacingSm,
+            ),
+            child: SizedBox(width: double.infinity, child: child),
           ),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-          ),
-          child: child,
         ),
       ],
     );

@@ -7,11 +7,12 @@ import 'tc_backend_external_api_client.dart';
 
 class TcBackendPlateSolveService {
   TcBackendPlateSolveService({
-    required this._client,
+    required TcBackendExternalApiClient client,
     this.pollInterval = const Duration(seconds: 2),
     this.maxPollDuration = const Duration(minutes: 5),
     Future<void> Function(Duration)? delay,
-  }) : _delay = delay ?? Future<void>.delayed;
+  }) : _client = client,
+       _delay = delay ?? Future<void>.delayed;
 
   final TcBackendExternalApiClient _client;
   final Duration pollInterval;

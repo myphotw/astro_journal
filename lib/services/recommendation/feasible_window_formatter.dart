@@ -11,6 +11,10 @@ class FeasibleWindowFormatter {
 
   static List<FeasibleTimeRange> mergeSlotTimes(Iterable<DateTime> slotStarts) {
     final sorted = slotStarts.toList()..sort((a, b) => a.compareTo(b));
+    return mergeSortedSlotTimes(sorted);
+  }
+
+  static List<FeasibleTimeRange> mergeSortedSlotTimes(List<DateTime> sorted) {
     if (sorted.isEmpty) return const [];
 
     final ranges = <FeasibleTimeRange>[];
@@ -34,24 +38,27 @@ class FeasibleWindowFormatter {
   static FeasibleTimeRange? bestScoringRange({
     required Map<DateTime, double> slotScores,
     DateTime? focusTime,
+    List<FeasibleTimeRange>? precomputedRanges,
   }) {
     if (slotScores.isEmpty) return null;
 
-    final ranges = mergeSlotTimes(slotScores.keys);
+    final ranges = precomputedRanges ?? mergeSlotTimes(slotScores.keys);
     FeasibleTimeRange? best;
     var bestScore = -1.0;
 
     for (final range in ranges) {
       final slots = slotScores.entries.where((entry) {
-        return !entry.key.isBefore(range.start) && entry.key.isBefore(range.end);
+        return !entry.key.isBefore(range.start) &&
+            entry.key.isBefore(range.end);
       });
       if (slots.isEmpty) continue;
 
       final average =
           slots.map((entry) => entry.value).reduce((a, b) => a + b) /
-              slots.length;
+          slots.length;
 
-      final containsFocus = focusTime != null &&
+      final containsFocus =
+          focusTime != null &&
           !focusTime.isBefore(range.start) &&
           focusTime.isBefore(range.end);
 
@@ -76,7 +83,9 @@ class FeasibleWindowFormatter {
         fullWindowEnd != null &&
         feasibleRanges.length == 1) {
       final range = feasibleRanges.first;
-      if (!range.start.isAfter(fullWindowStart.add(const Duration(minutes: 10))) &&
+      if (!range.start.isAfter(
+            fullWindowStart.add(const Duration(minutes: 10)),
+          ) &&
           !range.end.isBefore(fullWindowEnd)) {
         return null;
       }

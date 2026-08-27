@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:astro_journal/core/constants/catalog_type.dart';
@@ -12,6 +13,8 @@ import 'package:astro_journal/data/models/object_observation_window.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/observation_site.dart';
 import 'package:astro_journal/data/models/recommendation_build_result.dart';
+import 'package:astro_journal/data/models/recommendation_result.dart';
+import 'package:astro_journal/data/models/scored_observation_target.dart';
 import 'package:astro_journal/data/models/scheduler_models.dart';
 import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
@@ -222,10 +225,18 @@ class _ObservationEngine extends ObservationEngine {
 
 class _Scheduler extends SchedulerEngine {
   int builds = 0;
+  final List<List<String>> candidateIds = [];
+  final List<TrackingMode> trackingModes = [];
+  final List<int> horizonPointCounts = [];
 
   @override
   ScheduleResult buildSchedule(SchedulerInput input) {
     builds += 1;
+    candidateIds.add(
+      input.targets.map((target) => target.object.id).toList(growable: false),
+    );
+    trackingModes.add(input.context.trackingMode);
+    horizonPointCounts.add(input.context.horizonProfile.points.length);
     return ScheduleResult(slots: generateSlots(input.session));
   }
 }
@@ -242,6 +253,10 @@ class _RecommendationEngine extends RecommendationEngine {
   final _Scheduler scheduler;
   final List<TrackingMode> trackingModes = [];
   final List<int> horizonPointCounts = [];
+  final List<Set<CatalogType>> enabledCatalogs = [];
+  Completer<void>? nextBuildGate;
+  Completer<void>? nextBuildStarted;
+  bool failNextBuild = false;
 
   @override
   Future<RecommendationBuildResult> build({
@@ -261,12 +276,67 @@ class _RecommendationEngine extends RecommendationEngine {
   }) async {
     trackingModes.add(trackingMode);
     horizonPointCounts.add(context.horizonProfile.points.length);
+    enabledCatalogs.add(Set.of(settings.enabledCatalogs));
+    final gate = nextBuildGate;
+    nextBuildGate = null;
+    final started = nextBuildStarted;
+    nextBuildStarted = null;
+    if (started != null && !started.isCompleted) started.complete();
+    if (gate != null) await gate.future;
+    if (failNextBuild) {
+      failNextBuild = false;
+      throw StateError('recommendation failed');
+    }
+    final selectedCatalog = settings.enabledCatalogs.toList()
+      ..sort((left, right) => left.name.compareTo(right.name));
+    final catalogType = selectedCatalog.firstOrNull ?? CatalogType.messier;
+    final object = CatalogObject(
+      id: 'candidate-${catalogType.name}',
+      number: 1,
+      catalog: catalogType,
+      name: 'Candidate',
+      type: '은하',
+      constellation: 'Test',
+      ra: '0h0m',
+      dec: '+0d0m',
+      magnitude: '5',
+    );
+    final window = ObjectObservationWindow(
+      currentAltitude: 45,
+      currentAzimuth: 180,
+      isCurrentlyVisible: true,
+      recommendStartTime: session.start,
+      optimalStartTime: session.start,
+      optimalEndTime: session.end,
+      optimalTime: session.start,
+      optimalAltitude: 45,
+      observationEndTime: session.end,
+      totalObservableMinutes: session.end.difference(session.start).inMinutes,
+      remainingVisibleMinutes: session.end.difference(session.start).inMinutes,
+    );
+    final target = ScoredObservationTarget(
+      object: object,
+      window: window,
+      profile: const ObjectImagingProfileProvider().profileFor(object),
+      score: 80,
+      moonSeparation: 90,
+      minimumExposure: const Duration(minutes: 10),
+      recommendedExposure: const Duration(minutes: 30),
+    );
+    final result = RecommendationResult(
+      object: object,
+      reasons: const [],
+      season: 'test',
+      score: 80,
+      moonSeparation: 90,
+      observationWindow: window,
+    );
     final schedule = scheduler.buildSchedule(
       SchedulerInput(
         context: context,
         session: session,
-        targets: const [],
-        resultsById: const {},
+        targets: [target],
+        resultsById: {object.id: result},
         referenceTime: referenceTime ?? context.currentTime,
       ),
     );
@@ -278,9 +348,10 @@ class _RecommendationEngine extends RecommendationEngine {
       exclusionReasons: [
         'tracking:${trackingMode.name}',
         'horizon:${context.horizonProfile.points.length}',
+        'catalogs:${settings.enabledCatalogs.map((item) => item.name).join(',')}',
       ],
       scheduleResult: schedule,
-      scoredTargets: const [],
+      scoredTargets: [target],
     );
   }
 }
@@ -336,6 +407,15 @@ void main() {
       );
       addTearDown(home.dispose);
       await home.load();
+      while (home.isWeatherLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      var homeNotifications = 0;
+      final recommendationStates = <RecommendationComputationState>[];
+      home.addListener(() {
+        homeNotifications++;
+        recommendationStates.add(home.recommendationState);
+      });
 
       final initialRecommendationBuilds = recommendation.trackingModes.length;
       final initialScheduleBuilds = scheduler.builds;
@@ -357,6 +437,13 @@ void main() {
         fovHeightDegrees: 1,
       );
       await equipment.save(telescope);
+      expect(homeNotifications, 2);
+      expect(recommendationStates, [
+        RecommendationComputationState.recalculating,
+        RecommendationComputationState.current,
+      ]);
+      homeNotifications = 0;
+      recommendationStates.clear();
       expect(home.activeEquipment, contains(telescope));
       expect(
         recommendation.trackingModes.length,
@@ -378,7 +465,17 @@ void main() {
 
       final trackingRecommendationBuilds = recommendation.trackingModes.length;
       final trackingScheduleBuilds = scheduler.builds;
+      final trackingReloads = PerformanceProbe.count(
+        'observation_context.reload',
+      );
       await home.setTrackingMode(TrackingMode.eq);
+      expect(homeNotifications, 2);
+      expect(recommendationStates, [
+        RecommendationComputationState.recalculating,
+        RecommendationComputationState.current,
+      ]);
+      homeNotifications = 0;
+      recommendationStates.clear();
       expect(home.trackingMode, TrackingMode.eq);
       expect(home.lastSessionContext?.trackingMode, TrackingMode.eq);
       expect(recommendation.trackingModes.last, TrackingMode.eq);
@@ -388,9 +485,15 @@ void main() {
         trackingRecommendationBuilds + 1,
       );
       expect(scheduler.builds, trackingScheduleBuilds + 1);
+      expect(scheduler.trackingModes.last, TrackingMode.eq);
+      expect(
+        PerformanceProbe.count('observation_context.reload'),
+        trackingReloads + 1,
+      );
 
       final siteRecommendationBuilds = recommendation.trackingModes.length;
       final siteScheduleBuilds = scheduler.builds;
+      final siteReloads = PerformanceProbe.count('observation_context.reload');
       final movedSite = initialSite.copyWith(
         name: 'Moved',
         latitude: 38.5,
@@ -404,6 +507,10 @@ void main() {
       expect(home.lastSessionContext?.bortle, 4);
       expect(recommendation.trackingModes.length, siteRecommendationBuilds + 1);
       expect(scheduler.builds, siteScheduleBuilds + 1);
+      expect(
+        PerformanceProbe.count('observation_context.reload'),
+        siteReloads + 1,
+      );
 
       final session =
           HorizonScanSession(
@@ -448,6 +555,9 @@ void main() {
       final points = const HorizonScanProcessor().process(session);
       final horizonRecommendationBuilds = recommendation.trackingModes.length;
       final horizonScheduleBuilds = scheduler.builds;
+      final horizonReloads = PerformanceProbe.count(
+        'observation_context.reload',
+      );
       await sites.update(movedSite.copyWith(horizonPoints: points));
       expect(home.lastSessionContext?.horizonProfile.points, hasLength(36));
       expect(recommendation.horizonPointCounts.last, 36);
@@ -456,10 +566,73 @@ void main() {
         horizonRecommendationBuilds + 1,
       );
       expect(scheduler.builds, horizonScheduleBuilds + 1);
+      expect(scheduler.horizonPointCounts.last, 36);
+      expect(
+        PerformanceProbe.count('observation_context.reload'),
+        horizonReloads + 1,
+      );
 
       await sites.update(movedSite.copyWith(horizonPoints: const []));
       expect(home.lastSessionContext?.horizonProfile.hasRestrictions, isFalse);
       expect(recommendation.horizonPointCounts.last, 0);
+
+      final filterRecommendationBuilds = recommendation.enabledCatalogs.length;
+      final filterScheduleBuilds = scheduler.builds;
+      await home.updateRecommendationSettings(
+        RecommendationSettings.defaults.copyWith(
+          enabledCatalogs: {CatalogType.messier},
+        ),
+      );
+      expect(
+        recommendation.enabledCatalogs.length,
+        filterRecommendationBuilds + 1,
+      );
+      expect(scheduler.builds, filterScheduleBuilds + 1);
+      expect(recommendation.enabledCatalogs.last, {CatalogType.messier});
+      expect(scheduler.candidateIds.last, ['candidate-messier']);
+      expect(home.lastScheduleCandidateIds, ['candidate-messier']);
+      expect(home.recommendationState, RecommendationComputationState.current);
+      expect(home.scheduleState, ScheduleComputationState.current);
+
+      final staleGate = Completer<void>();
+      final staleStarted = Completer<void>();
+      recommendation.nextBuildGate = staleGate;
+      recommendation.nextBuildStarted = staleStarted;
+      final firstSettings = RecommendationSettings.defaults.copyWith(
+        enabledCatalogs: {CatalogType.messier},
+      );
+      final latestSettings = RecommendationSettings.defaults.copyWith(
+        enabledCatalogs: {CatalogType.ngc},
+      );
+
+      final staleRequest = home.updateRecommendationSettings(firstSettings);
+      await staleStarted.future;
+      expect(home.scheduleState, ScheduleComputationState.recalculating);
+      final latestRequest = home.updateRecommendationSettings(latestSettings);
+      staleGate.complete();
+      await Future.wait([staleRequest, latestRequest]);
+
+      expect(
+        PerformanceProbe.count('recommendation.stale_result_discarded'),
+        1,
+      );
+      expect(recommendation.enabledCatalogs.last, {CatalogType.ngc});
+      expect(scheduler.candidateIds.last, ['candidate-ngc']);
+      expect(home.lastScheduleCandidateIds, ['candidate-ngc']);
+      expect(home.lastScheduleContextRevision, invalidator.revision);
+      expect(home.exclusionReasons, contains('catalogs:ngc'));
+      expect(home.recommendationState, RecommendationComputationState.current);
+      expect(home.scheduleState, ScheduleComputationState.current);
+
+      recommendation.failNextBuild = true;
+      await home.updateRecommendationSettings(
+        RecommendationSettings.defaults.copyWith(
+          enabledCatalogs: {CatalogType.caldwell},
+        ),
+      );
+      expect(home.recommendationState, RecommendationComputationState.failed);
+      expect(home.scheduleState, ScheduleComputationState.failed);
+      expect(home.exclusionReasons, contains('catalogs:ngc'));
     },
   );
 }

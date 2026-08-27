@@ -57,6 +57,7 @@ class GalleryShootingRecordRepositoryAdapter
     SyncOutboxRepository? syncOutboxRepository,
     TcBackendDrainRunner? syncCoordinator,
     CatalogCaptureProjectionService? catalogCaptureProjection,
+    void Function()? onRecordsChanged,
   }) => GalleryShootingRecordRepositoryAdapter._(
     galleryRepository,
     localRepository,
@@ -66,6 +67,7 @@ class GalleryShootingRecordRepositoryAdapter
     syncOutboxRepository,
     syncCoordinator,
     catalogCaptureProjection,
+    onRecordsChanged,
   );
 
   GalleryShootingRecordRepositoryAdapter._(
@@ -77,6 +79,7 @@ class GalleryShootingRecordRepositoryAdapter
     this._syncOutboxRepository,
     this._syncCoordinator,
     this._catalogCaptureProjection,
+    this._onRecordsChanged,
   );
 
   final GalleryRepository _galleryRepository;
@@ -87,6 +90,7 @@ class GalleryShootingRecordRepositoryAdapter
   final SyncOutboxRepository? _syncOutboxRepository;
   final TcBackendDrainRunner? _syncCoordinator;
   final CatalogCaptureProjectionService? _catalogCaptureProjection;
+  final void Function()? _onRecordsChanged;
   Map<String, ShootingRecord> _lastRemoteRecords = const {};
 
   @override
@@ -107,7 +111,12 @@ class GalleryShootingRecordRepositoryAdapter
     final projected = <ShootingRecord>[];
 
     for (final item in snapshot.items) {
-      final linkedLocalId = links[item.backendRecordId];
+      final remoteProjectionId = 'remote:${item.backendRecordId}';
+      final linkedLocalId =
+          links[item.backendRecordId] ??
+          (localById.containsKey(remoteProjectionId)
+              ? remoteProjectionId
+              : null);
       final localRecord = linkedLocalId == null
           ? null
           : localById[linkedLocalId];
@@ -141,9 +150,7 @@ class GalleryShootingRecordRepositoryAdapter
       final item = await _galleryRepository.getById(backendRecordId);
       if (item == null) return current;
       final catalog = await _catalogRepository.getAll(listOnly: true);
-      final localRecord = _isRemoteOnly(id)
-          ? null
-          : await _localRepository.getById(id);
+      final localRecord = await _localRepository.getById(id);
       final detailed = _projectionMapper
           .toProjection(item, catalog: catalog)
           .toShootingRecord(localRecord: localRecord);
@@ -183,16 +190,27 @@ class GalleryShootingRecordRepositoryAdapter
   }
 
   @override
-  Future<void> save(ShootingRecord record) => _localRepository.save(record);
+  Future<void> save(ShootingRecord record) async {
+    await _localRepository.save(record);
+    _onRecordsChanged?.call();
+  }
 
   @override
   Future<void> update(ShootingRecord record) async {
     final previous = _lastRemoteRecords[record.id];
-    if (!_isRemoteOnly(record.id)) {
+    if (_isRemoteOnly(record.id)) {
+      // Remote canonical rows still need a durable local projection for fields
+      // not yet present in the ObservationRecord API (integration/equipment).
+      // ShootingRecord.toMap intentionally omits transient backend identifiers.
+      await _localRepository.save(record);
+    } else {
       await _localRepository.update(record);
     }
     _lastRemoteRecords = {..._lastRemoteRecords, record.id: record};
-    if (previous == null || previous.backendRecordId == null) return;
+    if (previous == null || previous.backendRecordId == null) {
+      _onRecordsChanged?.call();
+      return;
+    }
 
     final fields = <String, Object?>{};
     if (previous.isFavorite != record.isFavorite) {
@@ -202,7 +220,19 @@ class GalleryShootingRecordRepositoryAdapter
     if (previous.isRepresentative != record.isRepresentative) {
       fields['representative'] = record.isRepresentative;
     }
+    final previousLocation = previous.exif?.locationName ?? previous.location;
+    final nextLocation = record.exif?.locationName ?? record.location;
+    if (previousLocation != nextLocation) {
+      fields['location_name'] = nextLocation;
+    }
+    if (previous.exif?.lat != record.exif?.lat) {
+      fields['latitude'] = record.exif?.lat;
+    }
+    if (previous.exif?.lng != record.exif?.lng) {
+      fields['longitude'] = record.exif?.lng;
+    }
     await _queuePatch(record, fields);
+    _onRecordsChanged?.call();
   }
 
   @override
@@ -213,10 +243,13 @@ class GalleryShootingRecordRepositoryAdapter
       await _localRepository.delete(id);
       await _syncOutboxRepository?.cancelPendingUpload(id);
       await _reconcileCatalog(local?.celestialObjectId);
+      _onRecordsChanged?.call();
       return;
     }
     final remoteOnly = _isRemoteOnly(id);
-    if (!remoteOnly) await _localRepository.delete(id);
+    if (!remoteOnly || await _localRepository.getById(id) != null) {
+      await _localRepository.delete(id);
+    }
     await _galleryRepository.applyLocalDelete(record!.backendRecordId!);
     final updated = Map<String, ShootingRecord>.from(_lastRemoteRecords)
       ..remove(id);
@@ -226,6 +259,7 @@ class GalleryShootingRecordRepositoryAdapter
       localRecordId: remoteOnly ? null : id,
     );
     await _reconcileCatalog(record.celestialObjectId);
+    _onRecordsChanged?.call();
     _requestDrain();
   }
 

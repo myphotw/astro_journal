@@ -33,6 +33,32 @@ void main() {
       expect(a.raHours, b.raHours);
       expect(a.decDeg, b.decDeg);
     });
+
+    test('prepared trajectory matches direct Alt/Az calculation', () {
+      final service = CelestialPositionService();
+      final start = DateTime.utc(2026, 8, 27, 12);
+      final trajectory = service.getTrajectory(
+        objectId: 'test',
+        raHours: 5.5,
+        decDeg: -5.4,
+        latitude: 37.5,
+        longitude: 127,
+        start: start,
+        end: start.add(const Duration(minutes: 30)),
+      );
+
+      for (final point in trajectory.points) {
+        final direct = CelestialPositionService.computeAltAz(
+          raHours: 5.5,
+          decDeg: -5.4,
+          latDeg: 37.5,
+          lonDeg: 127,
+          time: point.time,
+        );
+        expect(point.altitude, closeTo(direct.altitude, 1e-10));
+        expect(point.azimuth, closeTo(direct.azimuth, 1e-10));
+      }
+    });
   });
 
   group('FeasibleWindowFormatter', () {
@@ -56,10 +82,7 @@ void main() {
     test('builds partial-window summary', () {
       final summary = FeasibleWindowFormatter.buildSummary(
         feasibleRanges: [
-          (
-            start: DateTime(2026, 7, 1, 22, 0),
-            end: DateTime(2026, 7, 2, 1, 0),
-          ),
+          (start: DateTime(2026, 7, 1, 22, 0), end: DateTime(2026, 7, 2, 1, 0)),
         ],
         fullWindowStart: DateTime(2026, 7, 1, 21, 0),
         fullWindowEnd: DateTime(2026, 7, 2, 4, 0),

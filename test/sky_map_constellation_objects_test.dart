@@ -8,6 +8,8 @@ import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/features/sky_map/viewmodel/sky_map_view_model.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_object_symbol.dart';
+import 'package:astro_journal/features/sky_map/widgets/painters/catalog_object_painter.dart';
+import 'package:astro_journal/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,7 +53,10 @@ void main() {
     }
 
     test('구상/산개/행성상을 구분한다', () {
-      expect(render(ObjectType.openCluster).shapeKind, SkyMapShapeKind.openCluster);
+      expect(
+        render(ObjectType.openCluster).shapeKind,
+        SkyMapShapeKind.openCluster,
+      );
       expect(
         render(ObjectType.globularCluster).shapeKind,
         SkyMapShapeKind.globularCluster,
@@ -61,8 +66,55 @@ void main() {
         SkyMapShapeKind.planetaryNebula,
       );
       expect(render(ObjectType.galaxy).shapeKind, SkyMapShapeKind.galaxy);
-      expect(render(ObjectType.emissionNebula).shapeKind, SkyMapShapeKind.nebula);
+      expect(
+        render(ObjectType.emissionNebula).shapeKind,
+        SkyMapShapeKind.nebula,
+      );
     });
+  });
+
+  test('Messier label alone uses the amber high-contrast token', () {
+    final messier = SkyMapRenderObject(
+      catalogId: 'M42',
+      name: 'M42',
+      objectType: ObjectType.emissionNebula,
+      catalog: CatalogType.messier,
+      raDeg: 0,
+      decDeg: 0,
+      screenX: 0,
+      screenY: 0,
+      renderWidth: 10,
+      renderHeight: 10,
+    );
+    final ngc = SkyMapRenderObject(
+      catalogId: 'NGC1976',
+      name: 'NGC1976',
+      objectType: ObjectType.emissionNebula,
+      catalog: CatalogType.ngc,
+      raDeg: 0,
+      decDeg: 0,
+      screenX: 0,
+      screenY: 0,
+      renderWidth: 10,
+      renderHeight: 10,
+    );
+
+    expect(
+      CatalogObjectPainter.labelColorFor(messier, false),
+      AppColors.skyMapMessierLabel,
+    );
+    expect(
+      CatalogObjectPainter.labelColorFor(messier, true),
+      AppColors.skyMapMessierLabel,
+    );
+    expect(
+      CatalogObjectPainter.labelColorFor(ngc, false),
+      AppColors.textPrimary.withValues(alpha: 0.9),
+    );
+    expect(
+      CatalogObjectPainter.labelColorFor(ngc, true),
+      CatalogType.ngc.accentColor,
+    );
   });
 
   group('SkyMapViewModel.objectsInConstellation', () {
@@ -244,10 +296,13 @@ void main() {
     });
 
     test('성도 필터 종류는 범례와 동일', () {
-      expect(
-        SkyMapFilters.supportedObjectTypes.map((e) => e.label).toList(),
-        ['은하', '산개성단', '구상성단', '성운', '행성상성운'],
-      );
+      expect(SkyMapFilters.supportedObjectTypes.map((e) => e.label).toList(), [
+        '은하',
+        '산개성단',
+        '구상성단',
+        '성운',
+        '행성상성운',
+      ]);
       expect(
         SkyMapObjectTypeFilter.forObjectType(ObjectType.emissionNebula),
         SkyMapObjectTypeFilter.nebula,
@@ -306,11 +361,9 @@ class _FakeCatalogRepository implements CatalogRepository {
   Future<List<CatalogObject>> getAll({bool listOnly = true}) async => objects;
 
   @override
-  Future<CatalogObject?> getById(String id) async =>
-      objects.cast<CatalogObject?>().firstWhere(
-            (o) => o?.id == id,
-            orElse: () => null,
-          );
+  Future<CatalogObject?> getById(String id) async => objects
+      .cast<CatalogObject?>()
+      .firstWhere((o) => o?.id == id, orElse: () => null);
 
   @override
   Future<List<CatalogObject>> getByCatalog(CatalogType type) async =>
@@ -338,8 +391,7 @@ class _FakeCatalogRepository implements CatalogRepository {
     required double raDeg,
     required double decDeg,
     required double radiusDeg,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<List<CatalogObject>> findObjectsInPhotoField({
@@ -348,8 +400,7 @@ class _FakeCatalogRepository implements CatalogRepository {
     required double fovWidthDeg,
     required double fovHeightDeg,
     required double rotationDeg,
-  }) async =>
-      const [];
+  }) async => const [];
 }
 
 class _FakeEquipmentRepository implements EquipmentRepository {

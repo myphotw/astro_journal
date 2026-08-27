@@ -57,6 +57,7 @@ class PlateSolveViewModel extends ChangeNotifier {
   static const _tag = 'PlateSolveViewModel';
 
   final Map<String, PlateSolveRunState> _states = {};
+  final Map<String, Future<PlateSolveResult>> _inFlight = {};
 
   PlateSolveRunState stateFor(String recordId) =>
       _states[recordId] ?? PlateSolveRunState.idle;
@@ -66,6 +67,21 @@ class PlateSolveViewModel extends ChangeNotifier {
   /// 이미 Plate Solve가 완료된 기록에도 언제든 다시 실행할 수 있다
   /// ("Plate Solve 다시 실행").
   Future<PlateSolveResult> solve(ShootingRecord record) async {
+    final existing = _inFlight[record.id];
+    if (existing != null) return existing;
+
+    final run = _solveOnce(record);
+    _inFlight[record.id] = run;
+    try {
+      return await run;
+    } finally {
+      if (identical(_inFlight[record.id], run)) {
+        _inFlight.remove(record.id);
+      }
+    }
+  }
+
+  Future<PlateSolveResult> _solveOnce(ShootingRecord record) async {
     final photoUri = record.photoUri;
     if (photoUri == null || photoUri.isEmpty) {
       final failure = PlateSolveResult.failure(
@@ -75,9 +91,21 @@ class PlateSolveViewModel extends ChangeNotifier {
       return failure;
     }
 
-    final commonFileId =
-        record.commonFileId ??
-        await _commonFileLinks?.getCommonFileId(record.id);
+    var commonFileId = record.commonFileId;
+    var commonFileIdSource = commonFileId == null ? 'none' : 'ShootingRecord';
+    if (commonFileId == null && _commonFileLinks != null) {
+      commonFileId = await _commonFileLinks.getCommonFileId(record.id);
+      if (commonFileId != null) commonFileIdSource = 'sync_outbox';
+    }
+    AppLogger.info(
+      _tag,
+      'identity '
+      'shooting_record_id=${record.id} '
+      'backend_record_id=${record.backendRecordId ?? "null"} '
+      'backend_file_id=${record.backendFileId ?? "null"} '
+      'common_file_id=${commonFileId ?? "null"} '
+      'common_file_id_source=$commonFileIdSource',
+    );
     if (_commonFileLinks != null && commonFileId == null) {
       final failure = PlateSolveResult.failure(
         errorMessage: '사진 등록이 완료된 후 Plate Solve를 사용할 수 있습니다.',
@@ -92,23 +120,19 @@ class PlateSolveViewModel extends ChangeNotifier {
       const PlateSolveRunState(
         isRunning: true,
         stage: PlateSolveStage.uploading,
-        message: 'Plate Solving...',
+        message: '플레이트 솔빙 요청 중…',
       ),
     );
 
     final pending = PlateSolveResult.pending(
       solver: _plateSolveService.activeProvider.id,
     );
-    try {
-      await _galleryViewModel.updateRecord(
-        record.copyWith(
-          plateSolve: pending,
-          analysisStatus: AnalysisStatus.processing,
-        ),
-      );
-    } catch (e, s) {
-      AppLogger.error(_tag, e, s);
-    }
+    await _galleryViewModel.updateRecord(
+      record.copyWith(
+        plateSolve: pending,
+        analysisStatus: AnalysisStatus.processing,
+      ),
+    );
 
     final target = await _resolveTarget(record.celestialObjectId);
     final equipment = await _resolveImagingEquipment();
@@ -150,19 +174,19 @@ class PlateSolveViewModel extends ChangeNotifier {
 
     _setState(record.id, PlateSolveRunState(result: result));
 
-    final solved = record.copyWith(
+    final current = _galleryViewModel.recordForId(record.id);
+    if (_galleryViewModel.hasLoaded && current == null) {
+      return result;
+    }
+    final solved = (current ?? record).copyWith(
       plateSolve: result,
       analysisStatus: result.success
           ? AnalysisStatus.completed
           : AnalysisStatus.failed,
     );
-    try {
-      await _galleryViewModel.updateRecord(solved);
-    } catch (e, s) {
-      AppLogger.error(_tag, e, s);
-    }
+    final saved = await _galleryViewModel.updateRecord(solved);
 
-    if (result.success) {
+    if (saved && result.success) {
       await _searchService.searchAndSave(solved);
     }
 

@@ -44,6 +44,14 @@ class StatsViewModel extends ChangeNotifier {
       _dashboard?.typeBreakdown ?? const [];
   List<CatalogCategoryProgress> get categoryProgress => _categoryProgress;
 
+  /// 촬영 기록 변경 시 기존 통계 snapshot을 stale로 표시한다.
+  /// 다음 통계 탭 진입에서 MainShell이 canonical repository를 다시 읽는다.
+  void invalidateRecords() {
+    if (!_hasLoaded) return;
+    _hasLoaded = false;
+    notifyListeners();
+  }
+
   List<int> get availableAchievementYears =>
       _statsAnalyticsService.listAchievementYears(_records);
 

@@ -123,6 +123,13 @@ class GalleryViewModel extends ChangeNotifier {
   CatalogObject? catalogObjectFor(String celestialObjectId) =>
       _catalogMap[celestialObjectId];
 
+  ShootingRecord? recordForId(String recordId) {
+    for (final record in _allRecords) {
+      if (record.id == recordId) return record;
+    }
+    return null;
+  }
+
   List<String> get availableLocations {
     final locations = <String>{};
     for (final record in _allRecords) {
@@ -565,13 +572,16 @@ class GalleryViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> updateRecord(ShootingRecord updatedRecord) async {
+  Future<bool> updateRecord(ShootingRecord updatedRecord) async {
     try {
       await _shootingRecordRepository.update(updatedRecord);
+      _errorMessage = null;
       _replaceRecord(updatedRecord);
+      return true;
     } catch (error) {
       _errorMessage = error.toString();
       notifyListeners();
+      return false;
     }
   }
 

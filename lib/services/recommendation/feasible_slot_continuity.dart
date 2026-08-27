@@ -20,8 +20,7 @@ class FeasibleSlotContinuity {
 
   static bool hasMinimumContinuousDuration(
     Iterable<DateTime> slotStarts, {
-    int minMinutes =
-        ObservationFeasibilityConfig.minContinuousShootingMinutes,
+    int minMinutes = ObservationFeasibilityConfig.minContinuousShootingMinutes,
   }) {
     final ranges = mergeRanges(slotStarts);
     return ranges.any(
@@ -31,8 +30,7 @@ class FeasibleSlotContinuity {
 
   static Iterable<DateTime> slotsInRangesAtLeast(
     Iterable<DateTime> slotStarts, {
-    int minMinutes =
-        ObservationFeasibilityConfig.minContinuousShootingMinutes,
+    int minMinutes = ObservationFeasibilityConfig.minContinuousShootingMinutes,
   }) {
     final sorted = slotStarts.toList()..sort((a, b) => a.compareTo(b));
     if (sorted.isEmpty) return const [];
@@ -50,4 +48,67 @@ class FeasibleSlotContinuity {
     }
     return allowed;
   }
+
+  static FeasibleSlotAnalysis analyze(
+    Iterable<DateTime> slotStarts, {
+    int minMinutes = ObservationFeasibilityConfig.minContinuousShootingMinutes,
+  }) {
+    final sorted = slotStarts.toList()..sort((a, b) => a.compareTo(b));
+    return analyzeSorted(sorted, minMinutes: minMinutes);
+  }
+
+  static FeasibleSlotAnalysis analyzeSorted(
+    List<DateTime> sorted, {
+    int minMinutes = ObservationFeasibilityConfig.minContinuousShootingMinutes,
+  }) {
+    final ranges = FeasibleWindowFormatter.mergeSortedSlotTimes(sorted);
+    final allowedRanges = ranges
+        .where(
+          (range) => range.end.difference(range.start).inMinutes >= minMinutes,
+        )
+        .toList(growable: false);
+    final allowedSlots = <DateTime>[];
+    var rangeIndex = 0;
+    for (final slot in sorted) {
+      while (rangeIndex < allowedRanges.length &&
+          !slot.isBefore(allowedRanges[rangeIndex].end)) {
+        rangeIndex++;
+      }
+      if (rangeIndex >= allowedRanges.length) break;
+      final range = allowedRanges[rangeIndex];
+      if (!slot.isBefore(range.start) && slot.isBefore(range.end)) {
+        allowedSlots.add(slot);
+      }
+    }
+    final longestMinutes = ranges.isEmpty
+        ? 0
+        : ranges
+              .map((range) => range.end.difference(range.start).inMinutes)
+              .reduce((a, b) => a > b ? a : b);
+    return FeasibleSlotAnalysis(
+      sortedSlots: sorted,
+      ranges: ranges,
+      allowedSlots: allowedSlots,
+      allowedRanges: allowedRanges,
+      longestMinutes: longestMinutes,
+    );
+  }
+}
+
+class FeasibleSlotAnalysis {
+  const FeasibleSlotAnalysis({
+    required this.sortedSlots,
+    required this.ranges,
+    required this.allowedSlots,
+    required this.allowedRanges,
+    required this.longestMinutes,
+  });
+
+  final List<DateTime> sortedSlots;
+  final List<FeasibleTimeRange> ranges;
+  final List<DateTime> allowedSlots;
+  final List<FeasibleTimeRange> allowedRanges;
+  final int longestMinutes;
+
+  bool get hasMinimumContinuousDuration => allowedRanges.isNotEmpty;
 }

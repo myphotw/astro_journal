@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/services/performance_probe.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
@@ -43,6 +44,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
     return AnimatedBuilder(
       animation: viewModel,
       builder: (context, _) {
+        PerformanceProbe.event('widget.observation_site_selector.build');
         final active = viewModel.active;
         final selectedValue = active.selectedSiteId ?? currentLocationValue;
         final choices = <_SiteChoice>[

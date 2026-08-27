@@ -26,6 +26,9 @@ class _FakeObservationSiteRepository implements ObservationSiteRepository {
   Future<void> create(ObservationSite site) async => sites.add(site);
 
   @override
+  Future<void> createFavorite(ObservationSite site) => create(site);
+
+  @override
   Future<void> delete(String id, {bool hard = false}) async =>
       sites.removeWhere((site) => site.id == id);
 
@@ -244,6 +247,7 @@ void main() {
     expect(find.byKey(const Key('add-blocked-range')), findsOneWidget);
     expect(find.byKey(const Key('add-horizon-point')), findsOneWidget);
     expect(find.byKey(const Key('start-horizon-scan')), findsOneWidget);
+    expect(find.byKey(const Key('horizon-visibility-legend')), findsOneWidget);
     expect(find.textContaining('기본 최소 고도'), findsNothing);
     expect(find.textContaining('기본 최대 고도'), findsNothing);
 
@@ -617,7 +621,9 @@ void main() {
       await tester.tap(find.text('우리집'));
       await tester.pumpAndSettle();
 
-      expect(find.text('촬영 가능 시야'), findsOneWidget);
+      expect(find.text('촬영 가능 시야'), findsWidgets);
+      expect(find.byKey(const Key('horizon-visibility-legend')), findsOneWidget);
+      expect(find.text('장애물 / 촬영 불가 영역'), findsOneWidget);
       expect(
         find.byKey(const Key('observation-site-horizon-visualization')),
         findsOneWidget,

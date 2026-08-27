@@ -169,6 +169,9 @@ void main() {
 
     expect(controller.session.status, HorizonScanStatus.completed);
     expect(find.byKey(const Key('horizon-scan-summary')), findsOneWidget);
+    expect(find.byKey(const Key('horizon-visibility-legend')), findsOneWidget);
+    expect(find.text('장애물 / 촬영 불가 영역'), findsOneWidget);
+    expect(find.text('미측정 / 불확실'), findsOneWidget);
     expect(find.text('시야 스캔 완료'), findsOneWidget);
     expect(find.byKey(const Key('restart-horizon-scan')), findsOneWidget);
     expect(find.byKey(const Key('finish-horizon-scan')), findsOneWidget);

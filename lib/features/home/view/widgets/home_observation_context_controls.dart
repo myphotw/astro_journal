@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/performance_probe.dart';
 import '../../../../data/models/equipment.dart';
 import '../../../../data/models/imaging_suitability_assessment.dart';
 import '../../../../data/models/weather_data.dart';
@@ -48,6 +49,7 @@ class HomeObservationContextControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event('widget.observation_context_controls.build');
     final siteSelector = ActiveObservationSiteSelector(
       viewModel: siteViewModel,
       equipmentName: selectedEquipmentName,
@@ -128,6 +130,7 @@ class _EquipmentSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event('widget.equipment_selector.build');
     final hasSelected = equipment.any((item) => item.id == selectedId);
     final choices = <Equipment?>[null, ...equipment];
     return Column(
@@ -218,6 +221,7 @@ class _TrackingModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event('widget.tracking_selector.build');
     const label = Text(
       '추적 방식',
       style: TextStyle(

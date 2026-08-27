@@ -15,7 +15,25 @@ class MoonScore {
   }) {
     final raHours = CelestialPositionService.parseRaHours(object.ra);
     final decDeg = CelestialPositionService.parseDecDeg(object.dec);
-    final moonCoords = positionService.getMoonEquatorial(evaluationTime);
+    return calculateForCoordinates(
+      raHours: raHours,
+      decDeg: decDeg,
+      context: context,
+      positionService: positionService,
+      evaluationTime: evaluationTime,
+    );
+  }
+
+  double calculateForCoordinates({
+    required double raHours,
+    required double decDeg,
+    required ObservationContext context,
+    required CelestialPositionService positionService,
+    required DateTime evaluationTime,
+    EquatorialCoordinates? moonCoordinates,
+  }) {
+    final moonCoords =
+        moonCoordinates ?? positionService.getMoonEquatorial(evaluationTime);
     final separation = CelestialPositionService.angularSeparationDeg(
       ra1Hours: raHours,
       dec1Deg: decDeg,
@@ -26,10 +44,13 @@ class MoonScore {
     final moonIllumBonus =
         (1 - context.moonIllumination.clamp(0.0, 1.0)) * 50.0;
     final separationBonus = (separation / 120.0 * 50.0).clamp(0.0, 50.0);
-    final separationPenalty =
-        MoonSeparationWeights.penaltyForSeparation(separation);
+    final separationPenalty = MoonSeparationWeights.penaltyForSeparation(
+      separation,
+    );
 
-    return (moonIllumBonus + separationBonus + separationPenalty)
-        .clamp(0.0, 100.0);
+    return (moonIllumBonus + separationBonus + separationPenalty).clamp(
+      0.0,
+      100.0,
+    );
   }
 }

@@ -19,6 +19,16 @@ class CatalogObjectPainter extends CustomPainter {
   final String? selectedId;
   final bool showLabels;
 
+  @visibleForTesting
+  static Color labelColorFor(SkyMapRenderObject object, bool selected) {
+    if (object.catalog == CatalogType.messier) {
+      return AppColors.skyMapMessierLabel;
+    }
+    return selected
+        ? object.catalog.accentColor
+        : AppColors.textPrimary.withValues(alpha: 0.9);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     for (final obj in objects) {
@@ -50,14 +60,15 @@ class CatalogObjectPainter extends CustomPainter {
         selected: selected,
       );
 
-      final shouldLabel = selected ||
+      final shouldLabel =
+          selected ||
           (showLabels &&
               (obj.catalog == CatalogType.messier ||
                   obj.renderWidth >= 28 ||
                   (obj.magnitude != null && obj.magnitude! <= 8)));
       if (shouldLabel) {
         final style = TextStyle(
-          color: selected ? color : AppColors.textPrimary.withValues(alpha: 0.9),
+          color: labelColorFor(obj, selected),
           fontSize: selected ? 12 : 11,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
         );
@@ -68,7 +79,10 @@ class CatalogObjectPainter extends CustomPainter {
         final dy = math.max(obj.renderHeight / 2, 6) + 4;
         painter.paint(
           canvas,
-          Offset(center.dx - painter.width / 2, center.dy - dy - painter.height),
+          Offset(
+            center.dx - painter.width / 2,
+            center.dy - dy - painter.height,
+          ),
         );
       }
     }
@@ -85,7 +99,8 @@ class CatalogObjectPainter extends CustomPainter {
       ..color = color.withValues(alpha: selected ? 0.85 : 0.62)
       ..style = PaintingStyle.stroke
       ..strokeWidth = selected ? 1.6 : 1.25;
-    final fill = Paint()..color = color.withValues(alpha: selected ? 0.18 : 0.10);
+    final fill = Paint()
+      ..color = color.withValues(alpha: selected ? 0.18 : 0.10);
 
     if (obj.shapeKind == SkyMapShapeKind.galaxy) {
       final rect = Rect.fromCenter(

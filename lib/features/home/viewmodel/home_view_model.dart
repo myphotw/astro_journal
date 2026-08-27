@@ -208,6 +208,10 @@ class CategoryProgress {
 
 // ── ViewModel ────────────────────────────────────────────────────────────────
 
+enum RecommendationComputationState { current, recalculating, failed }
+
+enum ScheduleComputationState { current, recalculating, failed }
+
 class HomeViewModel extends ChangeNotifier {
   HomeViewModel(
     this._catalogRepository,
@@ -225,7 +229,9 @@ class HomeViewModel extends ChangeNotifier {
     this._activeObservationSiteViewModel, [
     this._contextInvalidator,
   ]) {
-    _contextInvalidator?.bind(_handleContextInvalidation);
+    _contextBindingToken = _contextInvalidator?.bind(
+      _handleContextInvalidation,
+    );
   }
 
   final CatalogRepository _catalogRepository;
@@ -242,9 +248,11 @@ class HomeViewModel extends ChangeNotifier {
   final SchedulerEngine _schedulerEngine;
   final ActiveObservationSiteViewModel _activeObservationSiteViewModel;
   final ObservationContextInvalidator? _contextInvalidator;
+  late final Object? _contextBindingToken;
 
   bool _isLoading = false;
   bool _isWeatherLoading = false;
+  bool _isDisposed = false;
   int _weatherRequestGeneration = 0;
   String? _errorMessage;
   List<RecommendationResult> _recommendedObjects = [];
@@ -269,6 +277,15 @@ class HomeViewModel extends ChangeNotifier {
   List<WeatherForecastSlot> _cachedForecasts = [];
   List<String> _exclusionReasons = [];
   String? _scheduleEmptyMessage;
+  RecommendationComputationState _recommendationState =
+      RecommendationComputationState.current;
+  ScheduleComputationState _scheduleState = ScheduleComputationState.current;
+  DateTime? _scheduleUpdatedAt;
+  int _recommendationRequestToken = 0;
+  int _lastScheduleRequestToken = 0;
+  int _lastScheduleContextRevision = 0;
+  List<String> _lastScheduleCandidateIds = const [];
+  String? _recommendationErrorMessage;
   _PendingHomeHeavyLoad? _pendingHeavyLoad;
 
   double _latitude = 37.5;
@@ -298,6 +315,18 @@ class HomeViewModel extends ChangeNotifier {
   ObservationCondition? get observationCondition => _observationCondition;
   List<String> get exclusionReasons => _exclusionReasons;
   String? get scheduleEmptyMessage => _scheduleEmptyMessage;
+  RecommendationComputationState get recommendationState =>
+      _recommendationState;
+  ScheduleComputationState get scheduleState => _scheduleState;
+  DateTime? get scheduleUpdatedAt => _scheduleUpdatedAt;
+  @visibleForTesting
+  int get lastScheduleRequestToken => _lastScheduleRequestToken;
+  @visibleForTesting
+  int get lastScheduleContextRevision => _lastScheduleContextRevision;
+  @visibleForTesting
+  List<String> get lastScheduleCandidateIds =>
+      List.unmodifiable(_lastScheduleCandidateIds);
+  String? get recommendationErrorMessage => _recommendationErrorMessage;
   bool get hasLocation => _hasLocation;
   double get latitude => _latitude;
   double get longitude => _longitude;
@@ -309,8 +338,8 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> setTrackingMode(TrackingMode mode) async {
     if (_trackingMode == mode) return;
     _trackingMode = mode;
+    _markRecommendationRecalculating();
     await _activeObservationSiteViewModel.setTemporaryTrackingOverride(mode);
-    notifyListeners();
 
     if (_contextInvalidator != null) {
       return;
@@ -320,14 +349,7 @@ class HomeViewModel extends ChangeNotifier {
       return;
     }
 
-    await _applyRecommendations(
-      allObjects: _cachedAllObjects,
-      now: DateTime.now(),
-      cloudCoverage: _observationCondition?.cloudCover ?? 0,
-      windSpeed: _observationCondition?.windSpeed ?? 0,
-      moonIllumination: _observationCondition?.moon.illumination,
-    );
-    notifyListeners();
+    await _recalculateWithoutInvalidator();
   }
 
   Future<void> setEquipment(String? equipmentId) async {
@@ -335,10 +357,10 @@ class HomeViewModel extends ChangeNotifier {
         equipmentId) {
       return;
     }
+    _markRecommendationRecalculating();
     await _activeObservationSiteViewModel.setTemporaryEquipmentOverride(
       equipmentId,
     );
-    notifyListeners();
 
     if (_contextInvalidator != null) {
       return;
@@ -348,14 +370,22 @@ class HomeViewModel extends ChangeNotifier {
       return;
     }
 
-    await _applyRecommendations(
-      allObjects: _cachedAllObjects,
-      now: DateTime.now(),
-      cloudCoverage: _observationCondition?.cloudCover ?? 0,
-      windSpeed: _observationCondition?.windSpeed ?? 0,
-      moonIllumination: _observationCondition?.moon.illumination,
-    );
-    notifyListeners();
+    await _recalculateWithoutInvalidator();
+  }
+
+  Future<void> updateRecommendationSettings(
+    RecommendationSettings settings,
+  ) async {
+    _recommendationSettings = settings;
+    _markRecommendationRecalculating();
+    final invalidator = _contextInvalidator;
+    if (invalidator != null) {
+      await invalidator.invalidate(
+        ObservationContextChange.recommendationSettings,
+      );
+      return;
+    }
+    await _recalculateWithoutInvalidator();
   }
 
   DateTime get _planDate {
@@ -580,7 +610,7 @@ class HomeViewModel extends ChangeNotifier {
     DateTime now,
   ) => ObservationScoreService.estimatedNightWindow(now);
 
-  Future<void> _applyRecommendations({
+  Future<bool> _applyRecommendations({
     required List<CatalogObject> allObjects,
     required DateTime now,
     int cloudCoverage = 0,
@@ -588,8 +618,10 @@ class HomeViewModel extends ChangeNotifier {
     double? moonIllumination,
     int mainLimit = 4,
     int allLimit = 20,
+    int? expectedRevision,
   }) async {
-    if (_nightStart == null || _nightEnd == null) return;
+    if (_nightStart == null || _nightEnd == null) return false;
+    final requestToken = ++_recommendationRequestToken;
 
     final session = TonightObservationSession(
       start: _nightStart!,
@@ -624,7 +656,6 @@ class HomeViewModel extends ChangeNotifier {
       () => _equipmentRepository.getAll(activeOnly: true),
       state: 'revision=$revision',
     );
-    _activeEquipment = allEquipment;
     var preferredEquipmentId =
         _activeObservationSiteViewModel.active.effectiveEquipmentId;
     if (preferredEquipmentId != null &&
@@ -663,6 +694,40 @@ class HomeViewModel extends ChangeNotifier {
       state: 'revision=$revision',
     );
 
+    if (_isDisposed ||
+        requestToken != _recommendationRequestToken ||
+        (expectedRevision != null &&
+            _contextInvalidator?.revision != expectedRevision)) {
+      PerformanceProbe.event(
+        'recommendation.stale_result_discarded',
+        state:
+            'request_token=$requestToken latest_token=$_recommendationRequestToken '
+            'expected_revision=$expectedRevision current_revision=${_contextInvalidator?.revision ?? 0}',
+      );
+      return false;
+    }
+
+    final candidateIds = result.scoredTargets
+        .map((target) => target.object.id)
+        .toList(growable: false);
+    final scheduleIds = result.scheduleItems
+        .map((item) => item.target.object.id)
+        .toList(growable: false);
+    _lastScheduleRequestToken = requestToken;
+    _lastScheduleContextRevision = revision;
+    _lastScheduleCandidateIds = candidateIds;
+    _scheduleState = ScheduleComputationState.current;
+    _scheduleUpdatedAt = DateTime.now();
+    PerformanceProbe.event(
+      'scheduler.latest_result_applied',
+      state:
+          'revision=$revision request_token=$requestToken '
+          'candidates=${candidateIds.length} candidate_hash=${Object.hashAll(candidateIds)} '
+          'candidate_sample=${candidateIds.take(5).join(",")} '
+          'schedules=${scheduleIds.length} selected=${scheduleIds.take(5).join(",")}',
+    );
+
+    _activeEquipment = allEquipment;
     _exclusionReasons = result.exclusionReasons;
     _allRecommendedObjects = result.allRecommendations;
     _recommendedObjects = result.allRecommendations.take(mainLimit).toList();
@@ -678,6 +743,9 @@ class HomeViewModel extends ChangeNotifier {
     await _buildEquipmentGroups(equipment: equipment);
     await _autoGenerateTonightPlanIfNeeded();
     _applyShootingPlanFilter();
+    return !_isDisposed &&
+        (expectedRevision == null ||
+            _contextInvalidator?.revision == expectedRevision);
   }
 
   Future<void> _loadTonightPlan() async {
@@ -992,6 +1060,7 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<void> load({bool silent = false, bool deferHeavyWork = false}) async {
+    final loadStopwatch = kDebugMode ? (Stopwatch()..start()) : null;
     if (!silent) {
       _isLoading = true;
       _errorMessage = null;
@@ -1053,6 +1122,14 @@ class HomeViewModel extends ChangeNotifier {
       _errorMessage = error.toString();
       _isLoading = false;
     } finally {
+      loadStopwatch?.stop();
+      if (loadStopwatch != null) {
+        PerformanceProbe.record(
+          'home.load',
+          loadStopwatch.elapsed,
+          state: 'silent=$silent deferred=$deferHeavyWork',
+        );
+      }
       if (!deferHeavyWork) {
         notifyListeners();
       }
@@ -1123,37 +1200,90 @@ class HomeViewModel extends ChangeNotifier {
 
   Future<void> _handleContextInvalidation(
     ObservationContextChange change,
+    int revision,
   ) async {
+    _markRecommendationRecalculating();
     final refreshSiteCache =
         change == ObservationContextChange.observationSite ||
         change == ObservationContextChange.horizon;
-    if (refreshSiteCache) {
-      await _activeObservationSiteViewModel.load(force: true);
-    }
-
     final changesLocation =
         refreshSiteCache || change == ObservationContextChange.activeSite;
-    if (changesLocation) {
-      _celestialPositionService.clearCache();
-      _applyActiveSiteDefaults();
-    }
+    try {
+      if (refreshSiteCache) {
+        await _activeObservationSiteViewModel.load(force: true);
+      }
 
-    if (_cachedAllObjects.isNotEmpty &&
-        _nightStart != null &&
-        _nightEnd != null) {
-      await _applyRecommendations(
+      if (changesLocation) {
+        _celestialPositionService.clearCache();
+        _applyActiveSiteDefaults();
+      }
+
+      if (_cachedAllObjects.isNotEmpty &&
+          _nightStart != null &&
+          _nightEnd != null) {
+        final applied = await _applyRecommendations(
+          allObjects: _cachedAllObjects,
+          now: DateTime.now(),
+          cloudCoverage: _observationCondition?.cloudCover ?? 0,
+          windSpeed: _observationCondition?.windSpeed ?? 0,
+          moonIllumination: _observationCondition?.moon.illumination,
+          expectedRevision: revision,
+        );
+        if (!applied || _contextInvalidator?.revision != revision) return;
+      }
+
+      _markRecommendationCurrent();
+      if (changesLocation) {
+        unawaited(_fetchWeather());
+      }
+    } catch (_) {
+      if (_contextInvalidator?.revision == revision) {
+        _markRecommendationFailed();
+      }
+    }
+  }
+
+  Future<void> _recalculateWithoutInvalidator() async {
+    try {
+      final applied = await _applyRecommendations(
         allObjects: _cachedAllObjects,
         now: DateTime.now(),
         cloudCoverage: _observationCondition?.cloudCover ?? 0,
         windSpeed: _observationCondition?.windSpeed ?? 0,
         moonIllumination: _observationCondition?.moon.illumination,
       );
-      notifyListeners();
+      if (applied) _markRecommendationCurrent();
+    } catch (_) {
+      _markRecommendationFailed();
     }
+  }
 
-    if (changesLocation) {
-      unawaited(_fetchWeather());
+  void _markRecommendationRecalculating() {
+    if (_isDisposed) return;
+    _recommendationErrorMessage = null;
+    _scheduleState = ScheduleComputationState.recalculating;
+    if (_recommendationState == RecommendationComputationState.recalculating) {
+      return;
     }
+    _recommendationState = RecommendationComputationState.recalculating;
+    notifyListeners();
+  }
+
+  void _markRecommendationCurrent() {
+    if (_isDisposed) return;
+    _recommendationState = RecommendationComputationState.current;
+    _scheduleState = ScheduleComputationState.current;
+    _scheduleUpdatedAt ??= DateTime.now();
+    _recommendationErrorMessage = null;
+    notifyListeners();
+  }
+
+  void _markRecommendationFailed() {
+    if (_isDisposed) return;
+    _recommendationState = RecommendationComputationState.failed;
+    _scheduleState = ScheduleComputationState.failed;
+    _recommendationErrorMessage = '추천을 다시 계산하지 못했습니다. 잠시 후 다시 시도해주세요.';
+    notifyListeners();
   }
 
   void _applyActiveSiteDefaults() {
@@ -1358,6 +1488,7 @@ class HomeViewModel extends ChangeNotifier {
         moonIllumination: summary?.averageMoonIllumination ?? moon.illumination,
         cloudCoverage: summary?.averageCloudCoverage.round() ?? 0,
         windSpeed: summary?.averageWindSpeed ?? 0,
+        expectedRevision: _contextInvalidator?.revision,
       );
     }
   }
@@ -1377,8 +1508,9 @@ class HomeViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _weatherRequestGeneration += 1;
-    _contextInvalidator?.unbind();
+    _contextInvalidator?.unbind(_contextBindingToken);
     super.dispose();
   }
 }

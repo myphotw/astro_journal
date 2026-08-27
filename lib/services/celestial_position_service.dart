@@ -2,10 +2,7 @@ import 'dart:math' as math;
 
 /// Equatorial coordinates (RA in hours, Dec in degrees).
 class EquatorialCoordinates {
-  const EquatorialCoordinates({
-    required this.raHours,
-    required this.decDeg,
-  });
+  const EquatorialCoordinates({required this.raHours, required this.decDeg});
 
   final double raHours;
   final double decDeg;
@@ -48,9 +45,11 @@ class CelestialTrajectory {
 ///   objectId + 날짜(YYYYMMDD) + 위도(소수점 1자리) + 경도(소수점 1자리) 를
 ///   키로 사용하여 동일 조건 재계산을 방지한다.
 class CelestialPositionService {
+  static const _maxMoonCacheEntries = 256;
+
   final Map<String, CelestialTrajectory> _cache = {};
-  EquatorialCoordinates? _cachedMoonCoords;
-  String? _cachedMoonKey;
+  final Map<String, EquatorialCoordinates> _moonCache = {};
+  final Map<String, _TrajectoryGrid> _trajectoryGrids = {};
 
   // ── 공개 계산 메서드 ─────────────────────────────────────────────────────
 
@@ -72,7 +71,8 @@ class CelestialPositionService {
     final decRad = _toRad(decDeg);
     final latRad = _toRad(latDeg);
 
-    final sinAlt = math.sin(latRad) * math.sin(decRad) +
+    final sinAlt =
+        math.sin(latRad) * math.sin(decRad) +
         math.cos(latRad) * math.cos(decRad) * math.cos(haRad);
     final altRad = math.asin(sinAlt.clamp(-1.0, 1.0));
     final alt = _toDeg(altRad);
@@ -82,7 +82,8 @@ class CelestialPositionService {
     if (cosAlt.abs() < 1e-10) {
       az = latDeg >= 0 ? 180.0 : 0.0;
     } else {
-      final cosAz = (math.sin(decRad) - math.sin(latRad) * sinAlt) /
+      final cosAz =
+          (math.sin(decRad) - math.sin(latRad) * sinAlt) /
           (math.cos(latRad) * cosAlt);
       az = _toDeg(math.acos(cosAz.clamp(-1.0, 1.0)));
       if (math.sin(haRad) > 0) az = 360.0 - az;
@@ -108,24 +109,32 @@ class CelestialPositionService {
     final cached = _cache[key];
     if (cached != null) return cached;
 
+    final grid = _trajectoryGrid(
+      start: start,
+      end: end,
+      latitude: latitude,
+      longitude: longitude,
+      interval: interval,
+    );
+    final decRad = _toRad(decDeg);
+    final sinDec = math.sin(decRad);
+    final cosDec = math.cos(decRad);
     final points = <CelestialTimePoint>[];
-    var cursor = start;
-    while (!cursor.isAfter(end)) {
-      final altAz = computeAltAz(
+    for (final frame in grid.frames) {
+      final altAz = _computePreparedAltAz(
         raHours: raHours,
-        decDeg: decDeg,
-        latDeg: latitude,
-        lonDeg: longitude,
-        time: cursor,
+        sinDec: sinDec,
+        cosDec: cosDec,
+        grid: grid,
+        lstDeg: frame.lstDeg,
       );
       points.add(
         CelestialTimePoint(
-          time: cursor,
+          time: frame.time,
           altitude: altAz.altitude,
           azimuth: altAz.azimuth,
         ),
       );
-      cursor = cursor.add(interval);
     }
 
     final traj = CelestialTrajectory(points: points);
@@ -141,13 +150,14 @@ class CelestialPositionService {
     final key =
         '${utc.year}${utc.month.toString().padLeft(2, '0')}${utc.day.toString().padLeft(2, '0')}_'
         '${utc.hour.toString().padLeft(2, '0')}${utc.minute.toString().padLeft(2, '0')}';
-    if (_cachedMoonKey == key && _cachedMoonCoords != null) {
-      return _cachedMoonCoords!;
-    }
+    final cached = _moonCache[key];
+    if (cached != null) return cached;
 
     final coords = _computeMoonEquatorial(utc);
-    _cachedMoonKey = key;
-    _cachedMoonCoords = coords;
+    if (_moonCache.length >= _maxMoonCacheEntries) {
+      _moonCache.remove(_moonCache.keys.first);
+    }
+    _moonCache[key] = coords;
     return coords;
   }
 
@@ -163,7 +173,8 @@ class CelestialPositionService {
     final dec1 = _toRad(dec1Deg);
     final dec2 = _toRad(dec2Deg);
 
-    final cosD = math.sin(dec1) * math.sin(dec2) +
+    final cosD =
+        math.sin(dec1) * math.sin(dec2) +
         math.cos(dec1) * math.cos(dec2) * math.cos(ra1 - ra2);
     return _toDeg(math.acos(cosD.clamp(-1.0, 1.0)));
   }
@@ -171,8 +182,70 @@ class CelestialPositionService {
   /// 날짜/위치 변경 시 캐시를 비운다.
   void clearCache() {
     _cache.clear();
-    _cachedMoonCoords = null;
-    _cachedMoonKey = null;
+    _moonCache.clear();
+    _trajectoryGrids.clear();
+  }
+
+  _TrajectoryGrid _trajectoryGrid({
+    required DateTime start,
+    required DateTime end,
+    required double latitude,
+    required double longitude,
+    required Duration interval,
+  }) {
+    final key =
+        '${start.microsecondsSinceEpoch}_${end.microsecondsSinceEpoch}_'
+        '${latitude.toStringAsFixed(6)}_${longitude.toStringAsFixed(6)}_'
+        '${interval.inMicroseconds}';
+    final cached = _trajectoryGrids[key];
+    if (cached != null) return cached;
+
+    final frames = <_TrajectoryFrame>[];
+    var cursor = start;
+    while (!cursor.isAfter(end)) {
+      final utc = cursor.toUtc();
+      frames.add(
+        _TrajectoryFrame(
+          time: cursor,
+          lstDeg: (_gmst(_julianDay(utc)) + longitude + 360) % 360,
+        ),
+      );
+      cursor = cursor.add(interval);
+    }
+    final latRad = _toRad(latitude);
+    final grid = _TrajectoryGrid(
+      frames: frames,
+      sinLat: math.sin(latRad),
+      cosLat: math.cos(latRad),
+      northernHemisphere: latitude >= 0,
+    );
+    _trajectoryGrids[key] = grid;
+    return grid;
+  }
+
+  static AltAz _computePreparedAltAz({
+    required double raHours,
+    required double sinDec,
+    required double cosDec,
+    required _TrajectoryGrid grid,
+    required double lstDeg,
+  }) {
+    final haDeg = (lstDeg - raHours * 15 + 360) % 360;
+    final haRad = _toRad(haDeg);
+    final sinAlt =
+        grid.sinLat * sinDec + grid.cosLat * cosDec * math.cos(haRad);
+    final altRad = math.asin(sinAlt.clamp(-1.0, 1.0));
+    final altitude = _toDeg(altRad);
+    final cosAlt = math.cos(altRad);
+    double azimuth;
+    if (cosAlt.abs() < 1e-10) {
+      azimuth = grid.northernHemisphere ? 180.0 : 0.0;
+    } else {
+      final cosAz = (sinDec - grid.sinLat * sinAlt) / (grid.cosLat * cosAlt);
+      azimuth = _toDeg(math.acos(cosAz.clamp(-1.0, 1.0)));
+      if (math.sin(haRad) > 0) azimuth = 360.0 - azimuth;
+    }
+    return AltAz(altitude: altitude, azimuth: azimuth);
   }
 
   // ── RA / Dec 파싱 ────────────────────────────────────────────────────────
@@ -188,8 +261,9 @@ class CelestialPositionService {
 
   /// Dec 문자열(예: "+30° 00m", "-05d30m") → 도(double)
   static double parseDecDeg(String dec) {
-    final match =
-        RegExp(r'([+-]?)(\d+)[°d]?\s*(\d+(?:\.\d+)?)?').firstMatch(dec);
+    final match = RegExp(
+      r'([+-]?)(\d+)[°d]?\s*(\d+(?:\.\d+)?)?',
+    ).firstMatch(dec);
     if (match == null) return 0;
     final sign = match.group(1) == '-' ? -1.0 : 1.0;
     final degrees = double.tryParse(match.group(2) ?? '0') ?? 0;
@@ -213,7 +287,8 @@ class CelestialPositionService {
     final yr = y + 4800 - a;
     final mo = m + 12 * a - 3;
 
-    final jdn = d +
+    final jdn =
+        d +
         (153 * mo + 2) ~/ 5 +
         365 * yr +
         yr ~/ 4 -
@@ -227,7 +302,8 @@ class CelestialPositionService {
   /// Julian Day → Greenwich Mean Sidereal Time (°)
   static double _gmst(double jd) {
     final t = (jd - 2451545.0) / 36525.0;
-    final gmst = 280.46061837 +
+    final gmst =
+        280.46061837 +
         360.98564736629 * (jd - 2451545.0) +
         0.000387933 * t * t -
         t * t * t / 38710000.0;
@@ -281,10 +357,7 @@ class CelestialPositionService {
           t * t * t / 56260000,
     );
     final f = _normDeg(
-      93.2720950 +
-          483202.0175233 * t -
-          0.0036539 * t * t -
-          t * t * t / 3526000,
+      93.2720950 + 483202.0175233 * t - 0.0036539 * t * t - t * t * t / 3526000,
     );
 
     final dRad = _toRad(d);
@@ -292,7 +365,8 @@ class CelestialPositionService {
     final mpRad = _toRad(mp);
     final fRad = _toRad(f);
 
-    var lambda = lp +
+    var lambda =
+        lp +
         6.289 * math.sin(mpRad) +
         1.274 * math.sin(2 * dRad - mpRad) +
         0.658 * math.sin(2 * dRad) +
@@ -303,7 +377,8 @@ class CelestialPositionService {
         0.053 * math.sin(2 * dRad + mpRad) +
         0.041 * math.sin(2 * dRad - mRad);
 
-    var beta = 5.128 * math.sin(fRad) +
+    var beta =
+        5.128 * math.sin(fRad) +
         0.281 * math.sin(mpRad + fRad) +
         0.278 * math.sin(mpRad - fRad) +
         0.173 * math.sin(2 * dRad - fRad) +
@@ -317,11 +392,13 @@ class CelestialPositionService {
     final betaRad = _toRad(beta);
     final epsRad = _toRad(epsilon);
 
-    final sinDec = math.sin(betaRad) * math.cos(epsRad) +
+    final sinDec =
+        math.sin(betaRad) * math.cos(epsRad) +
         math.cos(betaRad) * math.sin(epsRad) * math.sin(lambdaRad);
     final dec = _toDeg(math.asin(sinDec.clamp(-1.0, 1.0)));
 
-    final y = math.sin(lambdaRad) * math.cos(epsRad) -
+    final y =
+        math.sin(lambdaRad) * math.cos(epsRad) -
         math.tan(betaRad) * math.sin(epsRad);
     final x = math.cos(lambdaRad);
     var raDeg = _toDeg(math.atan2(y, x));
@@ -329,4 +406,25 @@ class CelestialPositionService {
 
     return EquatorialCoordinates(raHours: raDeg / 15, decDeg: dec);
   }
+}
+
+class _TrajectoryFrame {
+  const _TrajectoryFrame({required this.time, required this.lstDeg});
+
+  final DateTime time;
+  final double lstDeg;
+}
+
+class _TrajectoryGrid {
+  const _TrajectoryGrid({
+    required this.frames,
+    required this.sinLat,
+    required this.cosLat,
+    required this.northernHemisphere,
+  });
+
+  final List<_TrajectoryFrame> frames;
+  final double sinLat;
+  final double cosLat;
+  final bool northernHemisphere;
 }

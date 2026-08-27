@@ -47,5 +47,27 @@ void main() {
         DateTime(2026, 7, 1, 23, 20),
       ]);
     });
+
+    test('single-pass analysis preserves continuity results', () {
+      final slots = [
+        DateTime(2026, 7, 1, 22, 0),
+        DateTime(2026, 7, 1, 22, 10),
+        DateTime(2026, 7, 1, 23, 0),
+        DateTime(2026, 7, 1, 23, 10),
+        DateTime(2026, 7, 1, 23, 20),
+      ];
+
+      final analysis = FeasibleSlotContinuity.analyze(slots.reversed);
+
+      expect(analysis.hasMinimumContinuousDuration, isTrue);
+      expect(analysis.longestMinutes, 30);
+      expect(analysis.allowedSlots, slots.skip(2));
+      expect(analysis.allowedRanges, [
+        (
+          start: DateTime(2026, 7, 1, 23, 0),
+          end: DateTime(2026, 7, 1, 23, 30),
+        ),
+      ]);
+    });
   });
 }

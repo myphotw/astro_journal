@@ -24,9 +24,7 @@ class CatalogSeedImportService {
     try {
       final rows = await seedDb.query(DatabaseConstants.tableCelestialObjects);
       await db.transaction((txn) async {
-        for (final row in rows) {
-          await _upsertRow(txn, _sanitizeRow(row));
-        }
+        await importRowsForTesting(txn, rows);
       });
     } finally {
       await seedDb.close();
@@ -43,6 +41,16 @@ class CatalogSeedImportService {
       flush: true,
     );
     return path;
+  }
+
+  @visibleForTesting
+  static Future<void> importRowsForTesting(
+    DatabaseExecutor txn,
+    Iterable<Map<String, dynamic>> rows,
+  ) async {
+    for (final row in rows) {
+      await _upsertRow(txn, _sanitizeRow(row));
+    }
   }
 
   static Map<String, dynamic> _sanitizeRow(Map<String, dynamic> row) {
@@ -74,6 +82,9 @@ class CatalogSeedImportService {
         _sanitizeJsonListColumn(
           sanitized[DatabaseConstants.colCrossCatalogRefsJson] as String?,
         );
+    sanitized[DatabaseConstants.colTagsJson] = _sanitizeJsonListColumn(
+      sanitized[DatabaseConstants.colTagsJson] as String?,
+    );
 
     return sanitized;
   }
@@ -131,6 +142,7 @@ class CatalogSeedImportService {
     Map<String, dynamic> seed,
   ) {
     final updates = <String, dynamic>{};
+    final catalog = seed[DatabaseConstants.colCatalog] as String?;
 
     void setIfPresent(String column) {
       if (!seed.containsKey(column)) {
@@ -190,6 +202,27 @@ class CatalogSeedImportService {
     // part of this update.
     replaceCatalogJsonList(DatabaseConstants.colAliasesJson);
     replaceCatalogJsonList(DatabaseConstants.colCrossCatalogRefsJson);
+
+    if (catalog == CatalogType.solar.value) {
+      // Moving-target metadata is fully owned by the bundled solar source.
+      // Null values intentionally clear stale DSO coordinates/axes that were
+      // imported by the old number-based Messier fallback.
+      replaceCatalogJsonList(DatabaseConstants.colTagsJson);
+      for (final column in [
+        DatabaseConstants.colPeakMonth,
+        DatabaseConstants.colBestSeason,
+        DatabaseConstants.colAngularSize,
+        DatabaseConstants.colDistanceLy,
+        DatabaseConstants.colSearchKeywords,
+        DatabaseConstants.colMajorAxis,
+        DatabaseConstants.colMinorAxis,
+        DatabaseConstants.colPositionAngle,
+      ]) {
+        if (seed.containsKey(column)) {
+          updates[column] = seed[column];
+        }
+      }
+    }
 
     // 시드 재분류가 반영되도록 object_type은 항상 시드 값을 우선한다.
     final objectType = seed[DatabaseConstants.colObjectType] as String?;

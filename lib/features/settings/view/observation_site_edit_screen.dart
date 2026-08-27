@@ -19,6 +19,7 @@ import '../../../services/location_service.dart';
 import '../../../services/observation_condition_service.dart';
 import '../../../services/observation_site_validator.dart';
 import '../../horizon_scan/view/horizon_scan_screen.dart';
+import '../../observation_site/widgets/horizon_visibility_overview.dart';
 import '../widgets/observation_location_search_sheet.dart';
 
 class ObservationSiteEditScreen extends StatefulWidget {
@@ -741,6 +742,11 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               '건물·산·나무 때문에 가려지는 높이를 대표 방향별로 대략 설정합니다. '
               '방향 사이는 자동으로 이어집니다.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            HorizonVisibilityOverview(
+              points: _points,
+              blockedRanges: _blockedRanges,
             ),
             const SizedBox(height: 12),
             FilledButton.icon(

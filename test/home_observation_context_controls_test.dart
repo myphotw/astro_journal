@@ -1,5 +1,6 @@
 import 'package:astro_journal/core/constants/equipment_kind.dart';
 import 'package:astro_journal/core/constants/equipment_purpose.dart';
+import 'package:astro_journal/core/services/performance_probe.dart';
 import 'package:astro_journal/data/models/blocked_azimuth_range.dart';
 import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
@@ -32,6 +33,8 @@ class _SiteRepository implements ObservationSiteRepository {
 
   @override
   Future<void> create(ObservationSite site) async {}
+  @override
+  Future<void> createFavorite(ObservationSite site) => create(site);
   @override
   Future<void> update(ObservationSite site) async {}
   @override
@@ -233,5 +236,32 @@ void main() {
 
     expect(find.textContaining('날씨 없음'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('idle context controls do not rebuild repeatedly', (tester) async {
+    PerformanceProbe.reset();
+    await pumpControls(tester, const Size(360, 800));
+
+    expect(
+      PerformanceProbe.count('widget.observation_context_controls.build'),
+      1,
+    );
+    expect(PerformanceProbe.count('widget.equipment_selector.build'), 1);
+    expect(PerformanceProbe.count('widget.tracking_selector.build'), 1);
+    expect(
+      PerformanceProbe.count('widget.observation_site_selector.build'),
+      1,
+    );
+
+    await tester.pump();
+
+    expect(
+      PerformanceProbe.count('widget.observation_context_controls.build'),
+      1,
+    );
+    expect(
+      PerformanceProbe.count('widget.observation_site_selector.build'),
+      1,
+    );
   });
 }

@@ -102,8 +102,10 @@ class AppProviders {
     );
     final shootingRecordRepository = ShootingRecordRepositoryImpl();
     final photoRepository = PhotoRepositoryImpl();
+    late Future<void> Function() refreshObservationSiteCollection;
     final observationSiteRepository = ObservationSiteRepositoryImpl(
       contextInvalidator: observationContextInvalidator,
+      onCollectionChanged: () => refreshObservationSiteCollection(),
     );
     final photoObjectRepository = PhotoObjectRepositoryImpl();
     final exifService = ExifService();
@@ -195,6 +197,7 @@ class AppProviders {
     );
     final metadataService = MetadataService();
     final catalogSearchService = CatalogSearchService();
+    late void Function() invalidateStatsRecords;
     final galleryShootingRecordRepository =
         GalleryShootingRecordRepositoryAdapter(
           galleryRepository: galleryRepository,
@@ -207,6 +210,7 @@ class AppProviders {
           syncOutboxRepository: syncOutboxRepository,
           syncCoordinator: syncCoordinator,
           catalogCaptureProjection: catalogCaptureProjection,
+          onRecordsChanged: () => invalidateStatsRecords(),
         );
     final metadataPipeline = PhotoMetadataPipeline(
       metadataService: metadataService,
@@ -251,6 +255,8 @@ class AppProviders {
       observationSiteRepository,
       contextInvalidator: observationContextInvalidator,
     );
+    refreshObservationSiteCollection = () =>
+        activeObservationSiteViewModel.load(force: true);
     final deviceOrientationService = NativeDeviceOrientationService();
     final recommendationSettingsService = RecommendationSettingsService();
     final baseExposureSettingsService = BaseExposureSettingsService();
@@ -337,6 +343,7 @@ class AppProviders {
       catalogRepository,
       statsAnalyticsService,
     );
+    invalidateStatsRecords = statsViewModel.invalidateRecords;
 
     final lightPollutionMapViewModel = LightPollutionMapViewModel(
       observationConditionService,

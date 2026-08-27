@@ -43,8 +43,16 @@ class SchedulerEngine {
 
   ScheduleResult _buildSchedule(SchedulerInput input) {
     // 관측 불가여도 기상 무시 슬롯으로 스케줄은 계속 계산한다.
-    final slots = _generateFeasibleSlots(input);
-    final prioritizedTargets = _applySchedulerPriorities(input);
+    final slots = PerformanceProbe.measure(
+      'scheduler.visible_slots',
+      () => _generateFeasibleSlots(input),
+      state: 'targets=${input.targets.length}',
+    );
+    final prioritizedTargets = PerformanceProbe.measure(
+      'scheduler.candidate_preparation',
+      () => _applySchedulerPriorities(input),
+      state: 'targets=${input.targets.length}',
+    );
     final hasTargets = input.targets.isNotEmpty;
     final isEmptyDueToFeasibility = hasTargets && slots.isEmpty;
 
@@ -58,11 +66,15 @@ class SchedulerEngine {
       );
     }
 
-    final items = SchedulerAssignmentPlanner.assign(
-      slots: slots,
-      targets: prioritizedTargets,
-      resultsById: input.resultsById,
-      siteSlotScores: input.context.siteSlotScores,
+    final items = PerformanceProbe.measure(
+      'scheduler.assignment_planner',
+      () => SchedulerAssignmentPlanner.assign(
+        slots: slots,
+        targets: prioritizedTargets,
+        resultsById: input.resultsById,
+        siteSlotScores: input.context.siteSlotScores,
+      ),
+      state: 'targets=${input.targets.length} slots=${slots.length}',
     );
 
     return ScheduleResult(

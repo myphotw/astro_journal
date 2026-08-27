@@ -8,14 +8,16 @@ enum ObservationContextChange {
   activeSite,
   trackingMode,
   horizon,
+  recommendationSettings,
 }
 
 typedef ObservationContextReload =
-    Future<void> Function(ObservationContextChange change);
+    Future<void> Function(ObservationContextChange change, int revision);
 
 /// Shared mutation signal for every input that can change observation results.
 class ObservationContextInvalidator extends ChangeNotifier {
   ObservationContextReload? _reload;
+  Object? _bindingToken;
   Future<void> _pending = Future.value();
   int _revision = 0;
   ObservationContextChange? _latestChange;
@@ -23,11 +25,18 @@ class ObservationContextInvalidator extends ChangeNotifier {
   int get revision => _revision;
   ObservationContextChange? get latestChange => _latestChange;
 
-  void bind(ObservationContextReload reload) {
+  Object bind(ObservationContextReload reload) {
+    final token = Object();
     _reload = reload;
+    _bindingToken = token;
+    return token;
   }
 
-  void unbind() => _reload = null;
+  void unbind([Object? token]) {
+    if (token != null && !identical(token, _bindingToken)) return;
+    _reload = null;
+    _bindingToken = null;
+  }
 
   Future<void> invalidate(ObservationContextChange change) {
     _revision += 1;
@@ -45,12 +54,12 @@ class ObservationContextInvalidator extends ChangeNotifier {
     final current = _pending.then(
       (_) => PerformanceProbe.measureAsync(
         'observation_context.reload',
-        () => reload(change),
+        () => reload(change, revision),
         state: 'revision=$revision change=${change.name}',
       ),
       onError: (Object _, StackTrace _) => PerformanceProbe.measureAsync(
         'observation_context.reload',
-        () => reload(change),
+        () => reload(change, revision),
         state: 'revision=$revision change=${change.name}',
       ),
     );

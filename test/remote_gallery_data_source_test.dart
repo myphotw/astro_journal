@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:astro_journal/data/datasources/remote_gallery_datasource.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -55,6 +56,110 @@ void main() {
 
     expect(requested.path, '/api/astro/gallery/record-1');
     expect(item.backendRecordId, 'record-1');
+  });
+
+  test(
+    'recovers canonical common_file_id from ObservationRecord detail',
+    () async {
+      final requestedPaths = <String>[];
+      final logs = <String>[];
+      final previousDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+      addTearDown(() => debugPrint = previousDebugPrint);
+      final galleryJson = _astroItemJson()..remove('common_file_id');
+      final source = RemoteGalleryDataSource(
+        baseUrl: 'https://backend.test',
+        client: MockClient((request) async {
+          requestedPaths.add(request.url.path);
+          if (request.url.path == '/api/astro/gallery/record-1') {
+            return http.Response(jsonEncode(galleryJson), 200);
+          }
+          if (request.url.path == '/api/astro/records/record-1') {
+            return http.Response(
+              jsonEncode({'record_id': 'record-1', 'file_id': 178}),
+              200,
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final item = await source.getDetail('record-1');
+
+      expect(requestedPaths, [
+        '/api/astro/gallery/record-1',
+        '/api/astro/records/record-1',
+      ]);
+      expect(item.backendRecordId, 'record-1');
+      expect(item.backendFileId, 'sha-1');
+      expect(item.commonFileId, 178);
+      expect(logs, contains(contains('backend_record_id=record-1')));
+      expect(logs, contains(contains('http=success')));
+      expect(logs, contains(contains('file_id_present=true')));
+      expect(logs, contains(contains('file_id_type=int')));
+      expect(logs, contains(contains('parsed_common_file_id=178')));
+    },
+  );
+
+  test(
+    'never substitutes record_id or SHA file_id for common_file_id',
+    () async {
+      final logs = <String>[];
+      final previousDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+      addTearDown(() => debugPrint = previousDebugPrint);
+      final galleryJson = _astroItemJson()..remove('common_file_id');
+      final source = RemoteGalleryDataSource(
+        baseUrl: 'https://backend.test',
+        client: MockClient((request) async {
+          if (request.url.path.startsWith('/api/astro/gallery/')) {
+            return http.Response(jsonEncode(galleryJson), 200);
+          }
+          return http.Response(
+            jsonEncode({'record_id': 'record-1', 'file_id': 'sha-1'}),
+            200,
+          );
+        }),
+      );
+
+      final item = await source.getDetail('record-1');
+
+      expect(item.backendRecordId, 'record-1');
+      expect(item.backendFileId, 'sha-1');
+      expect(item.commonFileId, isNull);
+      expect(logs, contains(contains('file_id_type=String')));
+      expect(logs, contains(contains('parsed_common_file_id=null')));
+    },
+  );
+
+  test('logs recovery HTTP failure without URL or secrets', () async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = previousDebugPrint);
+    final galleryJson = _astroItemJson()..remove('common_file_id');
+    final source = RemoteGalleryDataSource(
+      baseUrl: 'https://backend.test',
+      client: MockClient((request) async {
+        if (request.url.path.startsWith('/api/astro/gallery/')) {
+          return http.Response(jsonEncode(galleryJson), 200);
+        }
+        return http.Response('unavailable', 503);
+      }),
+    );
+
+    final item = await source.getDetail('record-1');
+
+    expect(item.commonFileId, isNull);
+    expect(logs, contains(contains('http=failure status_code=503')));
+    expect(logs.join('\n'), isNot(contains('https://')));
+    expect(logs.join('\n'), isNot(contains('Authorization')));
   });
 }
 

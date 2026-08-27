@@ -89,6 +89,26 @@ void main() {
     expect(result.single.backendFileId, 'fresh');
   });
 
+  test(
+    'fresh detail cache without common file identity is rehydrated',
+    () async {
+      cache.putItems('unused', const [], now);
+      cache.entries['astro:gallery:detail:record-cached'] = GalleryCacheEntry(
+        key: 'astro:gallery:detail:record-cached',
+        payloadJson: jsonEncode(_item('cached').toJson()),
+        cachedAt: now,
+      );
+      remote.detail = _item('cached', commonFileId: 178);
+
+      final result = await repository().getById('record-cached');
+
+      expect(remote.detailCalls, 1);
+      expect(result?.backendRecordId, 'record-cached');
+      expect(result?.backendFileId, 'cached');
+      expect(result?.commonFileId, 178);
+    },
+  );
+
   test('legacy Common Gallery cache key is not reused', () async {
     await settings.save(
       const TcBackendSettings(baseUrl: 'https://backend.test', enabled: false),
@@ -116,10 +136,16 @@ void main() {
       await subject.applyLocalPatch('record-cached', const {
         'favorite': true,
         'memo': 'local memo',
+        'location_name': 'New site',
+        'latitude': 37.55,
+        'longitude': 126.98,
       }, revision: 2);
       final updated = (await subject.getAll()).single;
       expect(updated.favorite, isTrue);
       expect(updated.memo, 'local memo');
+      expect(updated.location, 'New site');
+      expect(updated.latitude, 37.55);
+      expect(updated.longitude, 126.98);
       expect(updated.revision, 2);
 
       await subject.applyLocalDelete('record-cached');
@@ -163,7 +189,7 @@ void main() {
   });
 }
 
-GalleryItem _item(String id) => GalleryItem(
+GalleryItem _item(String id, {int? commonFileId}) => GalleryItem(
   backendRecordId: 'record-$id',
   revision: 1,
   catalogObjectId: 'M42',
@@ -171,6 +197,7 @@ GalleryItem _item(String id) => GalleryItem(
   favorite: false,
   representative: false,
   backendFileId: id,
+  commonFileId: commonFileId,
   thumbnailUrl: 'https://backend.test/thumbnail/$id',
   previewUrl: 'https://backend.test/preview/$id',
   originalUrl: 'https://backend.test/original/$id',
@@ -198,7 +225,9 @@ class _FakeCache implements GalleryCacheDataSource {
 
 class _FakeRemote implements GalleryRemoteDataSource {
   int galleryCalls = 0;
+  int detailCalls = 0;
   List<GalleryItem> items = const [];
+  GalleryItem? detail;
   RemoteGalleryException? failure;
 
   @override
@@ -209,5 +238,9 @@ class _FakeRemote implements GalleryRemoteDataSource {
   }
 
   @override
-  Future<GalleryItem> getDetail(String fileId) async => _item(fileId);
+  Future<GalleryItem> getDetail(String fileId) async {
+    detailCalls++;
+    if (failure case final error?) throw error;
+    return detail ?? _item(fileId);
+  }
 }

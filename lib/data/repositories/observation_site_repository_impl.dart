@@ -10,10 +10,12 @@ class ObservationSiteRepositoryImpl implements ObservationSiteRepository {
   ObservationSiteRepositoryImpl({
     ObservationSiteLocalDataSource? dataSource,
     this.contextInvalidator,
+    this.onCollectionChanged,
   }) : _dataSource = dataSource ?? ObservationSiteLocalDataSource();
 
   final ObservationSiteLocalDataSource _dataSource;
   final ObservationContextInvalidator? contextInvalidator;
+  final Future<void> Function()? onCollectionChanged;
 
   @override
   Future<void> addBlockedRange(BlockedAzimuthRange range) async {
@@ -31,6 +33,12 @@ class ObservationSiteRepositoryImpl implements ObservationSiteRepository {
   Future<void> create(ObservationSite site) async {
     await _dataSource.create(site);
     await _invalidateSite();
+  }
+
+  @override
+  Future<void> createFavorite(ObservationSite site) async {
+    await _dataSource.create(site);
+    await onCollectionChanged?.call();
   }
 
   @override

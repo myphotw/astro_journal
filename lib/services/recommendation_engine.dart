@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../core/constants/catalog_type.dart';
 import '../core/constants/imaging_difficulty.dart';
 import '../core/constants/observation_status_config.dart';
+import '../core/services/performance_probe.dart';
 import '../data/models/catalog_object.dart';
 import '../data/models/imaging_suitability_assessment.dart';
 import '../data/models/observation_context.dart';
@@ -70,7 +71,12 @@ class RecommendationEngine {
     )?
     equipmentFitResolver,
   }) async {
-    final filtered = _filterCatalog(catalog, settings);
+    final diagnostics = kDebugMode ? _RecommendationDiagnostics() : null;
+    diagnostics?.total.start();
+    diagnostics?.filter.start();
+    final prefilter = _prefilterCatalog(catalog, settings);
+    final filtered = prefilter.cheapEligible;
+    diagnostics?.filter.stop();
     if (filtered.isEmpty) {
       return _emptyResult(
         session: session,
@@ -103,16 +109,28 @@ class RecommendationEngine {
         evalContext.observationStatus == ObservationStatus.limited;
 
     final candidates = <ScoredObservationTarget>[];
+    final windowSharedCache = ObservationWindowSharedCache();
 
     // 카탈로그가 클수록 메인 isolate에서 동기 계산이 길어지므로
     // 일정 간격마다 이벤트 루프에 양보해 첫 진입 UI 버벅임을 줄인다.
-    const yieldEvery = 40;
+    const yieldEvery = 10;
     var processed = 0;
+    final batchStopwatch = kDebugMode ? (Stopwatch()..start()) : null;
 
     for (final object in filtered) {
       processed++;
       if (processed % yieldEvery == 0) {
+        if (batchStopwatch != null) {
+          batchStopwatch.stop();
+          PerformanceProbe.record(
+            'recommendation.main_isolate_batch',
+            batchStopwatch.elapsed,
+            state: 'objects=$yieldEvery processed=$processed',
+          );
+        }
         await Future<void>.delayed(Duration.zero);
+        batchStopwatch?.reset();
+        batchStopwatch?.start();
       }
 
       final profile = _profileProvider.profileFor(object);
@@ -133,6 +151,8 @@ class RecommendationEngine {
         profile: profile,
       );
 
+      diagnostics?.windowTargets += 1;
+      diagnostics?.window.start();
       final windowResult = _windowCalculator.calculate(
         object: object,
         profile: profile,
@@ -142,7 +162,10 @@ class RecommendationEngine {
         referenceTime: refTime,
         minimumExposure: minimumExposure,
         recommendedExposure: recommendedExposure,
+        performance: diagnostics?.windowDetails,
+        sharedCache: windowSharedCache,
       );
+      diagnostics?.window.stop();
 
       switch (windowResult.exclusion) {
         case ObservationWindowExclusion.noWindow:
@@ -158,6 +181,7 @@ class RecommendationEngine {
           excludedInsufficientDuration++;
           continue;
         case ObservationWindowExclusion.none:
+          diagnostics?.windowPassed += 1;
           break;
       }
 
@@ -170,6 +194,7 @@ class RecommendationEngine {
         continue;
       }
 
+      diagnostics?.candidate.start();
       final window = windowResult.window!;
       final equipmentFit = equipmentFitResolver?.call(object, window);
       final rotationSpan = trackingMode == TrackingMode.altAz
@@ -226,6 +251,15 @@ class RecommendationEngine {
           imagingAssessment: assessment,
         ),
       );
+      diagnostics?.candidate.stop();
+    }
+    if (batchStopwatch != null && batchStopwatch.isRunning) {
+      batchStopwatch.stop();
+      PerformanceProbe.record(
+        'recommendation.main_isolate_batch',
+        batchStopwatch.elapsed,
+        state: 'objects=${processed % yieldEvery} processed=$processed',
+      );
     }
 
     if (candidates.isEmpty) {
@@ -257,6 +291,7 @@ class RecommendationEngine {
       );
     }
 
+    diagnostics?.finalization.start();
     RecommendationCandidateSorter.sort(candidates, settings.priorityMode);
 
     final allResults = candidates
@@ -307,7 +342,7 @@ class RecommendationEngine {
 
     _logRecommendationsDebug(recommendations, candidates);
 
-    return RecommendationBuildResult(
+    final result = RecommendationBuildResult(
       session: session,
       recommendations: recommendations,
       allRecommendations: allResults,
@@ -316,6 +351,14 @@ class RecommendationEngine {
       scheduleResult: scheduleResult,
       scoredTargets: candidates,
     );
+    diagnostics?.finalization.stop();
+    diagnostics?.finish(
+      catalogCount: catalog.length,
+      userFilteredCount: prefilter.userFiltered.length,
+      cheapEligibleCount: filtered.length,
+      candidateCount: candidates.length,
+    );
+    return result;
   }
 
   double _fieldRotationSpan({
@@ -364,17 +407,24 @@ class RecommendationEngine {
     );
   }
 
-  List<CatalogObject> _filterCatalog(
+  _RecommendationPrefilter _prefilterCatalog(
     List<CatalogObject> catalog,
     RecommendationSettings settings,
   ) {
-    return catalog.where((object) {
-      if (object.catalog == CatalogType.solar ||
-          object.catalog == CatalogType.milky) {
-        return false;
-      }
-      return settings.enabledCatalogs.contains(object.catalog);
-    }).toList();
+    final userFiltered = catalog
+        .where((object) => settings.enabledCatalogs.contains(object.catalog))
+        .toList(growable: false);
+    final cheapEligible = userFiltered
+        .where(
+          (object) =>
+              object.catalog != CatalogType.solar &&
+              object.catalog != CatalogType.milky,
+        )
+        .toList(growable: false);
+    return _RecommendationPrefilter(
+      userFiltered: userFiltered,
+      cheapEligible: cheapEligible,
+    );
   }
 
   DateTime _clampReferenceTime(
@@ -432,4 +482,65 @@ class RecommendationEngine {
       AppLogger.info('RECOMMEND', 'FinalScore : ${candidate.score.round()}');
     }
   }
+}
+
+class _RecommendationDiagnostics {
+  final Stopwatch total = Stopwatch();
+  final Stopwatch filter = Stopwatch();
+  final Stopwatch window = Stopwatch();
+  final Stopwatch candidate = Stopwatch();
+  final Stopwatch finalization = Stopwatch();
+  final ObservationWindowPerformance windowDetails =
+      ObservationWindowPerformance();
+  int windowTargets = 0;
+  int windowPassed = 0;
+
+  void finish({
+    required int catalogCount,
+    required int userFilteredCount,
+    required int cheapEligibleCount,
+    required int candidateCount,
+  }) {
+    total.stop();
+    final state =
+        'catalog=$catalogCount user_filtered=$userFilteredCount '
+        'cheap_eligible=$cheapEligibleCount window_targets=$windowTargets '
+        'window_passed=$windowPassed candidates=$candidateCount';
+    PerformanceProbe.record(
+      'recommendation.catalog_filter',
+      filter.elapsed,
+      state: state,
+    );
+    PerformanceProbe.record(
+      'recommendation.window',
+      window.elapsed,
+      state: state,
+    );
+    PerformanceProbe.record(
+      'recommendation.candidate',
+      candidate.elapsed,
+      state: state,
+    );
+    PerformanceProbe.record(
+      'recommendation.finalization',
+      finalization.elapsed,
+      state: state,
+    );
+    PerformanceProbe.record(
+      'recommendation.total',
+      total.elapsed,
+      state: state,
+    );
+    windowDetails.report(state);
+  }
+}
+
+class _RecommendationPrefilter {
+  const _RecommendationPrefilter({
+    required this.userFiltered,
+    required this.cheapEligible,
+  });
+
+  final List<CatalogObject> userFiltered;
+  final List<CatalogObject> cheapEligible;
 }

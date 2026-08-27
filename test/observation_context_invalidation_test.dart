@@ -1,4 +1,5 @@
 import 'package:astro_journal/core/services/observation_context_invalidator.dart';
+import 'package:astro_journal/core/services/performance_probe.dart';
 import 'package:astro_journal/data/datasources/equipment_local_datasource.dart';
 import 'package:astro_journal/data/datasources/observation_site_local_datasource.dart';
 import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
@@ -16,8 +17,18 @@ class _EquipmentDataSource extends EquipmentLocalDataSource {
 }
 
 class _SiteDataSource extends ObservationSiteLocalDataSource {
+  int creates = 0;
+  final List<ObservationSite> sites = [];
+
   @override
-  Future<void> create(ObservationSite site) async {}
+  Future<void> create(ObservationSite site) async {
+    creates++;
+    sites.add(site);
+  }
+
+  @override
+  Future<List<ObservationSite>> list({bool includeDeleted = false}) async =>
+      List<ObservationSite>.from(sites);
 
   @override
   Future<void> replaceHorizonPoints(
@@ -47,7 +58,7 @@ void main() {
   test('user context changes enter one serialized rebuild pipeline', () async {
     final invalidator = ObservationContextInvalidator();
     final changes = <ObservationContextChange>[];
-    invalidator.bind((change) async => changes.add(change));
+    invalidator.bind((change, _) async => changes.add(change));
 
     final now = DateTime(2026, 8, 26);
     final site = ObservationSite(
@@ -89,5 +100,95 @@ void main() {
       ObservationContextChange.horizon,
     ]);
     expect(invalidator.revision, 6);
+  });
+
+  test('disposing an old binding does not remove its replacement', () async {
+    final invalidator = ObservationContextInvalidator();
+    var oldCalls = 0;
+    var replacementCalls = 0;
+    final oldToken = invalidator.bind((_, _) async => oldCalls++);
+    invalidator.bind((_, _) async => replacementCalls++);
+
+    invalidator.unbind(oldToken);
+    await invalidator.invalidate(ObservationContextChange.equipment);
+
+    expect(oldCalls, 0);
+    expect(replacementCalls, 1);
+  });
+
+  test('map favorite creation does not invalidate observation context', () async {
+    final invalidator = ObservationContextInvalidator();
+    final changes = <ObservationContextChange>[];
+    invalidator.bind((change, _) async => changes.add(change));
+    final dataSource = _SiteDataSource();
+    final repository = ObservationSiteRepositoryImpl(
+      dataSource: dataSource,
+      contextInvalidator: invalidator,
+    );
+    final now = DateTime(2026, 8, 27);
+
+    await repository.createFavorite(
+      ObservationSite(
+        id: 'map-favorite',
+        name: 'Map favorite',
+        latitude: 37.5,
+        longitude: 127,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    expect(changes, isEmpty);
+    expect(invalidator.revision, 0);
+    expect(dataSource.creates, 1);
+  });
+
+  test(
+    'map favorite refreshes Home site collection without context rebuild',
+    () async {
+      final invalidator = ObservationContextInvalidator();
+      final dataSource = _SiteDataSource();
+      late ActiveObservationSiteViewModel activeSites;
+      final repository = ObservationSiteRepositoryImpl(
+        dataSource: dataSource,
+        contextInvalidator: invalidator,
+        onCollectionChanged: () => activeSites.load(force: true),
+      );
+      activeSites = ActiveObservationSiteViewModel(
+        repository,
+        contextInvalidator: invalidator,
+      );
+      await activeSites.load();
+      expect(activeSites.sites, isEmpty);
+
+      final now = DateTime(2026, 8, 27);
+      await repository.createFavorite(
+        ObservationSite(
+          id: 'map-favorite',
+          name: 'Map favorite',
+          latitude: 37.5,
+          longitude: 127,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      expect(activeSites.sites.single.id, 'map-favorite');
+      expect(activeSites.active.isCurrentLocation, isTrue);
+      expect(invalidator.revision, 0);
+    },
+  );
+
+  test('performance probe aggregates count, total and maximum', () {
+    PerformanceProbe.reset();
+
+    PerformanceProbe.record('diagnostic', const Duration(milliseconds: 12));
+    PerformanceProbe.record('diagnostic', const Duration(milliseconds: 55));
+
+    final stats = PerformanceProbe.stats('diagnostic');
+    expect(stats.count, 2);
+    expect(stats.totalElapsedMs, 67);
+    expect(stats.maxElapsedMs, 55);
+    expect(stats.averageElapsedMs, 33.5);
   });
 }

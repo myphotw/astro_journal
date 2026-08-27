@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/formatters/catalog_object_display_formatter.dart';
+import '../../../core/services/performance_probe.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
@@ -77,6 +78,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event('widget.home_screen.build');
     return Selector<HomeViewModel, ({bool loading, String? error})>(
       selector: (_, vm) => (loading: vm.isLoading, error: vm.errorMessage),
       builder: (context, state, _) {
@@ -241,6 +243,7 @@ class _HomeBodyState extends State<_HomeBody> {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event('widget.home_body.build');
     final now = DateTime.now();
     final condition = viewModel.observationCondition;
     final isUnavailable =
@@ -373,6 +376,21 @@ class _HomeBodyState extends State<_HomeBody> {
           if (viewModel.observationCondition?.observationStatus ==
               ObservationStatus.limited)
             const SizedBox(height: AppTheme.spacingSm),
+          if (viewModel.recommendationState !=
+              RecommendationComputationState.current)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingLg,
+              ),
+              child: HomeRecommendationRefreshNotice(
+                state: viewModel.recommendationState,
+                message: viewModel.recommendationErrorMessage,
+                showingPreviousResults: viewModel.recommendedObjects.isNotEmpty,
+              ),
+            ),
+          if (viewModel.recommendationState !=
+              RecommendationComputationState.current)
+            const SizedBox(height: AppTheme.spacingSm),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
             child: viewModel.recommendedObjects.isEmpty
@@ -388,6 +406,13 @@ class _HomeBodyState extends State<_HomeBody> {
                   ),
           ),
           const SizedBox(height: AppTheme.spacingMd),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+            child: HomeScheduleComputationStatus(
+              state: viewModel.scheduleState,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingXs),
           if (viewModel.scheduleItems.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(
@@ -419,6 +444,128 @@ class _HomeBodyState extends State<_HomeBody> {
               AppTheme.spacingMd,
             ),
             child: _FuturePlanningSection(month: now.month),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class HomeScheduleComputationStatus extends StatelessWidget {
+  const HomeScheduleComputationStatus({super.key, required this.state});
+
+  final ScheduleComputationState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label, color) = switch (state) {
+      ScheduleComputationState.current => (
+        Icons.check_circle_outline,
+        '오늘 밤 촬영 스케줄 · 현재 조건 기준',
+        AppColors.ic,
+      ),
+      ScheduleComputationState.recalculating => (
+        Icons.sync,
+        '오늘 밤 촬영 스케줄 · 촬영 스케줄 계산 중…',
+        AppColors.messier,
+      ),
+      ScheduleComputationState.failed => (
+        Icons.error_outline,
+        '오늘 밤 촬영 스케줄 · 계산 실패',
+        Colors.redAccent,
+      ),
+    };
+    return Semantics(
+      liveRegion: state != ScheduleComputationState.current,
+      child: Row(
+        key: Key('home-schedule-${state.name}'),
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class HomeRecommendationRefreshNotice extends StatelessWidget {
+  const HomeRecommendationRefreshNotice({
+    super.key,
+    required this.state,
+    required this.showingPreviousResults,
+    this.message,
+  });
+
+  final RecommendationComputationState state;
+  final bool showingPreviousResults;
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    final recalculating = state == RecommendationComputationState.recalculating;
+    return Container(
+      key: Key(
+        recalculating
+            ? 'home-recommendation-recalculating'
+            : 'home-recommendation-failed',
+      ),
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        border: Border.all(
+          color: (recalculating ? AppColors.messier : Colors.redAccent)
+              .withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (recalculating)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            const Icon(Icons.error_outline, size: 18, color: Colors.redAccent),
+          const SizedBox(width: AppTheme.spacingSm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  recalculating ? '재계산 중입니다…' : '추천 계산에 실패했습니다.',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  recalculating
+                      ? showingPreviousResults
+                            ? '변경된 조건을 계산하는 동안 기존 추천 결과를 표시하고 있습니다.'
+                            : '변경된 조건에 맞는 추천 대상을 계산하고 있습니다.'
+                      : message ?? '잠시 후 다시 시도해주세요.',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1878,6 +2025,10 @@ class _RecommendedObjectGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event(
+      'widget.home_recommendation.build',
+      state: 'items=${items.length}',
+    );
     final rows = <Widget>[];
     for (var i = 0; i < items.length; i += 2) {
       rows.add(
@@ -2879,6 +3030,10 @@ class _ObservationSessionTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PerformanceProbe.event(
+      'widget.home_scheduler.build',
+      state: 'items=${items.length}',
+    );
     final visibleItems = items;
 
     return Container(

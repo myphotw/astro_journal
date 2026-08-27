@@ -11,8 +11,10 @@ import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/shooting_record_repository.dart';
 import 'package:astro_journal/data/repositories/sync_outbox_repository.dart';
 import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart';
+import 'package:astro_journal/features/stats/viewmodel/stats_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
 import 'package:astro_journal/services/catalog_capture_projection_service.dart';
+import 'package:astro_journal/services/stats_analytics_service.dart';
 import 'package:astro_journal/services/tc_backend_sync_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,6 +54,7 @@ void main() {
     _FakeOutbox? outbox,
     _FakeDrain? drain,
     bool enableCaptureProjection = false,
+    void Function()? onRecordsChanged,
   }) {
     final gallery = _FakeGalleryRepository(snapshot, detail: detail);
     final localRepository = _FakeLocalRepository(local);
@@ -67,6 +70,7 @@ void main() {
         : null;
     return _Harness(
       gallery,
+      localRepository,
       GalleryShootingRecordRepositoryAdapter(
         galleryRepository: gallery,
         localRepository: localRepository,
@@ -78,6 +82,7 @@ void main() {
         syncOutboxRepository: outbox,
         syncCoordinator: drain,
         catalogCaptureProjection: captureProjection,
+        onRecordsChanged: onRecordsChanged,
       ),
       catalogRepository,
       outbox,
@@ -343,6 +348,45 @@ void main() {
     expect(detailed?.memo, 'detail memo');
   });
 
+  test(
+    'remote-only detail restores common file identity separately from record id',
+    () async {
+      final listItem = _item('record-1', 'sha-1', 'M42', capturedAt);
+      final detail = _item(
+        'record-1',
+        'sha-1',
+        'M42',
+        capturedAt,
+        commonFileId: 178,
+      );
+      final first = harness(
+        snapshot: _remoteSnapshot([listItem]),
+        detail: detail,
+      );
+      final remoteOnly = (await first.adapter.getAll()).single;
+      expect(remoteOnly.id, 'remote:record-1');
+      expect(remoteOnly.commonFileId, isNull);
+      await first.adapter.update(remoteOnly);
+
+      final recreated = GalleryShootingRecordRepositoryAdapter(
+        galleryRepository: first.gallery,
+        localRepository: first.local,
+        catalogRepository: first.catalog,
+        projectionMapper: GalleryObservationProjectionMapper(
+          CatalogSearchService(),
+        ),
+      );
+      final restoredRemoteOnly = (await recreated.getAll()).single;
+
+      final detailed = await recreated.getById(restoredRemoteOnly.id);
+
+      expect(detailed?.id, 'remote:record-1');
+      expect(detailed?.backendRecordId, 'record-1');
+      expect(detailed?.backendFileId, 'sha-1');
+      expect(detailed?.commonFileId, 178);
+    },
+  );
+
   test('Gallery search favorite and date sorting remain unchanged', () async {
     final result = harness(
       snapshot: _remoteSnapshot([
@@ -398,6 +442,103 @@ void main() {
       expect(drain.calls, 2);
     },
   );
+
+  test('linked record location queues name and coordinates together', () async {
+    final outbox = _FakeOutbox();
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item('record-1', 'sha-1', 'M42', capturedAt),
+      ]),
+      local: [_local('local-1', 'M42', capturedAt)],
+      links: const {'record-1': 'local-1'},
+      outbox: outbox,
+    );
+    final record = (await result.adapter.getAll()).single;
+    final updated = record.copyWith(
+      location: 'New site',
+      exif: record.exif!.copyWith(
+        locationName: 'New site',
+        lat: 37.55,
+        lng: 126.98,
+      ),
+    );
+
+    await result.adapter.update(updated);
+
+    expect(outbox.patches.single.fields, {
+      'location_name': 'New site',
+      'latitude': 37.55,
+      'longitude': 126.98,
+    });
+  });
+
+  test('remote-only editable metadata survives adapter recreation', () async {
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item('record-1', 'sha-1', 'M42', capturedAt),
+      ]),
+    );
+    final remote = (await result.adapter.getAll()).single;
+
+    await result.adapter.update(
+      remote.copyWith(
+        location: '회사 옥상',
+        exif: remote.exif!.copyWith(
+          exposure: '1시간',
+          equipment: 'Seestar S30 Pro',
+          locationName: '회사 옥상',
+        ),
+      ),
+    );
+
+    final recreated = GalleryShootingRecordRepositoryAdapter(
+      galleryRepository: result.gallery,
+      localRepository: result.local,
+      catalogRepository: result.catalog,
+      projectionMapper: GalleryObservationProjectionMapper(
+        CatalogSearchService(),
+      ),
+    );
+    final restored = (await recreated.getAll()).single;
+
+    expect(restored.id, 'remote:record-1');
+    expect(restored.exif?.exposure, '1시간');
+    expect(restored.exif?.equipment, 'Seestar S30 Pro');
+    expect(restored.exif?.locationName, 'Jeju');
+  });
+
+  test('metadata edit invalidates and reloads canonical stats', () async {
+    late StatsViewModel stats;
+    final local = _local('local-1', 'M42', capturedAt).copyWith(
+      exif: ExifInfo.placeholder(
+        filename: 'local.fit',
+      ).copyWith(exposure: '30분'),
+    );
+    final result = harness(
+      snapshot: const GallerySnapshot(
+        items: [],
+        source: GallerySnapshotSource.none,
+        backendEnabled: false,
+      ),
+      local: [local],
+      onRecordsChanged: () => stats.invalidateRecords(),
+    );
+    stats = StatsViewModel(
+      result.adapter,
+      result.catalog,
+      StatsAnalyticsService(),
+    );
+    await stats.load();
+    expect(stats.topTargets.single.integrationSeconds, 1800);
+
+    await result.adapter.update(
+      local.copyWith(exif: local.exif!.copyWith(exposure: '1시간')),
+    );
+    expect(stats.hasLoaded, isFalse);
+
+    await stats.load();
+    expect(stats.topTargets.single.integrationSeconds, 3600);
+  });
 
   test('representative queues only the selected canonical record', () async {
     final outbox = _FakeOutbox();
@@ -489,6 +630,7 @@ GalleryItem _item(
   bool favorite = false,
   bool representative = false,
   String memo = '',
+  int? commonFileId,
 }) => GalleryItem(
   backendRecordId: recordId,
   revision: 7,
@@ -497,6 +639,7 @@ GalleryItem _item(
   favorite: favorite,
   representative: representative,
   backendFileId: fileId,
+  commonFileId: commonFileId,
   thumbnailUrl: '/thumbnail/$fileId',
   previewUrl: '/preview/$fileId',
   originalUrl: '/original/$fileId',
@@ -522,12 +665,14 @@ ShootingRecord _local(
 class _Harness {
   const _Harness(
     this.gallery,
+    this.local,
     this.adapter,
     this.catalog,
     this.outbox,
     this.captureProjection,
   );
   final _FakeGalleryRepository gallery;
+  final _FakeLocalRepository local;
   final GalleryShootingRecordRepositoryAdapter adapter;
   final _FakeCatalogRepository catalog;
   final _FakeOutbox? outbox;
@@ -607,6 +752,16 @@ class _FakeLocalRepository implements ShootingRecordRepository {
       if (record.id == id) return record;
     }
     return null;
+  }
+
+  @override
+  Future<void> save(ShootingRecord record) async {
+    final index = records.indexWhere((item) => item.id == record.id);
+    if (index == -1) {
+      records.add(record);
+    } else {
+      records[index] = record;
+    }
   }
 
   @override

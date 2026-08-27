@@ -14,6 +14,7 @@ import '../models/horizon_scan_session.dart';
 import '../services/device_orientation_service.dart';
 import '../services/horizon_camera_service.dart';
 import '../services/horizon_scan_sampler.dart';
+import '../../observation_site/widgets/horizon_visibility_overview.dart';
 
 class HorizonScanScreen extends StatefulWidget {
   const HorizonScanScreen({
@@ -366,6 +367,12 @@ class _HorizonScanScreenState extends State<HorizonScanScreen>
               style: TextStyle(color: Colors.amber),
             ),
           ],
+          const SizedBox(height: 10),
+          HorizonVisibilityOverview(
+            points: _controller.horizonPoints,
+            blockedRanges: const [],
+            showUnmeasured: _controller.missingBins.isNotEmpty,
+          ),
           if (_controller.horizonPoints.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(
