@@ -1,6 +1,8 @@
 import '../../core/constants/analysis_status.dart';
 import 'exif_info.dart';
 import 'gallery_item.dart';
+import 'plate_solve_queue.dart';
+import 'plate_solve_result.dart';
 import 'shooting_record.dart';
 
 class GalleryObservationProjection {
@@ -9,6 +11,9 @@ class GalleryObservationProjection {
     required this.revision,
     required this.backendFileId,
     this.commonFileId,
+    this.plateSolveStatus,
+    this.plateSolveJobId,
+    this.plateSolve,
     required this.catalogObjectId,
     required this.captureDatetime,
     required this.favorite,
@@ -30,6 +35,9 @@ class GalleryObservationProjection {
   final int revision;
   final String backendFileId;
   final int? commonFileId;
+  final PlateSolveQueueStatus? plateSolveStatus;
+  final String? plateSolveJobId;
+  final PlateSolveResult? plateSolve;
   final String catalogObjectId;
   final String thumbnailUrl;
   final String previewUrl;
@@ -54,6 +62,9 @@ class GalleryObservationProjection {
     revision: item.revision,
     backendFileId: item.backendFileId,
     commonFileId: item.commonFileId,
+    plateSolveStatus: item.plateSolveStatus,
+    plateSolveJobId: item.plateSolveJobId,
+    plateSolve: item.plateSolve,
     catalogObjectId: item.catalogObjectId,
     thumbnailUrl: item.thumbnailUrl,
     previewUrl: item.previewUrl,
@@ -117,13 +128,21 @@ class GalleryObservationProjection {
       createdAt: localRecord?.createdAt ?? captureDatetime,
       isRepresentative: representative,
       isFavorite: favorite,
-      plateSolve: localRecord?.plateSolve,
+      plateSolve: plateSolve ?? localRecord?.plateSolve,
       detectMethod: localRecord?.detectMethod,
-      analysisStatus: localRecord?.analysisStatus ?? AnalysisStatus.completed,
+      analysisStatus: switch (plateSolveStatus) {
+        PlateSolveQueueStatus.waiting => AnalysisStatus.waiting,
+        PlateSolveQueueStatus.processing => AnalysisStatus.processing,
+        PlateSolveQueueStatus.completed => AnalysisStatus.completed,
+        PlateSolveQueueStatus.failed => AnalysisStatus.failed,
+        null => localRecord?.analysisStatus ?? AnalysisStatus.completed,
+      },
       backendRecordId: backendRecordId,
       backendRevision: revision,
       backendFileId: backendFileId,
       commonFileId: commonFileId,
+      plateSolveQueueStatus: plateSolveStatus,
+      plateSolveJobId: plateSolveJobId,
       thumbnailUrl: thumbnailUrl,
       previewUrl: previewUrl,
       originalUrl: originalUrl,

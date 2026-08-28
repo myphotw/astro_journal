@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../data/models/tc_backend_models.dart';
+import '../../../data/models/plate_solve_queue.dart';
 import '../../../services/tc_backend_service.dart';
 import '../../../services/tc_backend_settings_service.dart';
 import '../../../data/repositories/sync_outbox_repository.dart';
@@ -23,10 +24,12 @@ class TcBackendViewModel extends ChangeNotifier {
     this.serviceFactory,
     SyncOutboxRepository? syncOutboxRepository,
     Future<void> Function()? retryFailed,
+    Future<PlateSolveSummary> Function()? plateSolveSummaryLoader,
     TcBackendTokenStore? tokenStore,
     TcBackendAuthHeaders? authHeaders,
   }) : _syncOutboxRepository = syncOutboxRepository,
        _retryFailed = retryFailed,
+       _plateSolveSummaryLoader = plateSolveSummaryLoader,
        _tokenStore = tokenStore ?? const EmptyTcBackendTokenStore(),
        _authHeaders =
            authHeaders ??
@@ -36,6 +39,7 @@ class TcBackendViewModel extends ChangeNotifier {
   final TcBackendService Function(String baseUrl)? serviceFactory;
   final SyncOutboxRepository? _syncOutboxRepository;
   final Future<void> Function()? _retryFailed;
+  final Future<PlateSolveSummary> Function()? _plateSolveSummaryLoader;
   final TcBackendTokenStore _tokenStore;
   final TcBackendAuthHeaders _authHeaders;
 
@@ -59,6 +63,15 @@ class TcBackendViewModel extends ChangeNotifier {
   bool get isBackendSyncAvailable =>
       _settings.enabled && _settings.isConfigured;
 
+  PlateSolveSummary? _plateSolveSummary;
+  PlateSolveSummary? get plateSolveSummary => _plateSolveSummary;
+
+  bool _isLoadingPlateSolveSummary = false;
+  bool get isLoadingPlateSolveSummary => _isLoadingPlateSolveSummary;
+
+  String? _plateSolveSummaryError;
+  String? get plateSolveSummaryError => _plateSolveSummaryError;
+
   Future<void> load() async {
     _settings = await _settingsService.load();
     _hasStoredToken = await _tokenStore.readToken() != null;
@@ -66,6 +79,7 @@ class TcBackendViewModel extends ChangeNotifier {
         ? TcBackendConnectionStatus.notConfigured
         : TcBackendConnectionStatus.notConfigured;
     await refreshSyncStatus(notify: false);
+    await refreshPlateSolveSummary(notify: false);
     notifyListeners();
   }
 
@@ -90,6 +104,7 @@ class TcBackendViewModel extends ChangeNotifier {
     _result = null;
     _status = TcBackendConnectionStatus.notConfigured;
     await refreshSyncStatus(notify: false);
+    await refreshPlateSolveSummary(notify: false);
     notifyListeners();
   }
 
@@ -119,9 +134,32 @@ class TcBackendViewModel extends ChangeNotifier {
     await refreshSyncStatus();
   }
 
+  Future<void> refreshPlateSolveSummary({bool notify = true}) async {
+    final loader = _plateSolveSummaryLoader;
+    if (!isBackendSyncAvailable || loader == null) {
+      _plateSolveSummary = null;
+      _plateSolveSummaryError = null;
+      _isLoadingPlateSolveSummary = false;
+      if (notify) notifyListeners();
+      return;
+    }
+    _isLoadingPlateSolveSummary = true;
+    _plateSolveSummaryError = null;
+    if (notify) notifyListeners();
+    try {
+      _plateSolveSummary = await loader();
+    } catch (_) {
+      _plateSolveSummaryError = 'Plate Solve 진행현황을 불러오지 못했습니다.';
+    } finally {
+      _isLoadingPlateSolveSummary = false;
+      if (notify) notifyListeners();
+    }
+  }
+
   Future<void> refreshStatus() async {
     await testConnection();
     await refreshSyncStatus();
+    await refreshPlateSolveSummary();
   }
 
   Future<void> testConnection({String? baseUrl, bool? enabled}) async {

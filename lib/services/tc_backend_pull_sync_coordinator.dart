@@ -21,6 +21,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     required TcBackendSyncGate syncGate,
     CatalogCaptureProjectionService? catalogCaptureProjection,
     AstroJournalLocalCaptureReset? localCaptureReset,
+    Future<void> Function()? onObservationRecordsChanged,
     int maxPagesPerDrain = 100,
   }) => TcBackendPullSyncCoordinator._(
     changesApi,
@@ -32,6 +33,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     syncGate,
     catalogCaptureProjection,
     localCaptureReset,
+    onObservationRecordsChanged,
     maxPagesPerDrain,
   );
 
@@ -45,6 +47,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     this._syncGate,
     this._catalogCaptureProjection,
     this._localCaptureReset,
+    this._onObservationRecordsChanged,
     this.maxPagesPerDrain,
   );
 
@@ -59,6 +62,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
   final TcBackendSyncGate _syncGate;
   final CatalogCaptureProjectionService? _catalogCaptureProjection;
   final AstroJournalLocalCaptureReset? _localCaptureReset;
+  final Future<void> Function()? _onObservationRecordsChanged;
   final int maxPagesPerDrain;
   bool _draining = false;
 
@@ -77,6 +81,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
 
   Future<void> _drainExclusive() async {
     var cursor = await _checkpoints.readCursor(streamName);
+    var observationRecordsChanged = false;
     for (var pageIndex = 0; pageIndex < maxPagesPerDrain; pageIndex++) {
       final page = await _changesApi.getChanges(cursor: cursor);
       for (final change in page.changes) {
@@ -85,7 +90,8 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
           continue;
         }
         if (!change.isObservationRecord) continue;
-        await _apply(change);
+        observationRecordsChanged =
+            await _apply(change) || observationRecordsChanged;
       }
 
       final nextCursor = page.nextCursor;
@@ -100,6 +106,14 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
       }
       if (!page.hasMore) {
         await _reconcileCatalog();
+        if (observationRecordsChanged) {
+          try {
+            await _onObservationRecordsChanged?.call();
+          } catch (_) {
+            // The change and cursor are already durable. A UI refresh failure
+            // must not replay the same remote mutation page.
+          }
+        }
         return;
       }
     }
@@ -119,7 +133,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     }
   }
 
-  Future<void> _apply(TcBackendChange change) async {
+  Future<bool> _apply(TcBackendChange change) async {
     switch (change.operation) {
       case TcBackendChangeOperation.create:
       case TcBackendChangeOperation.update:
@@ -129,10 +143,10 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
         if (change.revision != null &&
             cachedRevision != null &&
             cachedRevision >= change.revision!) {
-          return;
+          return false;
         }
         final item = await _changesApi.getObservationRecord(change.resourceId);
-        await _galleryRepository.upsertPulledItem(item);
+        return _galleryRepository.upsertPulledItem(item);
       case TcBackendChangeOperation.delete:
         final revision = change.revision;
         if (revision == null) {
@@ -145,12 +159,13 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
           revision: revision,
           deletedAt: change.deletedAt,
         );
-        if (!applied) return;
+        if (!applied) return false;
         final localId = (await _recordLinks
             .localIdsByBackendRecordId())[change.resourceId];
         if (localId != null) {
           await _shootingRecordRepository.delete(localId);
         }
+        return true;
     }
   }
 }

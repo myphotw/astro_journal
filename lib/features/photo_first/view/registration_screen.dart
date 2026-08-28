@@ -13,11 +13,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/observation_site.dart';
-import '../../../data/models/plate_solve_result.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/geocoding_service.dart';
-import '../../../services/plate_solve_service.dart';
 import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/integration_minutes_field.dart';
 import '../../../shared/widgets/material_date_time_picker_field.dart';
@@ -448,47 +446,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
   }
 
-  Future<void> _runPlateSolve() async {
-    final s = session;
-    if (s.plateSolveBusy.value) return;
-    s.plateSolveBusy.value = true;
-    s.plateSolveMessage.value = 'Plate Solve 실행 중…';
-    try {
-      final service = context.read<PlateSolveService>();
-      Equipment? imaging;
-      try {
-        final list = await context.read<EquipmentRepository>().getAll(
-          activeOnly: true,
-        );
-        final candidates = list.where((e) => e.isImaging && e.hasFov).toList()
-          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-        imaging = candidates.isEmpty ? null : candidates.first;
-      } catch (_) {}
-
-      final result = await service.solve(
-        imagePath: s.localPath,
-        imageWidth: s.exifInfo.imageWidth,
-        imageHeight: s.exifInfo.imageHeight,
-        target: s.selectedObject,
-        imagingEquipment: imaging,
-      );
-      if (!mounted) return;
-      s.plateSolveResult = result;
-      final modeLabel = result.solveMode == PlateSolveMode.targeted
-          ? 'Targeted'
-          : (result.solveMode == PlateSolveMode.blind ? 'Blind' : '');
-      s.plateSolveMessage.value = result.success
-          ? 'Plate Solve 성공${modeLabel.isEmpty ? '' : ' ($modeLabel)'}'
-          : (result.errorMessage ?? 'Plate Solve 실패');
-      // 등록 요약에 Plate Solve 결과 반영
-      setState(() {});
-    } catch (e) {
-      s.plateSolveMessage.value = 'Plate Solve 오류: $e';
-    } finally {
-      s.plateSolveBusy.value = false;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final accent =
@@ -678,7 +635,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       RegistrationWizardStep.memo => _MemoStep(
         session: session,
         memoCtrl: _memoCtrl,
-        onPlateSolve: _runPlateSolve,
       ),
     };
   }
@@ -1345,15 +1301,10 @@ class _LocationStepState extends State<_LocationStep> {
 }
 
 class _MemoStep extends StatelessWidget {
-  const _MemoStep({
-    required this.session,
-    required this.memoCtrl,
-    required this.onPlateSolve,
-  });
+  const _MemoStep({required this.session, required this.memoCtrl});
 
   final RegistrationSession session;
   final TextEditingController memoCtrl;
-  final VoidCallback onPlateSolve;
 
   static String _dash(String? value) {
     final t = value?.trim();
@@ -1426,37 +1377,17 @@ class _MemoStep extends StatelessWidget {
           maxLines: 4,
         ),
         const SizedBox(height: AppTheme.spacingSm),
-        ValueListenableBuilder<bool>(
-          valueListenable: session.plateSolveBusy,
-          builder: (context, busy, _) {
-            return OutlinedButton.icon(
-              onPressed: busy ? null : onPlateSolve,
-              icon: busy
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.auto_awesome, size: 18),
-              label: Text(busy ? 'Plate Solve 중…' : 'Plate Solve 실행 (선택)'),
-            );
-          },
-        ),
-        ValueListenableBuilder<String?>(
-          valueListenable: session.plateSolveMessage,
-          builder: (context, msg, _) {
-            if (msg == null) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 4),
+        const Row(
+          children: [
+            Icon(Icons.auto_awesome, size: 18, color: AppColors.messier),
+            SizedBox(width: 8),
+            Expanded(
               child: Text(
-                msg,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
+                '사진 등록 후 서버에서 Plate Solve를 자동 처리합니다.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
-            );
-          },
+            ),
+          ],
         ),
         const SizedBox(height: AppTheme.spacingMd),
         Container(

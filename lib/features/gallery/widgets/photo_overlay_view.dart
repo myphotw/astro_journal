@@ -1,10 +1,49 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/photo_overlay_object.dart';
+import '../../../shared/widgets/app_file_image.dart';
+
+@visibleForTesting
+Rect photoOverlayContainRect({required Size viewport, required Size source}) {
+  final fit = math.min(
+    viewport.width / source.width,
+    viewport.height / source.height,
+  );
+  final rendered = Size(source.width * fit, source.height * fit);
+  return Alignment.center.inscribe(rendered, Offset.zero & viewport);
+}
+
+/// Resolves presentation geometry without changing the catalog-derived ring.
+///
+/// The ring radii always remain the projected angular radii. A separate center
+/// marker identifies objects whose real ring is too small to read on screen.
+@visibleForTesting
+({double radiusX, double radiusY, bool drawRing, bool drawCenterMarker})
+photoOverlayRenderGeometry(
+  PhotoOverlayObject object, {
+  required double scale,
+  double markerThreshold = 4,
+}) {
+  final major = object.rangeRadiusMajorPixel;
+  if (major == null || !major.isFinite || major <= 0 || scale <= 0) {
+    return (radiusX: 0, radiusY: 0, drawRing: false, drawCenterMarker: true);
+  }
+
+  final minor = object.rangeRadiusMinorPixel;
+  final radiusX = major * scale;
+  final radiusY = minor != null && minor.isFinite && minor > 0
+      ? minor * scale
+      : radiusX;
+  return (
+    radiusX: radiusX,
+    radiusY: radiusY,
+    drawRing: true,
+    drawCenterMarker: math.max(radiusX, radiusY) < markerThreshold,
+  );
+}
 
 /// 사진 위에 Catalog 천체 Overlay(Marker + Label)를 그리는 위젯.
 ///
@@ -40,9 +79,12 @@ class PhotoOverlayView extends StatelessWidget {
             : maxW * srcH / srcW;
 
         // BoxFit.contain
-        final fit = math.min(maxW / srcW, maxH / srcH);
-        final dispW = srcW * fit;
-        final dispH = srcH * fit;
+        final imageRect = photoOverlayContainRect(
+          viewport: Size(maxW, maxH),
+          source: Size(srcW, srcH),
+        );
+        final dispW = imageRect.width;
+        final dispH = imageRect.height;
 
         return SizedBox(
           width: maxW,
@@ -54,10 +96,10 @@ class PhotoOverlayView extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.file(
-                    File(photoPath),
+                  AppFileImage(
+                    path: photoPath,
                     fit: BoxFit.fill,
-                    cacheWidth: 1600,
+                    memCacheWidth: 1600,
                     filterQuality: FilterQuality.medium,
                     gaplessPlayback: true,
                     errorBuilder: (_, _, _) => Container(
@@ -108,7 +150,8 @@ class _PhotoOverlayPainter extends CustomPainter {
 
   static const _targetColor = Color(0xFFFFD54F);
   static const _nearbyColor = Color(0xFF80D8FF);
-  static const _maxRadiusFraction = 0.12;
+  static const _centerMarkerGap = 2.0;
+  static const _centerMarkerExtent = 5.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -117,7 +160,6 @@ class _PhotoOverlayPainter extends CustomPainter {
     final scaleX = size.width / imageWidth;
     final scaleY = size.height / imageHeight;
     final scale = (scaleX + scaleY) / 2;
-    final maxRadius = math.min(size.width, size.height) * _maxRadiusFraction;
 
     canvas.save();
     canvas.clipRect(Offset.zero & size);
@@ -130,17 +172,11 @@ class _PhotoOverlayPainter extends CustomPainter {
       if (!obj.isTarget && !showNearby) continue;
 
       final center = Offset(obj.pixelX * scaleX, obj.pixelY * scaleY);
-      if (center.dx < -maxRadius ||
-          center.dy < -maxRadius ||
-          center.dx > size.width + maxRadius ||
-          center.dy > size.height + maxRadius) {
-        continue;
-      }
 
       if (obj.isTarget) {
-        _drawTarget(canvas, center, obj, scale, size, maxRadius);
+        _drawTarget(canvas, center, obj, scale, size);
       } else {
-        _drawNearby(canvas, center, obj, scale, size, maxRadius);
+        _drawNearby(canvas, center, obj, scale, size);
       }
     }
 
@@ -153,27 +189,33 @@ class _PhotoOverlayPainter extends CustomPainter {
     PhotoOverlayObject obj,
     double scale,
     Size canvasSize,
-    double maxRadius,
   ) {
-    final radii = _radiiFor(
-      obj,
-      scale: scale,
-      isTarget: true,
-      maxRadius: maxRadius,
-    );
+    final geometry = photoOverlayRenderGeometry(obj, scale: scale);
     final paint = Paint()
       ..color = _targetColor.withValues(alpha: 0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.15
       ..isAntiAlias = true;
 
-    _drawEllipse(canvas, center, radii.rx, radii.ry, paint, dashed: false);
+    if (geometry.drawRing) {
+      _drawEllipse(
+        canvas,
+        center,
+        geometry.radiusX,
+        geometry.radiusY,
+        paint,
+        dashed: false,
+      );
+    }
+    if (geometry.drawCenterMarker) {
+      _drawCenterMarker(canvas, center, _targetColor, strokeWidth: 0.9);
+    }
 
     _drawStellariumLabel(
       canvas,
       center: center,
-      radiusX: radii.rx,
-      radiusY: radii.ry,
+      radiusX: _labelRadius(geometry.radiusX, geometry.drawCenterMarker),
+      radiusY: _labelRadius(geometry.radiusY, geometry.drawCenterMarker),
       label: obj.displayLabel,
       color: _targetColor,
       fontSize: 11,
@@ -188,27 +230,33 @@ class _PhotoOverlayPainter extends CustomPainter {
     PhotoOverlayObject obj,
     double scale,
     Size canvasSize,
-    double maxRadius,
   ) {
-    final radii = _radiiFor(
-      obj,
-      scale: scale,
-      isTarget: false,
-      maxRadius: maxRadius,
-    );
+    final geometry = photoOverlayRenderGeometry(obj, scale: scale);
     final paint = Paint()
       ..color = _nearbyColor.withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.95
       ..isAntiAlias = true;
 
-    _drawEllipse(canvas, center, radii.rx, radii.ry, paint, dashed: true);
+    if (geometry.drawRing) {
+      _drawEllipse(
+        canvas,
+        center,
+        geometry.radiusX,
+        geometry.radiusY,
+        paint,
+        dashed: true,
+      );
+    }
+    if (geometry.drawCenterMarker) {
+      _drawCenterMarker(canvas, center, _nearbyColor, strokeWidth: 0.75);
+    }
 
     _drawStellariumLabel(
       canvas,
       center: center,
-      radiusX: radii.rx,
-      radiusY: radii.ry,
+      radiusX: _labelRadius(geometry.radiusX, geometry.drawCenterMarker),
+      radiusY: _labelRadius(geometry.radiusY, geometry.drawCenterMarker),
       label: obj.name,
       color: _nearbyColor,
       fontSize: 9.5,
@@ -217,39 +265,42 @@ class _PhotoOverlayPainter extends CustomPainter {
     );
   }
 
-  ({double rx, double ry}) _radiiFor(
-    PhotoOverlayObject obj, {
-    required double scale,
-    required bool isTarget,
-    required double maxRadius,
+  double _labelRadius(double actualRadius, bool hasCenterMarker) =>
+      hasCenterMarker
+      ? math.max(actualRadius, _centerMarkerExtent)
+      : actualRadius;
+
+  void _drawCenterMarker(
+    Canvas canvas,
+    Offset center,
+    Color color, {
+    required double strokeWidth,
   }) {
-    final major = obj.rangeRadiusMajorPixel;
-    final minor = obj.rangeRadiusMinorPixel ?? major;
-    final minR = isTarget ? 12.0 : 8.0;
-    final fallback = isTarget ? 22.0 : 12.0;
-
-    double rx;
-    double ry;
-    if (major != null && major > 0) {
-      rx = major * scale;
-      ry = (minor ?? major) * scale;
-    } else {
-      rx = fallback;
-      ry = fallback;
-    }
-
-    final scaleDown = math.min(1.0, maxRadius / math.max(rx, ry));
-    rx *= scaleDown;
-    ry *= scaleDown;
-    if (rx < minR) {
-      final boost = minR / rx;
-      rx = minR;
-      ry = math.min(ry * boost, maxRadius);
-    }
-    if (ry < minR * 0.35) {
-      ry = math.min(math.max(ry, minR * 0.35), maxRadius);
-    }
-    return (rx: rx, ry: ry);
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..isAntiAlias = true;
+    canvas.drawLine(
+      Offset(center.dx - _centerMarkerExtent, center.dy),
+      Offset(center.dx - _centerMarkerGap, center.dy),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx + _centerMarkerGap, center.dy),
+      Offset(center.dx + _centerMarkerExtent, center.dy),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - _centerMarkerExtent),
+      Offset(center.dx, center.dy - _centerMarkerGap),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy + _centerMarkerGap),
+      Offset(center.dx, center.dy + _centerMarkerExtent),
+      paint,
+    );
   }
 
   void _drawEllipse(
@@ -260,11 +311,7 @@ class _PhotoOverlayPainter extends CustomPainter {
     Paint paint, {
     required bool dashed,
   }) {
-    final rect = Rect.fromCenter(
-      center: center,
-      width: rx * 2,
-      height: ry * 2,
-    );
+    final rect = Rect.fromCenter(center: center, width: rx * 2, height: ry * 2);
     if (!dashed) {
       canvas.drawOval(rect, paint);
       return;
@@ -327,10 +374,8 @@ class _PhotoOverlayPainter extends CustomPainter {
     final maxX = math.max(pad, canvasSize.width - pad - tw);
     final maxY = math.max(pad, canvasSize.height - pad - th);
 
-    Offset clampPos(Offset o) => Offset(
-          o.dx.clamp(pad, maxX),
-          o.dy.clamp(pad, maxY),
-        );
+    Offset clampPos(Offset o) =>
+        Offset(o.dx.clamp(pad, maxX), o.dy.clamp(pad, maxY));
 
     final candidates = <Offset>[
       clampPos(Offset(center.dx + radiusX + gap + leader, center.dy - th / 2)),
@@ -348,7 +393,8 @@ class _PhotoOverlayPainter extends CustomPainter {
       final dx = labelCenter.dx - center.dx;
       final dy = labelCenter.dy - center.dy;
       final score = dx * dx + dy * dy;
-      final fullyInside = c.dx >= pad - 0.5 &&
+      final fullyInside =
+          c.dx >= pad - 0.5 &&
           c.dy >= pad - 0.5 &&
           c.dx + tw <= canvasSize.width - pad + 0.5 &&
           c.dy + th <= canvasSize.height - pad + 0.5;

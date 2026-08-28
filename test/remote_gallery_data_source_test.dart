@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:astro_journal/data/datasources/remote_gallery_datasource.dart';
+import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -31,6 +32,8 @@ void main() {
     expect(item.catalogObjectId, 'M42');
     expect(item.backendFileId, 'sha-1');
     expect(item.commonFileId, 178);
+    expect(item.plateSolveStatus, PlateSolveQueueStatus.processing);
+    expect(item.plateSolveJobId, 'opaque-job/token=');
     expect(item.favorite, isTrue);
     expect(item.representative, isTrue);
     expect(item.latitude, 33.3);
@@ -43,19 +46,30 @@ void main() {
   });
 
   test('loads Astro Gallery detail by record_id', () async {
-    late Uri requested;
+    final requestedPaths = <String>[];
     final source = RemoteGalleryDataSource(
       baseUrl: 'https://backend.test',
       client: MockClient((request) async {
-        requested = request.url;
-        return http.Response(jsonEncode({'data': _astroItemJson()}), 200);
+        requestedPaths.add(request.url.path);
+        if (request.url.path == '/api/astro/gallery/record-1') {
+          return http.Response(jsonEncode({'data': _astroItemJson()}), 200);
+        }
+        return http.Response(
+          jsonEncode({
+            'record_id': 'record-1',
+            'file_id': 178,
+            'plate_solve_status': 'PROCESSING',
+          }),
+          200,
+        );
       }),
     );
 
     final item = await source.getDetail('record-1');
 
-    expect(requested.path, '/api/astro/gallery/record-1');
+    expect(requestedPaths, ['/api/astro/gallery/record-1']);
     expect(item.backendRecordId, 'record-1');
+    expect(item.plateSolveStatus, PlateSolveQueueStatus.processing);
   });
 
   test(
@@ -78,7 +92,11 @@ void main() {
           }
           if (request.url.path == '/api/astro/records/record-1') {
             return http.Response(
-              jsonEncode({'record_id': 'record-1', 'file_id': 178}),
+              jsonEncode({
+                'record_id': 'record-1',
+                'file_id': 178,
+                'plate_solve_status': 'WAITING',
+              }),
               200,
             );
           }
@@ -95,6 +113,7 @@ void main() {
       expect(item.backendRecordId, 'record-1');
       expect(item.backendFileId, 'sha-1');
       expect(item.commonFileId, 178);
+      expect(item.plateSolveStatus, PlateSolveQueueStatus.waiting);
       expect(logs, contains(contains('backend_record_id=record-1')));
       expect(logs, contains(contains('http=success')));
       expect(logs, contains(contains('file_id_present=true')));
@@ -102,6 +121,74 @@ void main() {
       expect(logs, contains(contains('parsed_common_file_id=178')));
     },
   );
+
+  test('hydrates COMPLETED persistent result from Gallery detail', () async {
+    final detail = _astroItemJson()
+      ..['plate_solve_status'] = 'COMPLETED'
+      ..['plate_solve_result'] = {
+        'ra': 83.822,
+        'dec': -5.391,
+        'rotation': 11.5,
+        'pixel_scale': 2.3,
+        'field_width': 1.8,
+        'field_height': 1.2,
+        'parity': -1,
+      };
+    final requestedPaths = <String>[];
+    final source = RemoteGalleryDataSource(
+      baseUrl: 'https://backend.test',
+      client: MockClient((request) async {
+        requestedPaths.add(request.url.path);
+        return http.Response(jsonEncode({'data': detail}), 200);
+      }),
+    );
+
+    final item = await source.getDetail('record-1');
+
+    expect(requestedPaths, ['/api/astro/gallery/record-1']);
+    expect(item.plateSolveJobId, 'opaque-job/token=');
+    expect(item.plateSolve?.centerRa, 83.822);
+    expect(item.plateSolve?.centerDec, -5.391);
+    expect(item.plateSolve?.fovWidth, 1.8);
+    expect(item.plateSolve?.fovHeight, 1.2);
+  });
+
+  test('hydrates persistent result from Observation detail fallback', () async {
+    final gallery = _astroItemJson()
+      ..remove('plate_solve_status')
+      ..remove('plate_solve_job_id');
+    final requestedPaths = <String>[];
+    final source = RemoteGalleryDataSource(
+      baseUrl: 'https://backend.test',
+      client: MockClient((request) async {
+        requestedPaths.add(request.url.path);
+        if (request.url.path == '/api/astro/gallery/record-1') {
+          return http.Response(jsonEncode({'data': gallery}), 200);
+        }
+        return http.Response(
+          jsonEncode({
+            'record_id': 'record-1',
+            'file_id': 178,
+            'plate_solve_status': 'COMPLETED',
+            'plate_solve_job_id': 'observation-job',
+            'plate_solve_result': {'ra': 10.5, 'dec': -20.25},
+          }),
+          200,
+        );
+      }),
+    );
+
+    final item = await source.getDetail('record-1');
+
+    expect(requestedPaths, [
+      '/api/astro/gallery/record-1',
+      '/api/astro/records/record-1',
+    ]);
+    expect(item.plateSolveStatus, PlateSolveQueueStatus.completed);
+    expect(item.plateSolveJobId, 'observation-job');
+    expect(item.plateSolve?.centerRa, 10.5);
+    expect(item.plateSolve?.centerDec, -20.25);
+  });
 
   test(
     'never substitutes record_id or SHA file_id for common_file_id',
@@ -182,4 +269,6 @@ Map<String, dynamic> _astroItemJson() => {
   'preview_url': '/media/preview/sha-1',
   'original_url': '/media/original/sha-1',
   'capture_datetime': '2026-08-07T01:01:00Z',
+  'plate_solve_status': 'PROCESSING',
+  'plate_solve_job_id': 'opaque-job/token=',
 };

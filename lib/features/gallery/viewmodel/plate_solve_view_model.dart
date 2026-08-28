@@ -5,6 +5,7 @@ import '../../../data/models/catalog_object.dart';
 import '../../../data/datasources/common_file_link_datasource.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/plate_solve_result.dart';
+import '../../../data/models/plate_solve_queue.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
@@ -13,6 +14,7 @@ import '../../../services/celestial_object_search_service.dart';
 import '../../../services/plate_solve/plate_solve_provider.dart';
 import '../../../services/plate_solve_service.dart';
 import '../../../services/plate_solve_settings_service.dart';
+import '../../../services/tc_backend_plate_solve_service.dart';
 import 'gallery_view_model.dart';
 
 /// 특정 [ShootingRecord]에 대한 Plate Solve 실행 상태.
@@ -32,10 +34,11 @@ class PlateSolveRunState {
   final PlateSolveResult? result;
 }
 
-/// Gallery 사진 상세에서 Plate Solve 수동 실행을 담당하는 ViewModel.
+/// Legacy explicit Plate Solve execution compatibility.
 ///
-/// Catalog 대상(RA/DEC/angular_size)이 있으면 Targeted Solve를 사용하고,
-/// 없거나 실패 시 Blind로 폴백한다.
+/// New ObservationRecords are automatically queued by TC-Backend and the
+/// Gallery UI no longer invokes this ViewModel. Keep the public contract for
+/// explicit compatibility flows while the backend job/result contract evolves.
 class PlateSolveViewModel extends ChangeNotifier {
   PlateSolveViewModel(
     this._plateSolveService,
@@ -45,7 +48,8 @@ class PlateSolveViewModel extends ChangeNotifier {
     this._catalogRepository,
     this._equipmentRepository, {
     this._commonFileLinks,
-  });
+    TcBackendPlateSolveService? backendPlateSolveService,
+  }) : _backendPlateSolveService = backendPlateSolveService;
 
   final PlateSolveService _plateSolveService;
   final GalleryViewModel _galleryViewModel;
@@ -53,19 +57,80 @@ class PlateSolveViewModel extends ChangeNotifier {
   final CatalogRepository _catalogRepository;
   final EquipmentRepository _equipmentRepository;
   final CommonFileLinkDataSource? _commonFileLinks;
+  final TcBackendPlateSolveService? _backendPlateSolveService;
 
   static const _tag = 'PlateSolveViewModel';
 
   final Map<String, PlateSolveRunState> _states = {};
   final Map<String, Future<PlateSolveResult>> _inFlight = {};
+  final Map<String, Future<bool>> _retryInFlight = {};
 
   PlateSolveRunState stateFor(String recordId) =>
       _states[recordId] ?? PlateSolveRunState.idle;
 
+  bool canRetryFailedJob(ShootingRecord record) {
+    return record.plateSolveQueueStatus == PlateSolveQueueStatus.failed &&
+        record.plateSolveJobId?.trim().isNotEmpty == true &&
+        _backendPlateSolveService != null &&
+        !_retryInFlight.containsKey(record.id);
+  }
+
+  /// Requests retry of the existing durable backend job without polling.
+  Future<bool> retryFailedJob(ShootingRecord record) {
+    final existing = _retryInFlight[record.id];
+    if (existing != null) return existing;
+    if (!canRetryFailedJob(record) || _backendPlateSolveService == null) {
+      return Future<bool>.value(false);
+    }
+    final run = _retryFailedJobOnce(record);
+    _retryInFlight[record.id] = run;
+    return run.whenComplete(() {
+      if (identical(_retryInFlight[record.id], run)) {
+        _retryInFlight.remove(record.id);
+        notifyListeners();
+      }
+    });
+  }
+
+  Future<bool> _retryFailedJobOnce(ShootingRecord record) async {
+    final jobId = record.plateSolveJobId!.trim();
+    _setState(
+      record.id,
+      const PlateSolveRunState(
+        isRunning: true,
+        message: 'Plate Solve 재시도 요청 중…',
+      ),
+    );
+    try {
+      await _backendPlateSolveService!.retryFailedJob(jobId);
+      final updated = record.copyWith(
+        plateSolveQueueStatus: PlateSolveQueueStatus.waiting,
+        plateSolveJobId: jobId,
+        analysisStatus: AnalysisStatus.waiting,
+      );
+      final saved = await _galleryViewModel.updateRecord(updated);
+      if (!saved) {
+        _setState(
+          record.id,
+          const PlateSolveRunState(message: 'Plate Solve 대기 상태를 갱신하지 못했습니다.'),
+        );
+        return false;
+      }
+      _setState(record.id, PlateSolveRunState.idle);
+      return true;
+    } catch (error, stackTrace) {
+      AppLogger.error(_tag, error, stackTrace);
+      _setState(
+        record.id,
+        const PlateSolveRunState(message: 'Plate Solve 재시도 요청에 실패했습니다.'),
+      );
+      return false;
+    }
+  }
+
   /// [record]의 사진에 대해 Plate Solve를 실행하고, 결과를 Gallery에 반영한다.
   ///
-  /// 이미 Plate Solve가 완료된 기록에도 언제든 다시 실행할 수 있다
-  /// ("Plate Solve 다시 실행").
+  /// Explicit legacy execution. Normal Gallery UX uses backend queue status.
   Future<PlateSolveResult> solve(ShootingRecord record) async {
     final existing = _inFlight[record.id];
     if (existing != null) return existing;

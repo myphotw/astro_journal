@@ -5,6 +5,7 @@ import 'package:astro_journal/data/datasources/sync_checkpoint_datasource.dart';
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
+import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:astro_journal/data/models/tc_backend_change.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_repository.dart';
@@ -41,6 +42,7 @@ void main() {
     TcBackendSyncGate? gate,
     CatalogCaptureProjectionService? captureProjection,
     AstroJournalLocalCaptureReset? localCaptureReset,
+    Future<void> Function()? onObservationRecordsChanged,
   }) => TcBackendPullSyncCoordinator(
     changesApi: api,
     checkpoints: checkpoints,
@@ -51,6 +53,7 @@ void main() {
     syncGate: gate ?? TcBackendSyncGate(),
     catalogCaptureProjection: captureProjection,
     localCaptureReset: localCaptureReset,
+    onObservationRecordsChanged: onObservationRecordsChanged,
   );
 
   test('CREATE pulls canonical record into local projection', () async {
@@ -103,6 +106,43 @@ void main() {
 
     expect(gallery.items['record-1']?.revision, 2);
   });
+
+  test(
+    'Plate Solve status UPDATE is cached and refreshes observers once',
+    () async {
+      var refreshCalls = 0;
+      final api = _FakeChangesApi(
+        {
+          null: _page([
+            _change('record-1', TcBackendChangeOperation.update, 2),
+          ], 'cursor-1'),
+        },
+        details: {
+          'record-1': _item(
+            'record-1',
+            2,
+            plateSolveStatus: PlateSolveQueueStatus.processing,
+          ),
+        },
+      );
+      final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 1);
+
+      await subject(
+        api: api,
+        checkpoints: _FakeCheckpoints(),
+        gallery: gallery,
+        onObservationRecordsChanged: () async {
+          refreshCalls++;
+        },
+      ).drain();
+
+      expect(
+        gallery.items['record-1']?.plateSolveStatus,
+        PlateSolveQueueStatus.processing,
+      );
+      expect(refreshCalls, 1);
+    },
+  );
 
   test('DELETE stores tombstone and removes linked local record', () async {
     final api = _FakeChangesApi({
@@ -282,7 +322,11 @@ TcBackendChangesPage _page(
   hasMore: hasMore,
 );
 
-GalleryItem _item(String id, int revision) => GalleryItem(
+GalleryItem _item(
+  String id,
+  int revision, {
+  PlateSolveQueueStatus? plateSolveStatus,
+}) => GalleryItem(
   backendRecordId: id,
   revision: revision,
   catalogObjectId: 'M42',
@@ -290,6 +334,7 @@ GalleryItem _item(String id, int revision) => GalleryItem(
   favorite: false,
   representative: false,
   backendFileId: 'file-$id',
+  plateSolveStatus: plateSolveStatus,
   thumbnailUrl: '/thumbnail/$id',
   previewUrl: '/preview/$id',
   originalUrl: '/original/$id',

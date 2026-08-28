@@ -24,7 +24,7 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
     if (_loaded) return;
     _loaded = true;
     final viewModel = context.read<TcBackendViewModel>();
-    viewModel.load().then((_) => viewModel.refreshStatus());
+    viewModel.load().then((_) => viewModel.testConnection());
   }
 
   @override
@@ -47,6 +47,8 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
             _ReadinessPanel(viewModel: viewModel),
             const SizedBox(height: 12),
             _SyncStatusPanel(viewModel: viewModel),
+            const SizedBox(height: 12),
+            _PlateSolveStatusPanel(viewModel: viewModel),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -74,6 +76,65 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PlateSolveStatusPanel extends StatelessWidget {
+  const _PlateSolveStatusPanel({required this.viewModel});
+
+  final TcBackendViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = viewModel.plateSolveSummary;
+    return Container(
+      key: const Key('plate_solve_summary_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Plate Solve',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          if (viewModel.isLoadingPlateSolveSummary && summary == null)
+            const Text('진행현황 확인 중…')
+          else if (summary != null) ...[
+            Text('총 ${summary.total}건'),
+            Text('대기 ${summary.waiting}건'),
+            Text('처리 중 ${summary.processing}건'),
+            Text('완료 ${summary.completed}건'),
+            Text('실패 ${summary.failed}건'),
+          ] else
+            Text(
+              viewModel.plateSolveSummaryError ??
+                  (viewModel.isBackendSyncAvailable
+                      ? '진행현황을 확인할 수 없습니다.'
+                      : 'Backend 연결 후 확인할 수 있습니다.'),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          if (viewModel.plateSolveSummaryError != null && summary != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              viewModel.plateSolveSummaryError!,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

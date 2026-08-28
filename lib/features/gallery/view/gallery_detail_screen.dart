@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/exif_info.dart';
 import '../../../data/models/observation_site.dart';
+import '../../../data/models/plate_solve_queue.dart';
 import '../../../data/models/plate_solve_result.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../data/repositories/observation_site_repository.dart';
@@ -447,11 +448,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
                     onMapLocationChanged: _onMapLocationChanged,
                   );
                 }
-                return _ViewBody(
-                  record: record,
-                  obj: recordObj,
-                  onRunPlateSolve: () => _runPlateSolveFor(record),
-                );
+                return _ViewBody(record: record, obj: recordObj);
               },
             ),
     );
@@ -496,23 +493,6 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
       );
     }
     setState(() => _syncRecord(detailVm.currentRecord));
-  }
-
-  /// [record]에 대해 Plate Solve를 실행하고, 완료되면 상세 화면 상태를 갱신한다.
-  Future<void> _runPlateSolveFor(ShootingRecord record) async {
-    final plateSolveVm = context.read<PlateSolveViewModel>();
-    final galleryVm = context.read<GalleryViewModel>();
-    final detailVm = context.read<GalleryDetailViewModel>();
-
-    await plateSolveVm.solve(record);
-    if (!mounted) return;
-
-    final updated = galleryVm.recordForId(record.id);
-    if (updated == null) return;
-    detailVm.updateRecord(updated);
-    if (updated.id == _record.id) {
-      setState(() => _syncRecord(updated));
-    }
   }
 
   void _showChangeTargetSheet(
@@ -648,11 +628,10 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
 // ── 보기 모드 (원본 사진 우선 + 상세정보 Bottom Sheet) ───────────────────────
 
 class _ViewBody extends StatelessWidget {
-  const _ViewBody({required this.record, this.obj, this.onRunPlateSolve});
+  const _ViewBody({required this.record, this.obj});
 
   final ShootingRecord record;
   final dynamic obj;
-  final VoidCallback? onRunPlateSolve;
 
   String _formatDateTime(DateTime dt) {
     String p(int n) => n.toString().padLeft(2, '0');
@@ -808,9 +787,9 @@ class _ViewBody extends StatelessWidget {
         title: '메모',
         content: record.memo.isEmpty ? '(없음)' : record.memo,
       ),
-      if (shouldShowManualPlateSolve(record) && onRunPlateSolve != null) ...[
+      if (shouldShowManualPlateSolve(record)) ...[
         const SizedBox(height: 12),
-        GalleryPlateSolveSection(record: record, onRun: onRunPlateSolve!),
+        GalleryPlateSolveSection(record: record),
       ],
       const SizedBox(height: 12),
       if (record.exif?.lat != null && record.exif?.lng != null)
@@ -874,14 +853,9 @@ class _ViewBody extends StatelessWidget {
 
 @visibleForTesting
 class GalleryPlateSolveSection extends StatelessWidget {
-  const GalleryPlateSolveSection({
-    super.key,
-    required this.record,
-    required this.onRun,
-  });
+  const GalleryPlateSolveSection({super.key, required this.record});
 
   final ShootingRecord record;
-  final VoidCallback onRun;
 
   String _formatDateTime(DateTime dt) {
     String p(int n) => n.toString().padLeft(2, '0');
@@ -891,10 +865,14 @@ class GalleryPlateSolveSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final runState = context.watch<PlateSolveViewModel>().stateFor(record.id);
-    // BottomSheet가 열린 뒤 record snapshot은 바뀌지 않을 수 있으므로
-    // 실행 결과는 ViewModel의 최신 run state를 우선한다.
-    final solved = runState.result ?? record.plateSolve;
+    final currentRecord =
+        context.watch<GalleryViewModel>().recordForId(record.id) ?? record;
+    final plateSolveViewModel = context.watch<PlateSolveViewModel?>();
+    final retryState =
+        plateSolveViewModel?.stateFor(currentRecord.id) ??
+        PlateSolveRunState.idle;
+    final solved = currentRecord.plateSolve;
+    final queueStatus = currentRecord.plateSolveQueueStatus;
 
     return Container(
       width: double.infinity,
@@ -924,25 +902,72 @@ class GalleryPlateSolveSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          if (runState.isRunning)
-            _PlateSolveProgressRow(
-              key: const Key('plate-solve-processing'),
-              message: runState.message ?? 'Plate Solving...',
+          if (queueStatus == PlateSolveQueueStatus.waiting)
+            const _PlateSolveQueueMessage(
+              key: Key('plate-solve-waiting'),
+              icon: Icons.schedule,
+              message: 'Plate Solve 대기',
+            )
+          else if (queueStatus == PlateSolveQueueStatus.processing)
+            const _PlateSolveProgressRow(
+              key: Key('plate-solve-processing'),
+              message: 'Plate Solve 처리 중…',
+            )
+          else if (queueStatus == PlateSolveQueueStatus.completed)
+            const _PlateSolveQueueMessage(
+              key: Key('plate-solve-completed'),
+              icon: Icons.check_circle_outline,
+              message: 'Plate Solve 완료',
+            )
+          else if (queueStatus == PlateSolveQueueStatus.failed)
+            _PlateSolveFailureBody(
+              canRetry:
+                  plateSolveViewModel?.canRetryFailedJob(currentRecord) ??
+                  false,
+              isRetrying: retryState.isRunning,
+              retryError: retryState.isRunning ? null : retryState.message,
+              onRetry: plateSolveViewModel == null
+                  ? null
+                  : () => unawaited(
+                      plateSolveViewModel.retryFailedJob(currentRecord),
+                    ),
             )
           else if (solved != null && solved.success)
             _PlateSolveSuccessBody(
               result: solved,
               formatDateTime: _formatDateTime,
-              onRun: onRun,
             )
           else if (solved != null && !solved.success)
-            _PlateSolveFailureBody(result: solved, onRun: onRun)
+            const _PlateSolveFailureBody()
           else
-            _PlateSolveIdleBody(onRun: onRun),
+            const _PlateSolveIdleBody(),
         ],
       ),
     );
   }
+}
+
+class _PlateSolveQueueMessage extends StatelessWidget {
+  const _PlateSolveQueueMessage({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 16, color: AppColors.messier),
+      const SizedBox(width: 8),
+      Text(
+        message,
+        style: const TextStyle(color: AppColors.messier, fontSize: 13),
+      ),
+    ],
+  );
 }
 
 class _PlateSolveProgressRow extends StatelessWidget {
@@ -978,12 +1003,10 @@ class _PlateSolveSuccessBody extends StatelessWidget {
   const _PlateSolveSuccessBody({
     required this.result,
     required this.formatDateTime,
-    required this.onRun,
   });
 
   final PlateSolveResult result;
   final String Function(DateTime) formatDateTime;
-  final VoidCallback onRun;
 
   @override
   Widget build(BuildContext context) {
@@ -1041,29 +1064,23 @@ class _PlateSolveSuccessBody extends StatelessWidget {
             label: '완료 시각',
             value: formatDateTime(result.solvedAt!),
           ).build(context),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: onRun,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Plate Solve 다시 실행'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.messier,
-              side: BorderSide(color: AppColors.messier.withAlpha(120)),
-            ),
-          ),
-        ),
       ],
     );
   }
 }
 
 class _PlateSolveFailureBody extends StatelessWidget {
-  const _PlateSolveFailureBody({required this.result, required this.onRun});
+  const _PlateSolveFailureBody({
+    this.canRetry = false,
+    this.isRetrying = false,
+    this.retryError,
+    this.onRetry,
+  });
 
-  final PlateSolveResult result;
-  final VoidCallback onRun;
+  final bool canRetry;
+  final bool isRetrying;
+  final String? retryError;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -1076,34 +1093,51 @@ class _PlateSolveFailureBody extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                result.errorMessage ?? 'Plate Solve에 실패했습니다.',
+                'Plate Solve 실패',
                 style: const TextStyle(color: Colors.redAccent, fontSize: 12),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: onRun,
+        if (isRetrying) ...[
+          const SizedBox(height: 8),
+          const _PlateSolveProgressRow(
+            key: Key('plate-solve-retrying'),
+            message: 'Plate Solve 재시도 요청 중…',
+          ),
+        ] else if (canRetry) ...[
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
+            key: const Key('plate-solve-retry-button'),
+            onPressed: onRetry,
             icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Plate Solve 다시 실행'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.messier,
-              side: BorderSide(color: AppColors.messier.withAlpha(120)),
+            label: const Text('Plate Solve 재시도'),
+          ),
+        ] else ...[
+          const SizedBox(height: 4),
+          const Text(
+            '재시도 정보는 서버 동기화 후 제공됩니다.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+        ],
+        if (retryError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            retryError!,
+            key: const Key('plate-solve-retry-error'),
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
             ),
           ),
-        ),
+        ],
       ],
     );
   }
 }
 
 class _PlateSolveIdleBody extends StatelessWidget {
-  const _PlateSolveIdleBody({required this.onRun});
-
-  final VoidCallback onRun;
+  const _PlateSolveIdleBody();
 
   @override
   Widget build(BuildContext context) {
@@ -1111,21 +1145,8 @@ class _PlateSolveIdleBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '이 사진은 아직 Plate Solve를 수행하지 않았습니다.',
+          '사진 등록 후 서버에서 Plate Solve를 자동 처리합니다.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: onRun,
-            icon: const Icon(Icons.explore_outlined, size: 16),
-            label: const Text('Plate Solve 실행'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.messier,
-              side: BorderSide(color: AppColors.messier.withAlpha(120)),
-            ),
-          ),
         ),
       ],
     );

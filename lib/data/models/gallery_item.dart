@@ -1,3 +1,6 @@
+import 'plate_solve_queue.dart';
+import 'plate_solve_result.dart';
+
 class GalleryItem {
   const GalleryItem({
     required this.backendRecordId,
@@ -8,6 +11,9 @@ class GalleryItem {
     required this.representative,
     required this.backendFileId,
     this.commonFileId,
+    this.plateSolveStatus,
+    this.plateSolveJobId,
+    this.plateSolve,
     required this.thumbnailUrl,
     required this.previewUrl,
     required this.originalUrl,
@@ -30,6 +36,9 @@ class GalleryItem {
   final bool representative;
   final String backendFileId;
   final int? commonFileId;
+  final PlateSolveQueueStatus? plateSolveStatus;
+  final String? plateSolveJobId;
+  final PlateSolveResult? plateSolve;
   final String thumbnailUrl;
   final String previewUrl;
   final String originalUrl;
@@ -45,6 +54,9 @@ class GalleryItem {
 
   GalleryItem copyWith({
     int? revision,
+    PlateSolveQueueStatus? plateSolveStatus,
+    String? plateSolveJobId,
+    PlateSolveResult? plateSolve,
     bool? favorite,
     bool? representative,
     String? memo,
@@ -65,6 +77,9 @@ class GalleryItem {
     representative: representative ?? this.representative,
     backendFileId: backendFileId,
     commonFileId: commonFileId,
+    plateSolveStatus: plateSolveStatus ?? this.plateSolveStatus,
+    plateSolveJobId: plateSolveJobId ?? this.plateSolveJobId,
+    plateSolve: plateSolve ?? this.plateSolve,
     thumbnailUrl: thumbnailUrl,
     previewUrl: previewUrl,
     originalUrl: originalUrl,
@@ -88,6 +103,10 @@ class GalleryItem {
     'representative': representative,
     'file_id': backendFileId,
     if (commonFileId != null) 'common_file_id': commonFileId,
+    if (plateSolveStatus != null)
+      'plate_solve_status': plateSolveStatus!.backendValue,
+    if (plateSolveJobId != null) 'plate_solve_job_id': plateSolveJobId,
+    if (plateSolve != null) 'plate_solve_result': plateSolve!.toJson(),
     'filename': originalFilename,
     'mime_type': mimeType,
     'thumbnail_url': thumbnailUrl,
@@ -112,6 +131,11 @@ class GalleryItem {
       representative: _requiredBool(json, 'representative'),
       backendFileId: _requiredString(json, 'file_id'),
       commonFileId: _optionalInt(json['common_file_id']),
+      plateSolveStatus: PlateSolveQueueStatus.fromJson(
+        json['plate_solve_status'],
+      ),
+      plateSolveJobId: _string(json['plate_solve_job_id']),
+      plateSolve: _plateSolveResult(json['plate_solve_result']),
       thumbnailUrl: _requiredString(json, 'thumbnail_url'),
       previewUrl: _requiredString(json, 'preview_url'),
       originalUrl: _requiredString(json, 'original_url'),
@@ -167,4 +191,26 @@ class GalleryItem {
     final text = _string(value);
     return text == null ? null : DateTime.tryParse(text)?.toLocal();
   }
+
+  static PlateSolveResult? _plateSolveResult(Object? value) {
+    if (value is! Map) return null;
+    final json = Map<String, dynamic>.from(value);
+    if (json.containsKey('status') || json.containsKey('centerRa')) {
+      return PlateSolveResult.fromJson(json);
+    }
+    return PlateSolveResult.fromJson({
+      'status': PlateSolveStatus.success.name,
+      'centerRa': _double(json['ra']),
+      'centerDec': _double(json['dec']),
+      'rotation': _double(json['rotation']),
+      'pixelScale': _double(json['pixel_scale']),
+      'fovWidth': _double(json['field_width']),
+      'fovHeight': _double(json['field_height']),
+      'parity': _double(json['parity']),
+    });
+  }
+
+  static double? _double(Object? value) => value is num
+      ? value.toDouble()
+      : double.tryParse(value?.toString() ?? '');
 }

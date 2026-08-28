@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../data/models/plate_solve_result.dart';
+import '../data/models/plate_solve_queue.dart';
 import 'plate_solve/plate_solve_provider.dart';
 import 'tc_backend_external_api_client.dart';
 
@@ -18,6 +19,50 @@ class TcBackendPlateSolveService {
   final Duration pollInterval;
   final Duration maxPollDuration;
   final Future<void> Function(Duration) _delay;
+
+  Future<PlateSolveSummary> getSummary() async {
+    final json = await _client.getMap('/api/astro/plate-solve/summary');
+    try {
+      return PlateSolveSummary.fromJson(json);
+    } on FormatException {
+      throw const TcBackendExternalApiException(
+        code: TcBackendExternalApiErrorCode.malformedResponse,
+        message: 'Plate Solve 진행현황 응답 형식이 올바르지 않습니다.',
+      );
+    }
+  }
+
+  /// Retries an existing FAILED queue item.
+  ///
+  /// [jobId] is an opaque backend value. It is URI-escaped but deliberately
+  /// never parsed or validated as a UUID.
+  Future<PlateSolveJobSnapshot> retryFailedJob(String jobId) async {
+    final normalized = jobId.trim();
+    if (normalized.isEmpty) {
+      throw const TcBackendExternalApiException(
+        code: TcBackendExternalApiErrorCode.invalidRequest,
+        message: 'Plate Solve Job ID가 없습니다.',
+      );
+    }
+    final json = await _client.postMap(
+      '/api/astro/plate-solve/${Uri.encodeComponent(normalized)}/retry',
+      body: const {},
+    );
+    final snapshot = _jobSnapshot(json);
+    if (snapshot.jobId != normalized) {
+      throw const TcBackendExternalApiException(
+        code: TcBackendExternalApiErrorCode.malformedResponse,
+        message: '재시도된 Plate Solve Job ID가 요청과 일치하지 않습니다.',
+      );
+    }
+    if (snapshot.status != PlateSolveQueueStatus.waiting) {
+      throw const TcBackendExternalApiException(
+        code: TcBackendExternalApiErrorCode.malformedResponse,
+        message: '재시도된 Plate Solve Job이 대기 상태가 아닙니다.',
+      );
+    }
+    return snapshot;
+  }
 
   Future<PlateSolveResult> solve({
     required int commonFileId,
@@ -110,6 +155,24 @@ class TcBackendPlateSolveService {
       solver: _requiredString(job, 'provider'),
       rawWcsJson: jsonEncode(result),
       solveMode: PlateSolveMode.blind,
+    );
+  }
+
+  PlateSolveJobSnapshot _jobSnapshot(Map<String, dynamic> job) {
+    final status = PlateSolveQueueStatus.fromJson(job['status']);
+    if (status == null) {
+      throw const TcBackendExternalApiException(
+        code: TcBackendExternalApiErrorCode.malformedResponse,
+        message: '알 수 없는 Plate Solve 상태입니다.',
+      );
+    }
+    return PlateSolveJobSnapshot(
+      jobId: _requiredString(job, 'job_id'),
+      commonFileId: _requiredInt(job, 'common_file_id'),
+      status: status,
+      result: status == PlateSolveQueueStatus.completed
+          ? _completed(job)
+          : null,
     );
   }
 

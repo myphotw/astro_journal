@@ -29,6 +29,8 @@ import '../../settings/view/observation_site_edit_screen.dart';
 import '../../settings/view/observation_site_list_screen.dart';
 import '../../observation_site/view/observation_site_detail_screen.dart';
 import 'widgets/home_observation_context_controls.dart';
+import 'widgets/astronomy_events_section.dart';
+import '../viewmodel/astronomy_events_view_model.dart';
 import '../viewmodel/home_view_model.dart';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -127,6 +129,14 @@ class _HomeBody extends StatefulWidget {
 
 class _HomeBodyState extends State<_HomeBody> {
   HomeViewModel get viewModel => widget.viewModel;
+
+  Future<void> _refreshHome() async {
+    final astronomyEvents = context.read<AstronomyEventsViewModel?>();
+    await Future.wait<void>([
+      viewModel.refresh(),
+      if (astronomyEvents != null) astronomyEvents.refresh(),
+    ]);
+  }
 
   Future<void> _selectCurrentSite() async {
     await viewModel.activeObservationSiteViewModel.selectCurrentLocation();
@@ -279,7 +289,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 bortle: viewModel.lastSessionContext?.bortle,
                 isWeatherLoading: viewModel.isWeatherLoading,
                 onDetailTap: () => _showObservationDetail(context),
-                onRefresh: () => context.read<HomeViewModel>().refresh(),
+                onRefresh: _refreshHome,
                 contextControls: HomeObservationContextControls(
                   siteViewModel: viewModel.activeObservationSiteViewModel,
                   equipment: viewModel.activeEquipment,
@@ -444,6 +454,15 @@ class _HomeBodyState extends State<_HomeBody> {
               AppTheme.spacingMd,
             ),
             child: _FuturePlanningSection(month: now.month),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppTheme.spacingLg,
+              0,
+              AppTheme.spacingLg,
+              AppTheme.spacingLg,
+            ),
+            child: AstronomyEventsSection(),
           ),
         ],
       ),

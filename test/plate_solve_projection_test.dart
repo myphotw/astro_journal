@@ -252,18 +252,85 @@ void main() {
       expect(dFar / dNear, closeTo(4.0, 0.15));
     });
 
-    test('rotation moves north vector around the image', () {
-      PixelOffset at(double orient) => PlateSolveProjection.worldToPixel(
+    test('RA wrap-around crosses 360 degrees through the short path', () {
+      final eastAcrossZero = PlateSolveProjection.worldToPixel(
+        centerRaDeg: 359.9,
+        centerDecDeg: 0,
+        targetRaDeg: 0.0,
+        targetDecDeg: 0,
+        orientationDeg: 0,
+        pixelScaleArcsec: 36,
+        imageWidth: 1000,
+        imageHeight: 1000,
+        parity: 1,
+      );
+      final ordinaryEast = PlateSolveProjection.worldToPixel(
+        centerRaDeg: 180,
+        centerDecDeg: 0,
+        targetRaDeg: 180.1,
+        targetDecDeg: 0,
+        orientationDeg: 0,
+        pixelScaleArcsec: 36,
+        imageWidth: 1000,
+        imageHeight: 1000,
+        parity: 1,
+      );
+
+      expect(eastAcrossZero.x, closeTo(ordinaryEast.x, 0.01));
+      expect(eastAcrossZero.y, closeTo(ordinaryEast.y, 0.01));
+    });
+
+    test('TAN projection applies cos(dec) to small RA offsets', () {
+      final equator = PlateSolveProjection.tangentIwcDeg(
+        centerRaDeg: 180,
+        centerDecDeg: 0,
+        targetRaDeg: 180.1,
+        targetDecDeg: 0,
+      );
+      final highDeclination = PlateSolveProjection.tangentIwcDeg(
+        centerRaDeg: 180,
+        centerDecDeg: 60,
+        targetRaDeg: 180.1,
+        targetDecDeg: 60,
+      );
+
+      expect(highDeclination.xDeg / equator.xDeg, closeTo(0.5, 0.002));
+    });
+
+    test('rotation 0 90 180 follows reconstructed CD contract', () {
+      PixelOffset northAt(double orientation) =>
+          PlateSolveProjection.worldToPixel(
             centerRaDeg: 180,
             centerDecDeg: 0,
             targetRaDeg: 180,
             targetDecDeg: 0.1,
-            orientationDeg: orient,
+            orientationDeg: orientation,
             pixelScaleArcsec: 36,
             imageWidth: 1000,
             imageHeight: 1000,
             parity: 1,
           );
+
+      final at0 = northAt(0);
+      final at90 = northAt(90);
+      final at180 = northAt(180);
+      expect(at0.y, greaterThan(500));
+      expect(at90.x, lessThan(500));
+      expect(at180.y, lessThan(500));
+    });
+
+    test('rotation moves north vector around the image', () {
+      PixelOffset at(double orient) => PlateSolveProjection.worldToPixel(
+        centerRaDeg: 180,
+        centerDecDeg: 0,
+        targetRaDeg: 180,
+        targetDecDeg: 0.1,
+        orientationDeg: orient,
+        pixelScaleArcsec: 36,
+        imageWidth: 1000,
+        imageHeight: 1000,
+        parity: 1,
+      );
 
       final o0 = at(0);
       final o90 = at(90);

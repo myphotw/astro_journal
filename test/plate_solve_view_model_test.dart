@@ -10,6 +10,7 @@ import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/data/models/plate_solve_result.dart';
+import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:astro_journal/data/models/photo_object.dart';
 import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
@@ -61,6 +62,7 @@ void main() {
     required PlateSolveProvider provider,
     PlateSolveService? service,
     CommonFileLinkDataSource? commonFileLinks,
+    TcBackendPlateSolveService? backendPlateSolveService,
   }) {
     final searchService = CelestialObjectSearchService(
       catalogRepository,
@@ -74,6 +76,7 @@ void main() {
       catalogRepository,
       equipmentRepository,
       commonFileLinks: commonFileLinks,
+      backendPlateSolveService: backendPlateSolveService,
     );
   }
 
@@ -456,49 +459,49 @@ void main() {
       expect(provider.calls, hasLength(2));
     });
 
-    testWidgets('Plate Solve action shows progress and completed result', (
-      tester,
-    ) async {
-      final record = ShootingRecord(
-        id: 'widget-photo',
-        celestialObjectId: 'UNKNOWN',
-        capturedAt: DateTime(2026, 1, 1),
-        createdAt: DateTime(2026, 1, 1),
-        photoUri: '/widget.jpg',
-      );
-      shootingRecordRepository.items[record.id] = record;
-      await galleryViewModel.load();
-      final provider = _DelayedPlateSolveProvider();
-      final viewModel = buildViewModel(provider: provider);
+    testWidgets(
+      'durable queue PROCESSING state is shown without manual action',
+      (tester) async {
+        final record = ShootingRecord(
+          id: 'widget-photo',
+          celestialObjectId: 'UNKNOWN',
+          capturedAt: DateTime(2026, 1, 1),
+          createdAt: DateTime(2026, 1, 1),
+          photoUri: '/widget.jpg',
+          plateSolveQueueStatus: PlateSolveQueueStatus.processing,
+        );
+        shootingRecordRepository.items[record.id] = record;
+        await galleryViewModel.load();
+        final plateSolveViewModel = buildViewModel(
+          provider: _RecordingPlateSolveProvider(
+            PlateSolveResult.failure(errorMessage: 'unused'),
+          ),
+        );
 
-      await tester.pumpWidget(
-        ChangeNotifierProvider<PlateSolveViewModel>.value(
-          value: viewModel,
-          child: MaterialApp(
-            home: Scaffold(
-              body: GalleryPlateSolveSection(
-                record: record,
-                onRun: () => unawaited(viewModel.solve(record)),
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<GalleryViewModel>.value(
+                value: galleryViewModel,
               ),
+              ChangeNotifierProvider<PlateSolveViewModel>.value(
+                value: plateSolveViewModel,
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(body: GalleryPlateSolveSection(record: record)),
             ),
           ),
-        ),
-      );
-      await tester.tap(find.text('Plate Solve 실행'));
-      await provider.started.future;
-      await tester.pump();
+        );
+        await tester.pump();
 
-      expect(find.byKey(const Key('plate-solve-processing')), findsOneWidget);
-      expect(find.text('Blind Solve...'), findsOneWidget);
-      expect(provider.calls, 1);
+        expect(find.byKey(const Key('plate-solve-processing')), findsOneWidget);
+        expect(find.text('Plate Solve 처리 중…'), findsOneWidget);
+        expect(find.text('Plate Solve 실행'), findsNothing);
+      },
+    );
 
-      provider.complete(PlateSolveResult.success(centerRa: 10, centerDec: 20));
-      await tester.pumpAndSettle();
-      expect(find.text('중심 RA'), findsOneWidget);
-      expect(find.text('Plate Solve 다시 실행'), findsOneWidget);
-    });
-
-    testWidgets('pre-upload Plate Solve failure is visible and retryable', (
+    testWidgets('unknown queue state explains automatic server processing', (
       tester,
     ) async {
       final record = ShootingRecord(
@@ -508,36 +511,194 @@ void main() {
         createdAt: DateTime(2026, 1, 1),
         photoUri: '/pending.jpg',
       );
-      final provider = _RecordingPlateSolveProvider(
-        PlateSolveResult.success(centerRa: 1, centerDec: 1),
-      );
-      final viewModel = buildViewModel(
-        provider: provider,
-        commonFileLinks: const _FakeCommonFileLinks(null),
+      shootingRecordRepository.items[record.id] = record;
+      await galleryViewModel.load();
+      final plateSolveViewModel = buildViewModel(
+        provider: _RecordingPlateSolveProvider(
+          PlateSolveResult.failure(errorMessage: 'unused'),
+        ),
       );
 
       await tester.pumpWidget(
-        ChangeNotifierProvider<PlateSolveViewModel>.value(
-          value: viewModel,
-          child: MaterialApp(
-            home: Scaffold(
-              body: GalleryPlateSolveSection(
-                record: record,
-                onRun: () => unawaited(viewModel.solve(record)),
-              ),
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(
+              value: galleryViewModel,
             ),
+            ChangeNotifierProvider<PlateSolveViewModel>.value(
+              value: plateSolveViewModel,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: GalleryPlateSolveSection(record: record)),
           ),
         ),
       );
-      await tester.tap(find.text('Plate Solve 실행'));
       await tester.pump();
 
-      expect(
-        find.text('사진 등록이 완료된 후 Plate Solve를 사용할 수 있습니다.'),
-        findsOneWidget,
+      expect(find.text('사진 등록 후 서버에서 Plate Solve를 자동 처리합니다.'), findsOneWidget);
+      expect(find.text('Plate Solve 실행'), findsNothing);
+    });
+
+    testWidgets('FAILED persistent job retries once and becomes WAITING', (
+      tester,
+    ) async {
+      final response = Completer<http.Response>();
+      var retryCalls = 0;
+      const jobId = 'opaque-job/token=';
+      final backend = _persistentBackendService((request) {
+        retryCalls++;
+        expect(request.url.pathSegments[3], jobId);
+        return response.future;
+      });
+      final record = ShootingRecord(
+        id: 'failed-widget-photo',
+        celestialObjectId: 'M31',
+        capturedAt: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        photoUri: '/failed.jpg',
+        commonFileId: 178,
+        plateSolveQueueStatus: PlateSolveQueueStatus.failed,
+        plateSolveJobId: jobId,
       );
-      expect(find.text('Plate Solve 다시 실행'), findsOneWidget);
-      expect(provider.calls, isEmpty);
+      shootingRecordRepository.items[record.id] = record;
+      await galleryViewModel.load();
+      final plateSolveViewModel = buildViewModel(
+        provider: _RecordingPlateSolveProvider(
+          PlateSolveResult.failure(errorMessage: 'unused'),
+        ),
+        backendPlateSolveService: backend,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(
+              value: galleryViewModel,
+            ),
+            ChangeNotifierProvider<PlateSolveViewModel>.value(
+              value: plateSolveViewModel,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: GalleryPlateSolveSection(record: record)),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('plate-solve-retry-button')));
+      await tester.pump();
+      expect(retryCalls, 1);
+      expect(find.byKey(const Key('plate-solve-retrying')), findsOneWidget);
+      expect(find.byKey(const Key('plate-solve-retry-button')), findsNothing);
+
+      response.complete(
+        http.Response(
+          '{"job_id":"opaque-job/token=","status":"WAITING",'
+          '"common_file_id":178}',
+          202,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(retryCalls, 1);
+      expect(
+        galleryViewModel.recordForId(record.id)?.plateSolveQueueStatus,
+        PlateSolveQueueStatus.waiting,
+      );
+      expect(galleryViewModel.recordForId(record.id)?.plateSolveJobId, jobId);
+      expect(find.byKey(const Key('plate-solve-waiting')), findsOneWidget);
+    });
+
+    testWidgets('FAILED without persistent job ID has no retry action', (
+      tester,
+    ) async {
+      final record = ShootingRecord(
+        id: 'failed-without-job',
+        celestialObjectId: 'M31',
+        capturedAt: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        photoUri: '/failed.jpg',
+        plateSolveQueueStatus: PlateSolveQueueStatus.failed,
+      );
+      shootingRecordRepository.items[record.id] = record;
+      await galleryViewModel.load();
+      final plateSolveViewModel = buildViewModel(
+        provider: _RecordingPlateSolveProvider(
+          PlateSolveResult.failure(errorMessage: 'unused'),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(
+              value: galleryViewModel,
+            ),
+            ChangeNotifierProvider<PlateSolveViewModel>.value(
+              value: plateSolveViewModel,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: GalleryPlateSolveSection(record: record)),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('plate-solve-retry-button')), findsNothing);
+      expect(find.text('재시도 정보는 서버 동기화 후 제공됩니다.'), findsOneWidget);
+    });
+
+    testWidgets('retry failure keeps FAILED state and re-enables action', (
+      tester,
+    ) async {
+      const jobId = 'opaque-failed-job';
+      final backend = _persistentBackendService(
+        (_) async => http.Response('{"detail":"unavailable"}', 503),
+      );
+      final record = ShootingRecord(
+        id: 'retry-failure-photo',
+        celestialObjectId: 'M31',
+        capturedAt: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        photoUri: '/failed.jpg',
+        commonFileId: 178,
+        plateSolveQueueStatus: PlateSolveQueueStatus.failed,
+        plateSolveJobId: jobId,
+      );
+      shootingRecordRepository.items[record.id] = record;
+      await galleryViewModel.load();
+      final plateSolveViewModel = buildViewModel(
+        provider: _RecordingPlateSolveProvider(
+          PlateSolveResult.failure(errorMessage: 'unused'),
+        ),
+        backendPlateSolveService: backend,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(
+              value: galleryViewModel,
+            ),
+            ChangeNotifierProvider<PlateSolveViewModel>.value(
+              value: plateSolveViewModel,
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: GalleryPlateSolveSection(record: record)),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('plate-solve-retry-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        galleryViewModel.recordForId(record.id)?.plateSolveQueueStatus,
+        PlateSolveQueueStatus.failed,
+      );
+      expect(find.byKey(const Key('plate-solve-retry-button')), findsOneWidget);
+      expect(find.byKey(const Key('plate-solve-retry-error')), findsOneWidget);
     });
   });
 
@@ -617,6 +778,20 @@ PlateSolveService _backendPlateSolveService(
     [provider],
     PlateSolveSettingsService(),
     backendService: TcBackendPlateSolveService(client: client),
+  );
+}
+
+TcBackendPlateSolveService _persistentBackendService(
+  Future<http.Response> Function(http.Request request) handler,
+) {
+  return TcBackendPlateSolveService(
+    client: TcBackendExternalApiClient(
+      settingsService: TcBackendSettingsService(
+        useBuildConfiguration: true,
+        buildBaseUrl: 'https://backend.test',
+      ),
+      client: MockClient(handler),
+    ),
   );
 }
 

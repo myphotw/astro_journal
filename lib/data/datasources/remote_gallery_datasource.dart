@@ -53,39 +53,67 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     // by the canonical ObservationRecord API. Keep the two identities separate
     // and only enrich a detail response when Gallery did not already provide
     // `common_file_id`.
-    if (_positiveInt(json['common_file_id']) == null) {
-      AppLogger.info(
-        'RemoteGalleryDataSource',
-        'common_file_id recovery request '
-            'backend_record_id=$recordId source=ObservationRecord detail',
-      );
+    final needsCommonFileId = _positiveInt(json['common_file_id']) == null;
+    final plateSolveStatus = _string(json['plate_solve_status'])?.toUpperCase();
+    final needsPlateSolveStatus = plateSolveStatus == null;
+    final needsPlateSolveJobId =
+        plateSolveStatus != null && _string(json['plate_solve_job_id']) == null;
+    final needsPlateSolveResult =
+        plateSolveStatus == 'COMPLETED' && json['plate_solve_result'] is! Map;
+    if (needsCommonFileId ||
+        needsPlateSolveStatus ||
+        needsPlateSolveJobId ||
+        needsPlateSolveResult) {
+      if (needsCommonFileId) {
+        AppLogger.info(
+          'RemoteGalleryDataSource',
+          'common_file_id recovery request '
+              'backend_record_id=$recordId source=ObservationRecord detail',
+        );
+      }
       try {
         final record = _object(
           await _get('/api/astro/records/${Uri.encodeComponent(recordId)}'),
         );
-        final hasFileId = record.containsKey('file_id');
-        final rawFileId = record['file_id'];
-        final commonFileId = _positiveInt(rawFileId);
-        AppLogger.info(
-          'RemoteGalleryDataSource',
-          'common_file_id recovery response '
-              'backend_record_id=$recordId http=success '
-              'file_id_present=$hasFileId '
-              'file_id_type=${rawFileId?.runtimeType ?? "null"} '
-              'parsed_common_file_id=${commonFileId ?? "null"}',
-        );
-        if (commonFileId != null) json['common_file_id'] = commonFileId;
+        if (needsCommonFileId) {
+          final hasFileId = record.containsKey('file_id');
+          final rawFileId = record['file_id'];
+          final commonFileId = _positiveInt(rawFileId);
+          AppLogger.info(
+            'RemoteGalleryDataSource',
+            'common_file_id recovery response '
+                'backend_record_id=$recordId http=success '
+                'file_id_present=$hasFileId '
+                'file_id_type=${rawFileId?.runtimeType ?? "null"} '
+                'parsed_common_file_id=${commonFileId ?? "null"}',
+          );
+          if (commonFileId != null) json['common_file_id'] = commonFileId;
+        }
+        final recordPlateSolveStatus = _string(record['plate_solve_status']);
+        if (recordPlateSolveStatus != null) {
+          json['plate_solve_status'] = recordPlateSolveStatus;
+        }
+        final plateSolveJobId = _string(record['plate_solve_job_id']);
+        if (plateSolveJobId != null) {
+          json['plate_solve_job_id'] = plateSolveJobId;
+        }
+        if (record['plate_solve_result'] is Map) {
+          json['plate_solve_result'] = record['plate_solve_result'];
+        }
       } on RemoteGalleryException catch (error) {
-        AppLogger.info(
-          'RemoteGalleryDataSource',
-          'common_file_id recovery response '
-              'backend_record_id=$recordId http=failure '
-              'status_code=${error.statusCode ?? "transport_or_parse"} '
-              'file_id_present=unknown file_id_type=unknown '
-              'parsed_common_file_id=null',
-        );
+        if (needsCommonFileId) {
+          AppLogger.info(
+            'RemoteGalleryDataSource',
+            'common_file_id recovery response '
+                'backend_record_id=$recordId http=failure '
+                'status_code=${error.statusCode ?? "transport_or_parse"} '
+                'file_id_present=unknown file_id_type=unknown '
+                'parsed_common_file_id=null',
+          );
+        }
         // Gallery detail remains usable when identity recovery is unavailable.
-        // Plate Solve will retain its existing pre-upload/unlinked guard.
+        // Plate Solve status remains unknown rather than being conflated with
+        // the backend WAITING state.
       }
     }
     return _item(json);
@@ -163,5 +191,10 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     if (value is num && value.toInt() > 0) return value.toInt();
     final parsed = int.tryParse(value?.toString() ?? '');
     return parsed != null && parsed > 0 ? parsed : null;
+  }
+
+  String? _string(Object? value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
   }
 }

@@ -4,6 +4,8 @@ import 'package:provider/single_child_widget.dart';
 
 import '../../data/repositories/bortle_repository.dart';
 import '../../data/repositories/bortle_repository_impl.dart';
+import '../../data/repositories/astronomy_event_repository.dart';
+import '../../data/repositories/tc_backend_astronomy_event_repository.dart';
 import '../../data/repositories/equipment_repository.dart';
 import '../../data/repositories/equipment_repository_impl.dart';
 import '../../data/datasources/gallery_cache_local_datasource.dart';
@@ -30,6 +32,7 @@ import '../../features/gallery/viewmodel/gallery_view_model.dart';
 import '../../features/gallery/viewmodel/plate_solve_view_model.dart';
 import '../../features/photo_first/viewmodel/photo_first_registration_view_model.dart';
 import '../../features/home/viewmodel/home_view_model.dart';
+import '../../features/home/viewmodel/astronomy_events_view_model.dart';
 import '../../features/light_pollution_map/viewmodel/light_pollution_map_view_model.dart';
 import '../../features/main/viewmodel/main_back_navigation_view_model.dart';
 import '../../features/horizon_scan/services/device_orientation_service.dart';
@@ -122,6 +125,12 @@ class AppProviders {
       settingsService: tcBackendSettingsService,
       authHeaders: tcBackendAuthHeaders,
     );
+    final astronomyEventRepository = TcBackendAstronomyEventRepository(
+      externalApiClient,
+    );
+    final astronomyEventsViewModel = AstronomyEventsViewModel(
+      astronomyEventRepository,
+    );
     final geocodingService = GeocodingService(backendClient: externalApiClient);
     final galleryCache = GalleryCacheLocalDataSource();
     final galleryRecordLinks = SyncOutboxGalleryRecordLinkDataSource();
@@ -173,6 +182,7 @@ class AppProviders {
       syncGate: syncGate,
     );
     final syncCheckpoints = GalleryCacheSyncCheckpointDataSource(galleryCache);
+    late Future<void> Function() refreshAfterPull;
     final changesService = TcBackendChangesService(
       settingsService: tcBackendSettingsService,
       authHeaders: tcBackendAuthHeaders,
@@ -187,6 +197,7 @@ class AppProviders {
       syncGate: syncGate,
       catalogCaptureProjection: catalogCaptureProjection,
       localCaptureReset: localCaptureReset,
+      onObservationRecordsChanged: () => refreshAfterPull(),
     );
     final startupResumeService = TcBackendStartupResumeService(
       tcBackendSettingsService,
@@ -334,6 +345,7 @@ class AppProviders {
       catalogRepository,
       equipmentRepository,
       commonFileLinks: commonFileLinks,
+      backendPlateSolveService: backendPlateSolveService,
     );
 
     final statsAnalyticsService = StatsAnalyticsService();
@@ -378,9 +390,14 @@ class AppProviders {
       tcBackendSettingsService,
       syncOutboxRepository: syncOutboxRepository,
       retryFailed: syncCoordinator.retryFailed,
+      plateSolveSummaryLoader: backendPlateSolveService.getSummary,
       tokenStore: tcBackendTokenStore,
       authHeaders: tcBackendAuthHeaders,
     );
+    refreshAfterPull = () async {
+      await galleryViewModel.load(silent: true);
+      await tcBackendViewModel.refreshPlateSolveSummary();
+    };
 
     final equipmentViewModel = EquipmentViewModel(equipmentRepository);
 
@@ -398,6 +415,9 @@ class AppProviders {
       ChangeNotifierProvider.value(value: appNavigationNotifier),
       ChangeNotifierProvider.value(value: mainBackNavigationViewModel),
       Provider<BortleRepository>.value(value: bortleRepository),
+      Provider<AstronomyEventRepository>.value(
+        value: astronomyEventRepository,
+      ),
       Provider<CatalogRepository>.value(value: catalogRepository),
       Provider<EquipmentRepository>.value(value: equipmentRepository),
       Provider<ShootingRecordRepository>.value(value: shootingRecordRepository),
@@ -488,6 +508,7 @@ class AppProviders {
       Provider<SplashImageService>.value(value: splashImageService),
       ChangeNotifierProvider.value(value: photoFirstViewModel),
       ChangeNotifierProvider.value(value: homeViewModel),
+      ChangeNotifierProvider.value(value: astronomyEventsViewModel),
       ChangeNotifierProvider.value(value: catalogViewModel),
       ChangeNotifierProvider.value(value: galleryViewModel),
       ChangeNotifierProvider.value(value: plateSolveViewModel),

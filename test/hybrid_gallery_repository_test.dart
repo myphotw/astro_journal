@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:astro_journal/data/datasources/gallery_cache_local_datasource.dart';
 import 'package:astro_journal/data/datasources/remote_gallery_datasource.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
+import 'package:astro_journal/data/models/plate_solve_queue.dart';
+import 'package:astro_journal/data/models/plate_solve_result.dart';
 import 'package:astro_journal/data/repositories/hybrid_gallery_repository.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -88,6 +90,79 @@ void main() {
     expect(remote.galleryCalls, 1);
     expect(result.single.backendFileId, 'fresh');
   });
+
+  test(
+    'remote list refresh preserves queue status learned by pull sync',
+    () async {
+      cache.putItems('astro:gallery:list', [
+        _item('same', plateSolveStatus: PlateSolveQueueStatus.processing),
+      ], now.subtract(const Duration(minutes: 31)));
+      remote.items = [_item('same')];
+
+      final result = await repository().getAll();
+
+      expect(result.single.plateSolveStatus, PlateSolveQueueStatus.processing);
+    },
+  );
+
+  test('remote list refresh preserves a cached completed WCS result', () async {
+    cache.putItems('astro:gallery:list', [
+      _item(
+        'same',
+        commonFileId: 178,
+        plateSolveStatus: PlateSolveQueueStatus.completed,
+        plateSolveJobId: 'job-1',
+        plateSolve: PlateSolveResult.success(centerRa: 83.8, centerDec: -5.4),
+      ),
+    ], now.subtract(const Duration(minutes: 31)));
+    remote.items = [
+      _item(
+        'same',
+        commonFileId: 178,
+        plateSolveStatus: PlateSolveQueueStatus.completed,
+        plateSolveJobId: 'job-1',
+      ),
+    ];
+
+    final result = await repository().getAll();
+
+    expect(result.single.plateSolve?.centerRa, 83.8);
+    expect(result.single.plateSolve?.centerDec, -5.4);
+  });
+
+  test(
+    'completed detail without result is rehydrated and replaces local WCS',
+    () async {
+      final cached = _item(
+        'cached',
+        commonFileId: 178,
+        plateSolveStatus: PlateSolveQueueStatus.completed,
+        plateSolveJobId: 'job-1',
+        plateSolve: PlateSolveResult.success(centerRa: 1, centerDec: 2),
+      );
+      // Simulate an old/incomplete detail cache whose persistent result was not
+      // yet supported by the app.
+      final payload = cached.toJson()..remove('plate_solve_result');
+      cache.entries['astro:gallery:detail:record-cached'] = GalleryCacheEntry(
+        key: 'astro:gallery:detail:record-cached',
+        payloadJson: jsonEncode(payload),
+        cachedAt: now,
+      );
+      remote.detail = _item(
+        'cached',
+        commonFileId: 178,
+        plateSolveStatus: PlateSolveQueueStatus.completed,
+        plateSolveJobId: 'job-1',
+        plateSolve: PlateSolveResult.success(centerRa: 83.8, centerDec: -5.4),
+      );
+
+      final result = await repository().getById('record-cached');
+
+      expect(remote.detailCalls, 1);
+      expect(result?.plateSolve?.centerRa, 83.8);
+      expect(result?.plateSolve?.centerDec, -5.4);
+    },
+  );
 
   test(
     'fresh detail cache without common file identity is rehydrated',
@@ -189,7 +264,13 @@ void main() {
   });
 }
 
-GalleryItem _item(String id, {int? commonFileId}) => GalleryItem(
+GalleryItem _item(
+  String id, {
+  int? commonFileId,
+  PlateSolveQueueStatus? plateSolveStatus,
+  String? plateSolveJobId,
+  PlateSolveResult? plateSolve,
+}) => GalleryItem(
   backendRecordId: 'record-$id',
   revision: 1,
   catalogObjectId: 'M42',
@@ -198,6 +279,9 @@ GalleryItem _item(String id, {int? commonFileId}) => GalleryItem(
   representative: false,
   backendFileId: id,
   commonFileId: commonFileId,
+  plateSolveStatus: plateSolveStatus,
+  plateSolveJobId: plateSolveJobId,
+  plateSolve: plateSolve,
   thumbnailUrl: 'https://backend.test/thumbnail/$id',
   previewUrl: 'https://backend.test/preview/$id',
   originalUrl: 'https://backend.test/original/$id',

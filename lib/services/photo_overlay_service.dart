@@ -76,6 +76,9 @@ class PhotoOverlayService {
       // Plate/EXIF 해상도를 우선 사용 — 파일 decode probe는 비싸므로 최후 수단.
       var imageWidth = plate.imageWidth ?? record.exif?.imageWidth;
       var imageHeight = plate.imageHeight ?? record.exif?.imageHeight;
+      final inferredSize = inferImageDimensions(plate);
+      imageWidth ??= inferredSize?.$1;
+      imageHeight ??= inferredSize?.$2;
       if (imageWidth == null ||
           imageHeight == null ||
           imageWidth <= 0 ||
@@ -335,6 +338,30 @@ class PhotoOverlayService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Recovers the source pixel dimensions carried implicitly by the durable
+  /// backend result. TC-Backend defines field width/height in degrees and
+  /// pixel scale in arcseconds per pixel (`field = scale * pixels / 3600`).
+  @visibleForTesting
+  static (int, int)? inferImageDimensions(PlateSolveResult plate) {
+    final scale = plate.pixelScale;
+    final widthDeg = plate.fovWidth;
+    final heightDeg = plate.fovHeight;
+    if (scale == null ||
+        widthDeg == null ||
+        heightDeg == null ||
+        !scale.isFinite ||
+        !widthDeg.isFinite ||
+        !heightDeg.isFinite ||
+        scale <= 0 ||
+        widthDeg <= 0 ||
+        heightDeg <= 0) {
+      return null;
+    }
+    final width = (widthDeg * 3600.0 / scale).round();
+    final height = (heightDeg * 3600.0 / scale).round();
+    return width > 0 && height > 0 ? (width, height) : null;
   }
 
   static ({double? major, double? minor}) _resolveAngularAxesArcmin(

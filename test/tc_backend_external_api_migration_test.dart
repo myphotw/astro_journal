@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:astro_journal/services/api_key_service.dart';
 import 'package:astro_journal/data/models/api_test_result.dart';
 import 'package:astro_journal/data/models/plate_solve_result.dart';
+import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:astro_journal/services/geocoding_service.dart';
 import 'package:astro_journal/services/plate_solve/plate_solve_provider.dart';
 import 'package:astro_journal/services/plate_solve_service.dart';
@@ -292,66 +293,112 @@ void main() {
     );
   });
 
-  test('backend Plate Solve distinguishes timeout and network failures', () async {
-    final timeoutService = TcBackendPlateSolveService(
-      client: client((_) => Completer<http.Response>().future),
-      delay: (_) async {},
-    );
-    await expectLater(
-      timeoutService.solve(commonFileId: 178),
-      throwsA(
-        isA<TcBackendExternalApiException>().having(
-          (error) => error.code,
-          'code',
-          TcBackendExternalApiErrorCode.timeout,
-        ),
-      ),
+  test('Plate Solve summary maps canonical uppercase queue counts', () async {
+    final service = TcBackendPlateSolveService(
+      client: client((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/api/astro/plate-solve/summary');
+        return http.Response(
+          '{"total":10,"WAITING":2,"PROCESSING":1,"COMPLETED":6,"FAILED":1}',
+          200,
+        );
+      }),
     );
 
-    final networkService = TcBackendPlateSolveService(
-      client: client((_) async => throw http.ClientException('offline')),
-      delay: (_) async {},
-    );
-    await expectLater(
-      networkService.solve(commonFileId: 178),
-      throwsA(
-        isA<TcBackendExternalApiException>().having(
-          (error) => error.code,
-          'code',
-          TcBackendExternalApiErrorCode.network,
-        ),
-      ),
-    );
+    final summary = await service.getSummary();
+    expect(summary.total, 10);
+    expect(summary.waiting, 2);
+    expect(summary.processing, 1);
+    expect(summary.completed, 6);
+    expect(summary.failed, 1);
   });
 
-  test('registered files use Backend while pre-registration keeps direct fallback', () async {
-    final provider = _RecordingPlateSolveProvider();
-    final backend = TcBackendPlateSolveService(
-      client: client(
-        (request) async => http.Response(
-          '{"job_id":"opaque","status":"COMPLETED","common_file_id":178,"provider":"astrometry.net","result":{"ra":10,"dec":20}}',
-          request.method == 'POST' ? 202 : 200,
-        ),
-      ),
-      delay: (_) async {},
-    );
-    final service = PlateSolveService(
-      [provider],
-      PlateSolveSettingsService(),
-      backendService: backend,
+  test('FAILED retry treats legacy encrypted job_id as opaque text', () async {
+    const opaqueJobId = 'encrypted-job_token=';
+    final service = TcBackendPlateSolveService(
+      client: client((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.pathSegments.last, 'retry');
+        expect(request.url.pathSegments[3], opaqueJobId);
+        return http.Response(
+          '{"job_id":"encrypted-job_token=","status":"WAITING","common_file_id":178,"provider":"astrometry.net"}',
+          202,
+        );
+      }),
     );
 
-    final registered = await service.solve(
-      imagePath: '/registered.jpg',
-      commonFileId: 178,
-    );
-    expect(registered.success, isTrue);
-    expect(provider.calls, 0);
-
-    final preRegistration = await service.solve(imagePath: '/staged.jpg');
-    expect(preRegistration.success, isTrue);
-    expect(provider.calls, 1);
+    final job = await service.retryFailedJob(opaqueJobId);
+    expect(job.jobId, opaqueJobId);
+    expect(job.commonFileId, 178);
+    expect(job.status, PlateSolveQueueStatus.waiting);
   });
+
+  test(
+    'backend Plate Solve distinguishes timeout and network failures',
+    () async {
+      final timeoutService = TcBackendPlateSolveService(
+        client: client((_) => Completer<http.Response>().future),
+        delay: (_) async {},
+      );
+      await expectLater(
+        timeoutService.solve(commonFileId: 178),
+        throwsA(
+          isA<TcBackendExternalApiException>().having(
+            (error) => error.code,
+            'code',
+            TcBackendExternalApiErrorCode.timeout,
+          ),
+        ),
+      );
+
+      final networkService = TcBackendPlateSolveService(
+        client: client((_) async => throw http.ClientException('offline')),
+        delay: (_) async {},
+      );
+      await expectLater(
+        networkService.solve(commonFileId: 178),
+        throwsA(
+          isA<TcBackendExternalApiException>().having(
+            (error) => error.code,
+            'code',
+            TcBackendExternalApiErrorCode.network,
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'registered files use Backend while pre-registration keeps direct fallback',
+    () async {
+      final provider = _RecordingPlateSolveProvider();
+      final backend = TcBackendPlateSolveService(
+        client: client(
+          (request) async => http.Response(
+            '{"job_id":"opaque","status":"COMPLETED","common_file_id":178,"provider":"astrometry.net","result":{"ra":10,"dec":20}}',
+            request.method == 'POST' ? 202 : 200,
+          ),
+        ),
+        delay: (_) async {},
+      );
+      final service = PlateSolveService(
+        [provider],
+        PlateSolveSettingsService(),
+        backendService: backend,
+      );
+
+      final registered = await service.solve(
+        imagePath: '/registered.jpg',
+        commonFileId: 178,
+      );
+      expect(registered.success, isTrue);
+      expect(provider.calls, 0);
+
+      final preRegistration = await service.solve(imagePath: '/staged.jpg');
+      expect(preRegistration.success, isTrue);
+      expect(provider.calls, 1);
+    },
+  );
 }
 
 class _RecordingPlateSolveProvider implements PlateSolveProvider {

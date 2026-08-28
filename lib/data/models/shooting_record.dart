@@ -4,6 +4,7 @@ import '../../core/constants/analysis_status.dart';
 import '../../core/constants/database_constants.dart';
 import '../../core/constants/detect_method.dart';
 import 'exif_info.dart';
+import 'plate_solve_queue.dart';
 import 'plate_solve_result.dart';
 
 /// 천체 촬영 기록 모델.
@@ -28,6 +29,8 @@ class ShootingRecord {
     this.backendRevision,
     this.backendFileId,
     this.commonFileId,
+    this.plateSolveQueueStatus,
+    this.plateSolveJobId,
     this.thumbnailUrl,
     this.previewUrl,
     this.originalUrl,
@@ -73,6 +76,8 @@ class ShootingRecord {
   /// into the V1 shooting_records table.
   final String? backendFileId;
   final int? commonFileId;
+  final PlateSolveQueueStatus? plateSolveQueueStatus;
+  final String? plateSolveJobId;
   final String? backendRecordId;
   final int? backendRevision;
   final String? thumbnailUrl;
@@ -177,6 +182,8 @@ class ShootingRecord {
     int? backendRevision,
     String? backendFileId,
     int? commonFileId,
+    PlateSolveQueueStatus? plateSolveQueueStatus,
+    String? plateSolveJobId,
     String? thumbnailUrl,
     String? previewUrl,
     String? originalUrl,
@@ -203,6 +210,9 @@ class ShootingRecord {
       backendRevision: backendRevision ?? this.backendRevision,
       backendFileId: backendFileId ?? this.backendFileId,
       commonFileId: commonFileId ?? this.commonFileId,
+      plateSolveQueueStatus:
+          plateSolveQueueStatus ?? this.plateSolveQueueStatus,
+      plateSolveJobId: plateSolveJobId ?? this.plateSolveJobId,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       previewUrl: previewUrl ?? this.previewUrl,
       originalUrl: originalUrl ?? this.originalUrl,

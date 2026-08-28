@@ -4,6 +4,7 @@ import '../../services/tc_backend_settings_service.dart';
 import '../datasources/gallery_cache_local_datasource.dart';
 import '../datasources/remote_gallery_datasource.dart';
 import '../models/gallery_item.dart';
+import '../models/plate_solve_queue.dart';
 import 'gallery_repository.dart';
 import '../../services/tc_backend_auth_service.dart';
 
@@ -77,8 +78,24 @@ class HybridGalleryRepository implements GalleryRepository {
     try {
       final syncedAt = _now();
       final fetched = await _remoteFactory(baseUrl).getGallery();
+      final cachedByRecordId = {
+        for (final item in cachedItems) item.backendRecordId: item,
+      };
       final synced = fetched
-          .map((item) => item.copyWith(syncedAt: syncedAt))
+          .map(
+            (item) => item.copyWith(
+              syncedAt: syncedAt,
+              plateSolveStatus:
+                  item.plateSolveStatus ??
+                  cachedByRecordId[item.backendRecordId]?.plateSolveStatus,
+              plateSolveJobId:
+                  item.plateSolveJobId ??
+                  cachedByRecordId[item.backendRecordId]?.plateSolveJobId,
+              plateSolve:
+                  item.plateSolve ??
+                  cachedByRecordId[item.backendRecordId]?.plateSolve,
+            ),
+          )
           .toList(growable: false);
       await _write(key, synced.map((item) => item.toJson()).toList());
       return GallerySnapshot(
@@ -114,13 +131,19 @@ class HybridGalleryRepository implements GalleryRepository {
     // SHA-256 `file_id`. Do not let a fresh but incomplete cache prevent the
     // remote detail datasource from recovering the canonical record `file_id`.
     if (!forceRefresh &&
-        cachedItem?.commonFileId != null &&
+        _isDetailHydrated(cachedItem) &&
         _isFresh(cached, detailTtl)) {
       return cachedItem;
     }
     try {
       final fetched = await _remoteFactory(baseUrl).getDetail(backendRecordId);
-      final synced = fetched.copyWith(syncedAt: _now());
+      final synced = fetched.copyWith(
+        syncedAt: _now(),
+        plateSolveStatus:
+            fetched.plateSolveStatus ?? cachedItem?.plateSolveStatus,
+        plateSolveJobId: fetched.plateSolveJobId ?? cachedItem?.plateSolveJobId,
+        plateSolve: fetched.plateSolve ?? cachedItem?.plateSolve,
+      );
       await _write(key, synced.toJson());
       return synced;
     } on RemoteGalleryException {
@@ -262,14 +285,21 @@ class HybridGalleryRepository implements GalleryRepository {
     final updated = current.map((existing) {
       if (existing.backendRecordId != item.backendRecordId) return existing;
       replaced = true;
-      return synced;
+      return synced.copyWith(
+        plateSolveJobId: synced.plateSolveJobId ?? existing.plateSolveJobId,
+        plateSolve: synced.plateSolve ?? existing.plateSolve,
+      );
     }).toList();
     if (!replaced) updated.add(synced);
     await _write(listKey, updated.map((entry) => entry.toJson()).toList());
-    await _write(
-      'astro:gallery:detail:${item.backendRecordId}',
-      synced.toJson(),
+    final detailKey = 'astro:gallery:detail:${item.backendRecordId}';
+    final existingDetail = _cachedItem(await _cache.read(detailKey));
+    final mergedDetail = synced.copyWith(
+      plateSolveJobId:
+          synced.plateSolveJobId ?? existingDetail?.plateSolveJobId,
+      plateSolve: synced.plateSolve ?? existingDetail?.plateSolve,
     );
+    await _write(detailKey, mergedDetail.toJson());
     return true;
   }
 
@@ -319,6 +349,14 @@ class HybridGalleryRepository implements GalleryRepository {
 
   bool _isFresh(GalleryCacheEntry? entry, Duration ttl) =>
       entry != null && _now().difference(entry.cachedAt) <= ttl;
+
+  bool _isDetailHydrated(GalleryItem? item) {
+    if (item?.commonFileId == null) return false;
+    final status = item!.plateSolveStatus;
+    if (status == null) return true;
+    if (item.plateSolveJobId == null) return false;
+    return status != PlateSolveQueueStatus.completed || item.plateSolve != null;
+  }
 
   List<GalleryItem> _cachedItems(GalleryCacheEntry? entry) {
     if (entry == null) return const [];
