@@ -7,7 +7,8 @@ import '../database/app_database.dart';
 import '../models/sync_outbox_item.dart';
 import 'sync_outbox_repository.dart';
 
-class SyncOutboxRepositoryImpl implements SyncOutboxRepository {
+class SyncOutboxRepositoryImpl
+    implements SyncOutboxRepository, PhotoSyncOutboxRepository {
   SyncOutboxRepositoryImpl({this.database});
 
   final Database? database;
@@ -130,10 +131,51 @@ class SyncOutboxRepositoryImpl implements SyncOutboxRepository {
     final db = await _db;
     await db.update(DatabaseConstants.tableSyncOutbox, {
       'state': 'QUEUED',
+      'retry_count': 0,
       'next_retry_at': null,
       'last_error': null,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     }, where: "state='FAILED'");
+  }
+
+  @override
+  Future<SyncOutboxItem?> findPhotoUpload(String localRecordId) async {
+    final db = await _db;
+    final rows = await db.query(
+      DatabaseConstants.tableSyncOutbox,
+      where:
+          "operation_type='PHOTO_UPLOAD_AND_RECORD' AND local_record_id=? AND state!='CANCELLED'",
+      whereArgs: [localRecordId],
+      orderBy: 'created_at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : SyncOutboxItem.fromMap(rows.single);
+  }
+
+  @override
+  Future<SyncOutboxItem?> retryFailedItem(String operationId) async {
+    final db = await _db;
+    final updated = await db.update(
+      DatabaseConstants.tableSyncOutbox,
+      {
+        'state': 'QUEUED',
+        'retry_count': 0,
+        'next_retry_at': null,
+        'last_error': null,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      where:
+          "operation_id=? AND operation_type='PHOTO_UPLOAD_AND_RECORD' AND state='FAILED'",
+      whereArgs: [operationId],
+    );
+    if (updated == 0) return null;
+    final rows = await db.query(
+      DatabaseConstants.tableSyncOutbox,
+      where: 'operation_id=?',
+      whereArgs: [operationId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : SyncOutboxItem.fromMap(rows.single);
   }
 
   @override

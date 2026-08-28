@@ -58,7 +58,7 @@ abstract class TcBackendUploadStages {
     required String clientFileId,
     TcBackendUploadMetadata? metadata,
   });
-  Future<UploadJobResult> pollUploadJob(String uploadJobId);
+  Future<UploadJobResult> getUploadJobStatus(String uploadJobId);
   Future<ObservationRecordResult> createObservationRecord(
     ShootingRecord record,
     int commonFileId, {
@@ -126,6 +126,20 @@ class TcBackendUploadService implements TcBackendUploadStages {
   }
 
   @override
+  Future<UploadJobResult> getUploadJobStatus(String uploadJobId) async {
+    final settings = await settingsService.load();
+    final base = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
+    if (!settings.enabled || base == null) {
+      throw const _UploadException(
+        BackendUploadErrorType.notConfigured,
+        'TC-Backend is not configured.',
+      );
+    }
+    return _getUploadJobStatus(base, uploadJobId);
+  }
+
+  /// Legacy all-in-one compatibility API. Durable outbox synchronization uses
+  /// [getUploadJobStatus] so a server-side WAITING job never blocks the app.
   Future<UploadJobResult> pollUploadJob(String uploadJobId) async {
     final settings = await settingsService.load();
     final base = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);

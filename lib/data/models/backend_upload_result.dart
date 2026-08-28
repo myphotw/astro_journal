@@ -62,8 +62,7 @@ extension BackendUploadErrorRetryPolicy on BackendUploadErrorType {
   bool get isRetryable => switch (this) {
     BackendUploadErrorType.network ||
     BackendUploadErrorType.timeout ||
-    BackendUploadErrorType.http5xx ||
-    BackendUploadErrorType.jobFailed => true,
+    BackendUploadErrorType.http5xx => true,
     _ => false,
   };
 }

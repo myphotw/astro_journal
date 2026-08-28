@@ -180,6 +180,7 @@ class AppProviders {
       catalogCaptureReconciler: (catalogObjectId) => catalogCaptureProjection
           .reconcileObject(catalogObjectId, includeRemote: false),
       syncGate: syncGate,
+      scheduleDrain: scheduleTcBackendDrainWithTimer,
     );
     final syncCheckpoints = GalleryCacheSyncCheckpointDataSource(galleryCache);
     late Future<void> Function() refreshAfterPull;
@@ -415,9 +416,7 @@ class AppProviders {
       ChangeNotifierProvider.value(value: appNavigationNotifier),
       ChangeNotifierProvider.value(value: mainBackNavigationViewModel),
       Provider<BortleRepository>.value(value: bortleRepository),
-      Provider<AstronomyEventRepository>.value(
-        value: astronomyEventRepository,
-      ),
+      Provider<AstronomyEventRepository>.value(value: astronomyEventRepository),
       Provider<CatalogRepository>.value(value: catalogRepository),
       Provider<EquipmentRepository>.value(value: equipmentRepository),
       Provider<ShootingRecordRepository>.value(value: shootingRecordRepository),

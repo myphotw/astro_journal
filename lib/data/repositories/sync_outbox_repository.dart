@@ -33,3 +33,8 @@ abstract class SyncOutboxRepository {
   Future<void> cancelPendingUpload(String localRecordId);
   Future<void> rebaseQueuedRecordPatches(String backendRecordId, int revision);
 }
+
+abstract interface class PhotoSyncOutboxRepository {
+  Future<SyncOutboxItem?> findPhotoUpload(String localRecordId);
+  Future<SyncOutboxItem?> retryFailedItem(String operationId);
+}

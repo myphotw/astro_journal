@@ -13,12 +13,17 @@ import '../../../data/models/observation_site.dart';
 import '../../../data/models/plate_solve_queue.dart';
 import '../../../data/models/plate_solve_result.dart';
 import '../../../data/models/shooting_record.dart';
+import '../../../data/models/sync_outbox_item.dart';
 import '../../../data/repositories/observation_site_repository.dart';
+import '../../../data/repositories/sync_outbox_repository.dart';
+import '../../../services/app_logger.dart';
 import '../../../services/google_maps_key_readiness.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/metadata_field_trace.dart';
 import '../../../services/metadata_format.dart';
 import '../../../services/photo_overlay_service.dart';
+import '../../../services/tc_backend_pull_sync_coordinator.dart';
+import '../../../services/tc_backend_sync_coordinator.dart';
 import '../../../shared/widgets/integration_minutes_field.dart';
 import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/material_date_time_picker_field.dart';
@@ -46,6 +51,14 @@ class GalleryDetailScreen extends StatefulWidget {
     required ShootingRecord record,
   }) async {
     final galleryViewModel = context.read<GalleryViewModel>();
+    final syncCoordinator = context.read<TcBackendSyncCoordinator?>();
+    final pullSyncCoordinator = context.read<TcBackendPullSyncCoordinator?>();
+    try {
+      await syncCoordinator?.refreshPhoto(record.id);
+      await pullSyncCoordinator?.drain();
+    } catch (error, stackTrace) {
+      AppLogger.error('GalleryDetail.Refresh', error, stackTrace);
+    }
     final detailedRecord = await galleryViewModel.loadDetailRecord(record);
     if (!context.mounted) return;
     final hydratedRecords = records
@@ -852,10 +865,108 @@ class _ViewBody extends StatelessWidget {
 // ── Plate Solve (WCS) ────────────────────────────────────────────────────────
 
 @visibleForTesting
-class GalleryPlateSolveSection extends StatelessWidget {
+enum GalleryNasSyncStatus { local, waiting, processing, completed, failed }
+
+@visibleForTesting
+GalleryNasSyncStatus galleryNasSyncStatus(
+  ShootingRecord record,
+  SyncOutboxItem? item,
+) {
+  if (item == null) {
+    return record.backendRecordId != null ||
+            record.syncState?.toUpperCase() == 'SYNCED'
+        ? GalleryNasSyncStatus.completed
+        : GalleryNasSyncStatus.local;
+  }
+  return switch (item.state) {
+    SyncOutboxState.queued => GalleryNasSyncStatus.waiting,
+    SyncOutboxState.uploading ||
+    SyncOutboxState.processing => GalleryNasSyncStatus.processing,
+    SyncOutboxState.recordCreating ||
+    SyncOutboxState.synced => GalleryNasSyncStatus.completed,
+    SyncOutboxState.failed => GalleryNasSyncStatus.failed,
+    SyncOutboxState.cancelled => GalleryNasSyncStatus.local,
+  };
+}
+
+@visibleForTesting
+String? gallerySyncFailureReason(String? storedError) {
+  final type = storedError?.split('|').first;
+  return switch (type) {
+    'network' ||
+    'unreachable' ||
+    'timeout' ||
+    'jobTimeout' ||
+    'http5xx' => '서버 연결 실패',
+    'jobFailed' || 'uploadRejected' => '업로드 처리 실패',
+    'recordCreateFailed' => '서버 등록 실패',
+    'malformedResponse' => '파일 처리 실패',
+    null || '' => null,
+    _ => '동기화 실패',
+  };
+}
+
+@visibleForTesting
+class GalleryPlateSolveSection extends StatefulWidget {
   const GalleryPlateSolveSection({super.key, required this.record});
 
   final ShootingRecord record;
+
+  @override
+  State<GalleryPlateSolveSection> createState() =>
+      _GalleryPlateSolveSectionState();
+}
+
+class _GalleryPlateSolveSectionState extends State<GalleryPlateSolveSection> {
+  PhotoSyncOutboxRepository? _outbox;
+  TcBackendSyncCoordinator? _syncCoordinator;
+  Future<SyncOutboxItem?>? _syncItem;
+  bool _dependenciesReady = false;
+  bool _retryingSync = false;
+  String? _syncRetryError;
+
+  ShootingRecord get record => widget.record;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_dependenciesReady) return;
+    _dependenciesReady = true;
+    final outbox = context.read<SyncOutboxRepository?>();
+    _outbox = outbox is PhotoSyncOutboxRepository
+        ? outbox as PhotoSyncOutboxRepository
+        : null;
+    _syncCoordinator = context.read<TcBackendSyncCoordinator?>();
+    _reloadSyncItem();
+  }
+
+  void _reloadSyncItem() {
+    _syncItem =
+        _outbox?.findPhotoUpload(record.id) ??
+        Future<SyncOutboxItem?>.value(null);
+  }
+
+  Future<void> _retrySync(SyncOutboxItem item) async {
+    final coordinator = _syncCoordinator;
+    if (coordinator == null || _retryingSync) return;
+    setState(() {
+      _retryingSync = true;
+      _syncRetryError = null;
+    });
+    try {
+      await coordinator.retryFailedItem(item.operationId);
+    } catch (error, stackTrace) {
+      AppLogger.error('GallerySyncRetry', error, stackTrace);
+      _syncRetryError = '동기화 재시도 요청에 실패했습니다.';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _retryingSync = false;
+          _reloadSyncItem();
+        });
+      }
+    }
+  }
 
   String _formatDateTime(DateTime dt) {
     String p(int n) => n.toString().padLeft(2, '0');
@@ -893,7 +1004,7 @@ class GalleryPlateSolveSection extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'Plate Solve (WCS)',
+                '서버 처리 · Plate Solve (WCS)',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: AppColors.textSecondary,
                   letterSpacing: 0.5,
@@ -902,6 +1013,21 @@ class GalleryPlateSolveSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
+          FutureBuilder<SyncOutboxItem?>(
+            future: _syncItem,
+            builder: (context, snapshot) => _NasSyncStatusBody(
+              record: currentRecord,
+              item: snapshot.data,
+              loading: snapshot.connectionState == ConnectionState.waiting,
+              retrying: _retryingSync,
+              retryError: _syncRetryError,
+              canRetry: _syncCoordinator != null,
+              onRetry: snapshot.data == null
+                  ? null
+                  : () => unawaited(_retrySync(snapshot.data!)),
+            ),
+          ),
+          const Divider(height: 20),
           if (queueStatus == PlateSolveQueueStatus.waiting)
             const _PlateSolveQueueMessage(
               key: Key('plate-solve-waiting'),
@@ -943,6 +1069,108 @@ class GalleryPlateSolveSection extends StatelessWidget {
             const _PlateSolveIdleBody(),
         ],
       ),
+    );
+  }
+}
+
+class _NasSyncStatusBody extends StatelessWidget {
+  const _NasSyncStatusBody({
+    required this.record,
+    required this.item,
+    required this.loading,
+    required this.retrying,
+    required this.canRetry,
+    required this.onRetry,
+    this.retryError,
+  });
+
+  final ShootingRecord record;
+  final SyncOutboxItem? item;
+  final bool loading;
+  final bool retrying;
+  final bool canRetry;
+  final VoidCallback? onRetry;
+  final String? retryError;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = galleryNasSyncStatus(record, item);
+    final failureReason = gallerySyncFailureReason(item?.lastError);
+    final label = switch (status) {
+      GalleryNasSyncStatus.local => '로컬 등록',
+      GalleryNasSyncStatus.waiting => 'NAS 동기화 대기',
+      GalleryNasSyncStatus.processing => 'NAS 동기화 중',
+      GalleryNasSyncStatus.completed => 'NAS 동기화 완료',
+      GalleryNasSyncStatus.failed => '동기화 실패',
+    };
+    final color = status == GalleryNasSyncStatus.failed
+        ? Colors.redAccent
+        : AppColors.messier;
+    return Column(
+      key: const Key('nas-sync-status'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const SizedBox(
+              width: 92,
+              child: Text(
+                'NAS 동기화',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
+            if (loading || retrying) ...[
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                retrying ? '동기화 재시도 중…' : label,
+                style: TextStyle(color: color, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        if (status == GalleryNasSyncStatus.failed && !retrying) ...[
+          if (failureReason != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              failureReason,
+              key: const Key('nas-sync-failure-reason'),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          if (canRetry) ...[
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              key: const Key('nas-sync-retry-button'),
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('이 사진 동기화 재시도'),
+            ),
+          ],
+        ],
+        if (retryError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            retryError!,
+            key: const Key('nas-sync-retry-error'),
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -1144,6 +1372,12 @@ class _PlateSolveIdleBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const _PlateSolveQueueMessage(
+          key: Key('plate-solve-pending'),
+          icon: Icons.schedule,
+          message: 'Plate Solve 대기',
+        ),
+        const SizedBox(height: 4),
         const Text(
           '사진 등록 후 서버에서 Plate Solve를 자동 처리합니다.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),

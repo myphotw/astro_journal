@@ -38,7 +38,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('천문 이벤트'), findsOne);
-    expect(find.byType(AstronomyEventCard), findsNWidgets(5));
+    expect(viewModel.events, hasLength(5));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('astronomy-event-event-4')),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.byKey(const Key('astronomy-event-event-4')), findsOneWidget);
     expect(repository.calls, 1);
   });
 

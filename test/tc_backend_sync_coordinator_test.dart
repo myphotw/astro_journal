@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:astro_journal/data/models/backend_upload_result.dart';
@@ -93,7 +96,7 @@ void main() {
       upload,
     ).drain();
     expect(upload.startCalls, 0);
-    expect(upload.pollCalls, 1);
+    expect(upload.statusCalls, 1);
     expect(upload.recordCalls, 1);
     expect(upload.commonFileId, 178);
     expect(outbox.markedBackendFileId, 'file');
@@ -107,6 +110,250 @@ void main() {
     );
     expect(outbox.synced, isTrue);
   });
+
+  test(
+    'COMPLETED common_file_id is posted as numeric Observation file_id',
+    () async {
+      final requests = <http.Request>[];
+      final service = TcBackendUploadService(
+        settingsService: settings,
+        client: MockClient((request) async {
+          requests.add(request);
+          if (request.method == 'GET') {
+            return http.Response(
+              jsonEncode({
+                'status': 'COMPLETED',
+                'backend_file_id': 'sha-256-file-id',
+                'common_file_id': 2014,
+              }),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({'record_id': 'observation-1', 'revision': 1}),
+            201,
+          );
+        }),
+      );
+      final outbox = _FakeOutbox(
+        item(state: SyncOutboxState.processing, jobId: 'upload-job-uuid'),
+      );
+
+      await TcBackendSyncCoordinator(
+        outbox,
+        _FakeRecords(record),
+        settings,
+        service,
+      ).drain();
+
+      expect(requests.map((request) => request.method), ['GET', 'POST']);
+      expect(requests.last.url.path, '/api/astro/records');
+      final payload = jsonDecode(requests.last.body) as Map<String, dynamic>;
+      expect(payload['file_id'], 2014);
+      expect(payload['file_id'], isA<int>());
+      expect(payload['file_id'], isNot('sha-256-file-id'));
+      expect(payload['file_id'], isNot('upload-job-uuid'));
+      expect(outbox.synced, isTrue);
+    },
+  );
+
+  test(
+    'WAITING schedules a single-shot recheck that completes record',
+    () async {
+      var now = DateTime.utc(2026);
+      Duration? scheduledDelay;
+      Future<void> Function()? scheduledCallback;
+      final outbox = _FakeOutbox(
+        item(state: SyncOutboxState.processing, jobId: 'job'),
+      );
+      final upload = _FakeStages(
+        jobStatuses: const [
+          TcBackendUploadJobStatus.waiting,
+          TcBackendUploadJobStatus.completed,
+        ],
+      );
+      final coordinator = TcBackendSyncCoordinator(
+        outbox,
+        _FakeRecords(record),
+        settings,
+        upload,
+        now: () => now,
+        scheduleDrain: (delay, callback) {
+          scheduledDelay = delay;
+          scheduledCallback = callback;
+        },
+      );
+
+      await coordinator.drain();
+
+      expect(upload.statusCalls, 1);
+      expect(upload.recordCalls, 0);
+      expect(outbox.lastState, SyncOutboxState.queued);
+      expect(scheduledDelay, const Duration(seconds: 15));
+
+      now = now.add(scheduledDelay!);
+      await scheduledCallback!();
+
+      expect(upload.statusCalls, 2);
+      expect(upload.recordCalls, 1);
+      expect(upload.commonFileId, 178);
+      expect(outbox.synced, isTrue);
+    },
+  );
+
+  test(
+    'server WAITING remains queued and is not classified as failed',
+    () async {
+      final outbox = _FakeOutbox(
+        item(state: SyncOutboxState.processing, jobId: 'job'),
+      );
+      final upload = _FakeStages(jobStatus: TcBackendUploadJobStatus.waiting);
+
+      await TcBackendSyncCoordinator(
+        outbox,
+        _FakeRecords(record),
+        settings,
+        upload,
+      ).drain();
+
+      expect(outbox.lastState, SyncOutboxState.queued);
+      expect(outbox.lastError, isNull);
+      expect(upload.recordCalls, 0);
+    },
+  );
+
+  test('server PROCESSING remains processing', () async {
+    final outbox = _FakeOutbox(
+      item(state: SyncOutboxState.queued, jobId: 'job'),
+    );
+    final upload = _FakeStages(jobStatus: TcBackendUploadJobStatus.processing);
+
+    await TcBackendSyncCoordinator(
+      outbox,
+      _FakeRecords(record),
+      settings,
+      upload,
+    ).drain();
+
+    expect(outbox.lastState, SyncOutboxState.processing);
+    expect(outbox.lastError, isNull);
+    expect(outbox.nextRetryAt, isNotNull);
+    expect(upload.recordCalls, 0);
+  });
+
+  test(
+    'duplicate completed drains do not duplicate Observation create',
+    () async {
+      final outbox = _FakeOutbox(
+        item(state: SyncOutboxState.processing, jobId: 'job'),
+      );
+      final upload = _FakeStages();
+      final coordinator = TcBackendSyncCoordinator(
+        outbox,
+        _FakeRecords(record),
+        settings,
+        upload,
+      );
+
+      await coordinator.drain();
+      await coordinator.drain();
+
+      expect(upload.statusCalls, 1);
+      expect(upload.recordCalls, 1);
+      expect(outbox.synced, isTrue);
+    },
+  );
+
+  test('photo detail refresh checks only the persisted job once', () async {
+    final outbox = _FakeOutbox(
+      item(state: SyncOutboxState.queued, jobId: 'job'),
+    );
+    final upload = _FakeStages(jobStatus: TcBackendUploadJobStatus.waiting);
+    final coordinator = TcBackendSyncCoordinator(
+      outbox,
+      _FakeRecords(record),
+      settings,
+      upload,
+    );
+
+    await coordinator.refreshPhoto(record.id);
+
+    expect(upload.startCalls, 0);
+    expect(upload.statusCalls, 1);
+    expect(outbox.lastState, SyncOutboxState.queued);
+  });
+
+  test('server FAILED is a durable actual failure', () async {
+    final outbox = _FakeOutbox(
+      item(state: SyncOutboxState.processing, jobId: 'job'),
+    );
+    final upload = _FakeStages(
+      jobStatus: TcBackendUploadJobStatus.failed,
+      jobError: 'worker failed at /internal/path',
+    );
+
+    await TcBackendSyncCoordinator(
+      outbox,
+      _FakeRecords(record),
+      settings,
+      upload,
+    ).drain();
+
+    expect(outbox.lastState, SyncOutboxState.failed);
+    expect(outbox.lastError, startsWith('jobFailed|'));
+    expect(outbox.nextRetryAt, isNull);
+    expect(upload.recordCalls, 0);
+  });
+
+  test('per-photo retry preserves the persistent upload job id', () async {
+    final failed = item(
+      state: SyncOutboxState.failed,
+      jobId: 'persistent-job',
+      retryCount: 4,
+      error: 'jobFailed|worker failed',
+    );
+    final outbox = _FakeOutbox(failed);
+    final upload = _FakeStages();
+    final coordinator = TcBackendSyncCoordinator(
+      outbox,
+      _FakeRecords(record),
+      settings,
+      upload,
+    );
+
+    await coordinator.retryFailedItem(failed.operationId);
+
+    expect(outbox.itemRetryCalls, 1);
+    expect(upload.startCalls, 0);
+    expect(upload.statusCalls, 1);
+    expect(upload.recordCalls, 1);
+    expect(outbox.synced, isTrue);
+  });
+
+  test(
+    'legacy polling timeout with job id recovers through one status check',
+    () async {
+      final outbox = _FakeOutbox(
+        item(
+          state: SyncOutboxState.failed,
+          jobId: 'job',
+          retryCount: 4,
+          error: 'jobTimeout|Upload job timed out.',
+        ),
+      );
+      final upload = _FakeStages(jobStatus: TcBackendUploadJobStatus.waiting);
+
+      await TcBackendSyncCoordinator(
+        outbox,
+        _FakeRecords(record),
+        settings,
+        upload,
+      ).drain();
+
+      expect(upload.statusCalls, 1);
+      expect(outbox.lastState, SyncOutboxState.queued);
+    },
+  );
 
   test(
     'app restart restores common_file_id without upload or polling',
@@ -127,7 +374,7 @@ void main() {
         upload,
       ).drain();
       expect(upload.startCalls, 0);
-      expect(upload.pollCalls, 0);
+      expect(upload.statusCalls, 0);
       expect(upload.recordCalls, 1);
       expect(upload.commonFileId, 178);
     },
@@ -207,6 +454,40 @@ void main() {
 
     expect(stages.clientRecordIds, ['client-record-id', 'client-record-id']);
     expect(stages.commonFileIds, [178, 178]);
+  });
+
+  test('transient record POST failure is scheduled and retried', () async {
+    var now = DateTime.utc(2026);
+    Future<void> Function()? scheduledCallback;
+    final outbox = _FakeOutbox(
+      item(
+        state: SyncOutboxState.recordCreating,
+        fileId: 'logical-file',
+        payload: const {'common_file_id': 178},
+      ),
+    );
+    final stages = _ReplayRecordStages();
+    final coordinator = TcBackendSyncCoordinator(
+      outbox,
+      _FakeRecords(record),
+      settings,
+      stages,
+      now: () => now,
+      scheduleDrain: (_, callback) => scheduledCallback = callback,
+    );
+
+    await coordinator.drain();
+
+    expect(outbox.lastState, SyncOutboxState.queued);
+    expect(outbox.nextRetryAt, now.add(const Duration(seconds: 5)));
+    expect(scheduledCallback, isNotNull);
+
+    now = now.add(const Duration(seconds: 5));
+    await scheduledCallback!();
+
+    expect(stages.clientRecordIds, ['client-record-id', 'client-record-id']);
+    expect(stages.commonFileIds, [178, 178]);
+    expect(outbox.synced, isTrue);
   });
 
   test('missing common_file_id never sends an ObservationRecord', () async {
@@ -329,7 +610,12 @@ void main() {
         now: () => DateTime.utc(2026),
       ).drain();
 
-      expect(outbox.lastState, SyncOutboxState.failed);
+      expect(
+        outbox.lastState,
+        scenario.type == BackendUploadErrorType.http5xx
+            ? SyncOutboxState.queued
+            : SyncOutboxState.failed,
+      );
       expect(
         outbox.nextRetryAt != null,
         scenario.type == BackendUploadErrorType.http5xx,
@@ -368,7 +654,10 @@ void main() {
           upload,
           now: () => DateTime.utc(2026),
         ).drain();
-        expect(outbox.lastState, SyncOutboxState.failed);
+        expect(
+          outbox.lastState,
+          entry.value ? SyncOutboxState.queued : SyncOutboxState.failed,
+        );
         expect(outbox.lastError, startsWith('${entry.key.name}|'));
         expect(outbox.nextRetryAt != null, entry.value);
         expect(outbox.patches.any((p) => p['retry_count'] == 1), isTrue);
@@ -395,20 +684,28 @@ void main() {
   });
 }
 
-class _FakeOutbox implements SyncOutboxRepository {
+class _FakeOutbox implements SyncOutboxRepository, PhotoSyncOutboxRepository {
   _FakeOutbox(this.item);
-  final SyncOutboxItem item;
+  SyncOutboxItem item;
   final List<Map<String, Object?>> patches = [];
   SyncOutboxState? lastState;
   String? lastError;
   DateTime? nextRetryAt;
   bool synced = false;
   String? markedBackendFileId;
+  int itemRetryCalls = 0;
   @override
-  Future<List<SyncOutboxItem>> listPending() async => [item];
+  Future<List<SyncOutboxItem>> listPending() async =>
+      item.state == SyncOutboxState.synced ||
+          item.state == SyncOutboxState.cancelled
+      ? []
+      : [item];
   @override
-  Future<void> patch(String id, Map<String, Object?> values) async =>
-      patches.add(values);
+  Future<void> patch(String id, Map<String, Object?> values) async {
+    patches.add(values);
+    _replace(values);
+  }
+
   @override
   Future<void> updateState(
     String id,
@@ -419,6 +716,11 @@ class _FakeOutbox implements SyncOutboxRepository {
     lastState = state;
     lastError = error;
     this.nextRetryAt = nextRetryAt;
+    _replace({
+      'state': state.name.toUpperCase(),
+      'last_error': error,
+      'next_retry_at': nextRetryAt?.toUtc().toIso8601String(),
+    });
   }
 
   @override
@@ -431,10 +733,43 @@ class _FakeOutbox implements SyncOutboxRepository {
     synced = true;
     markedBackendFileId = backendFileId;
     lastState = SyncOutboxState.synced;
+    _replace({
+      'state': 'SYNCED',
+      'backend_file_id': backendFileId,
+      'backend_record_id': backendRecordId,
+      'upload_job_id': uploadJobId,
+    });
   }
 
   @override
   Future<void> retryAllFailed() async {}
+
+  @override
+  Future<SyncOutboxItem?> findPhotoUpload(String localRecordId) async =>
+      item.localRecordId == localRecordId ? item : null;
+
+  @override
+  Future<SyncOutboxItem?> retryFailedItem(String operationId) async {
+    itemRetryCalls++;
+    if (item.operationId != operationId ||
+        item.state != SyncOutboxState.failed) {
+      return null;
+    }
+    _replace({
+      'state': 'QUEUED',
+      'retry_count': 0,
+      'next_retry_at': null,
+      'last_error': null,
+    });
+    return item;
+  }
+
+  void _replace(Map<String, Object?> values) {
+    final map = item.toMap()..addAll(values);
+    if (item.id != null) map['id'] = item.id;
+    item = SyncOutboxItem.fromMap(map);
+  }
+
   @override
   Future<void> create(SyncOutboxItem item) async {}
   @override
@@ -474,10 +809,19 @@ class _FakeRecords implements ShootingRecordRepository {
 }
 
 class _FakeStages implements TcBackendUploadStages {
-  _FakeStages({this.error, this.startGate});
+  _FakeStages({
+    this.error,
+    this.startGate,
+    this.jobStatus = TcBackendUploadJobStatus.completed,
+    this.jobError,
+    this.jobStatuses,
+  });
   final TcBackendUploadException? error;
   final Completer<UploadStartResult>? startGate;
-  int startCalls = 0, pollCalls = 0, recordCalls = 0;
+  final TcBackendUploadJobStatus jobStatus;
+  final String? jobError;
+  final List<TcBackendUploadJobStatus>? jobStatuses;
+  int startCalls = 0, statusCalls = 0, recordCalls = 0;
   String? clientFileId;
   String? clientRecordId;
   int? commonFileId;
@@ -496,14 +840,23 @@ class _FakeStages implements TcBackendUploadStages {
   }
 
   @override
-  Future<UploadJobResult> pollUploadJob(String id) async {
-    pollCalls++;
+  Future<UploadJobResult> getUploadJobStatus(String id) async {
+    statusCalls++;
     if (error != null) throw error!;
+    final statuses = jobStatuses;
+    final currentStatus = statuses == null
+        ? jobStatus
+        : statuses[(statusCalls - 1).clamp(0, statuses.length - 1)];
     return UploadJobResult(
       uploadJobId: id,
-      status: TcBackendUploadJobStatus.completed,
-      backendFileId: 'file',
-      commonFileId: 178,
+      status: currentStatus,
+      backendFileId: currentStatus == TcBackendUploadJobStatus.completed
+          ? 'file'
+          : null,
+      commonFileId: currentStatus == TcBackendUploadJobStatus.completed
+          ? 178
+          : null,
+      errorMessage: jobError,
     );
   }
 
@@ -587,7 +940,7 @@ class _ReplayRecordStages implements TcBackendUploadStages {
   }
 
   @override
-  Future<UploadJobResult> pollUploadJob(String uploadJobId) =>
+  Future<UploadJobResult> getUploadJobStatus(String uploadJobId) =>
       throw StateError('poll must not run');
 
   @override

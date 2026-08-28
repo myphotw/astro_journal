@@ -13,10 +13,12 @@ import 'package:astro_journal/data/models/plate_solve_result.dart';
 import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:astro_journal/data/models/photo_object.dart';
 import 'package:astro_journal/data/models/shooting_record.dart';
+import 'package:astro_journal/data/models/sync_outbox_item.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/data/repositories/photo_object_repository.dart';
 import 'package:astro_journal/data/repositories/shooting_record_repository.dart';
+import 'package:astro_journal/data/repositories/sync_outbox_repository.dart';
 import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart';
 import 'package:astro_journal/features/gallery/viewmodel/plate_solve_view_model.dart';
 import 'package:astro_journal/features/gallery/view/gallery_detail_screen.dart';
@@ -28,7 +30,6 @@ import 'package:astro_journal/services/plate_solve_settings_service.dart';
 import 'package:astro_journal/services/tc_backend_external_api_client.dart';
 import 'package:astro_journal/services/tc_backend_plate_solve_service.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -501,6 +502,111 @@ void main() {
       },
     );
 
+    testWidgets('photo detail shows NAS WAITING separately from Plate Solve', (
+      tester,
+    ) async {
+      final record = ShootingRecord(
+        id: 'nas-waiting-photo',
+        celestialObjectId: 'M31',
+        capturedAt: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        photoUri: '/waiting.jpg',
+        plateSolveQueueStatus: PlateSolveQueueStatus.waiting,
+      );
+      shootingRecordRepository.items[record.id] = record;
+      await galleryViewModel.load();
+      final plateSolveViewModel = buildViewModel(
+        provider: _RecordingPlateSolveProvider(
+          PlateSolveResult.failure(errorMessage: 'unused'),
+        ),
+      );
+      final outbox = _PhotoStatusOutbox(
+        SyncOutboxItem(
+          operationId: 'upload-1',
+          localRecordId: record.id,
+          clientFileId: 'client-file',
+          clientRecordId: 'client-record',
+          uploadJobId: 'job-1',
+          payload: const {},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(
+              value: galleryViewModel,
+            ),
+            ChangeNotifierProvider<PlateSolveViewModel>.value(
+              value: plateSolveViewModel,
+            ),
+            Provider<SyncOutboxRepository>.value(value: outbox),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: GalleryPlateSolveSection(record: record)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('NAS 동기화 대기'), findsOneWidget);
+      expect(find.text('Plate Solve 대기'), findsOneWidget);
+      expect(find.text('동기화 실패'), findsNothing);
+    });
+
+    testWidgets('photo detail summarizes sync failure without raw details', (
+      tester,
+    ) async {
+      final record = ShootingRecord(
+        id: 'nas-failed-photo',
+        celestialObjectId: 'M31',
+        capturedAt: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        photoUri: '/failed.jpg',
+      );
+      shootingRecordRepository.items[record.id] = record;
+      await galleryViewModel.load();
+      final plateSolveViewModel = buildViewModel(
+        provider: _RecordingPlateSolveProvider(
+          PlateSolveResult.failure(errorMessage: 'unused'),
+        ),
+      );
+      final outbox = _PhotoStatusOutbox(
+        SyncOutboxItem(
+          operationId: 'upload-failed',
+          localRecordId: record.id,
+          clientFileId: 'client-file',
+          clientRecordId: 'client-record',
+          uploadJobId: 'job-1',
+          state: SyncOutboxState.failed,
+          lastError: 'jobFailed|worker failed at C:\\server\\secret',
+          payload: const {},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(
+              value: galleryViewModel,
+            ),
+            ChangeNotifierProvider<PlateSolveViewModel>.value(
+              value: plateSolveViewModel,
+            ),
+            Provider<SyncOutboxRepository>.value(value: outbox),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: GalleryPlateSolveSection(record: record)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('동기화 실패'), findsOneWidget);
+      expect(find.text('업로드 처리 실패'), findsOneWidget);
+      expect(find.textContaining('secret'), findsNothing);
+    });
+
     testWidgets('unknown queue state explains automatic server processing', (
       tester,
     ) async {
@@ -536,6 +642,8 @@ void main() {
       );
       await tester.pump();
 
+      expect(find.byKey(const Key('plate-solve-pending')), findsOneWidget);
+      expect(find.text('Plate Solve 대기'), findsOneWidget);
       expect(find.text('사진 등록 후 서버에서 Plate Solve를 자동 처리합니다.'), findsOneWidget);
       expect(find.text('Plate Solve 실행'), findsNothing);
     });
@@ -1028,6 +1136,20 @@ class _FakePhotoObjectRepository implements PhotoObjectRepository {
 
   @override
   Future<void> deleteByPhotoId(String photoId) async {}
+}
+
+class _PhotoStatusOutbox
+    implements SyncOutboxRepository, PhotoSyncOutboxRepository {
+  _PhotoStatusOutbox(this.item);
+
+  final SyncOutboxItem item;
+
+  @override
+  Future<SyncOutboxItem?> findPhotoUpload(String localRecordId) async =>
+      item.localRecordId == localRecordId ? item : null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeShootingRecordRepository implements ShootingRecordRepository {

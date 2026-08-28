@@ -48,7 +48,9 @@ void main() {
       MaterialApp(
         home: ChangeNotifierProvider.value(
           value: vm,
-          child: const Scaffold(body: TcBackendSettingsSection()),
+          child: const Scaffold(
+            body: SingleChildScrollView(child: TcBackendSettingsSection()),
+          ),
         ),
       ),
     );

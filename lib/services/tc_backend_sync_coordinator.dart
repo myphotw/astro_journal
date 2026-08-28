@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../data/models/backend_upload_result.dart';
@@ -14,6 +15,16 @@ abstract class TcBackendDrainRunner {
   Future<void> drain();
 }
 
+typedef TcBackendDrainScheduler =
+    void Function(Duration delay, Future<void> Function() callback);
+
+void scheduleTcBackendDrainWithTimer(
+  Duration delay,
+  Future<void> Function() callback,
+) {
+  Timer(delay, () => unawaited(callback()));
+}
+
 class TcBackendSyncCoordinator implements TcBackendDrainRunner {
   TcBackendSyncCoordinator(
     this._outbox,
@@ -25,6 +36,9 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
     this.galleryRepository,
     this.catalogCaptureReconciler,
     TcBackendSyncGate? syncGate,
+    this.scheduleDrain,
+    this.waitingRecheckDelay = const Duration(seconds: 15),
+    this.processingRecheckDelay = const Duration(seconds: 5),
   }) : _now = now ?? DateTime.now,
        _syncGate = syncGate ?? TcBackendSyncGate();
 
@@ -37,7 +51,12 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
   final GalleryRepository? galleryRepository;
   final Future<void> Function(String catalogObjectId)? catalogCaptureReconciler;
   final TcBackendSyncGate _syncGate;
+  final TcBackendDrainScheduler? scheduleDrain;
+  final Duration waitingRecheckDelay;
+  final Duration processingRecheckDelay;
   bool _draining = false;
+  DateTime? _scheduledDrainAt;
+  int _scheduleGeneration = 0;
 
   @override
   Future<void> drain() async {
@@ -54,7 +73,12 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
     final settings = await _settings.load();
     if (!settings.enabled || !settings.isConfigured) return;
     for (final item in await _outbox.listPending()) {
-      if (_canProcess(item)) await _process(item);
+      if (_canProcess(item)) {
+        await _process(item);
+      } else {
+        final retryAt = item.nextRetryAt;
+        if (retryAt != null) _scheduleAt(retryAt);
+      }
     }
   }
 
@@ -63,12 +87,50 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
     await drain();
   }
 
+  Future<void> retryFailedItem(String operationId) async {
+    final photoOutbox = _photoOutbox();
+    final item = await photoOutbox.retryFailedItem(operationId);
+    await _processSingle(item);
+  }
+
+  Future<void> refreshPhoto(String localRecordId) async {
+    final item = await _photoOutbox().findPhotoUpload(localRecordId);
+    await _processSingle(item, force: true);
+  }
+
+  PhotoSyncOutboxRepository _photoOutbox() {
+    if (_outbox is! PhotoSyncOutboxRepository) {
+      throw StateError('Per-photo synchronization is unavailable.');
+    }
+    return _outbox as PhotoSyncOutboxRepository;
+  }
+
+  Future<void> _processSingle(
+    SyncOutboxItem? item, {
+    bool force = false,
+  }) async {
+    if (item == null || _draining) return;
+    _draining = true;
+    try {
+      final settings = await _settings.load();
+      if (!settings.enabled || !settings.isConfigured) return;
+      await _syncGate.runExclusive(() async {
+        if (force || _canProcess(item)) await _process(item);
+      });
+    } finally {
+      _draining = false;
+    }
+  }
+
   bool _canProcess(SyncOutboxItem item) {
     if (item.state == SyncOutboxState.synced) return false;
-    if (item.state != SyncOutboxState.failed) return true;
-    final type = _errorType(item.lastError);
     final due =
         item.nextRetryAt == null || !item.nextRetryAt!.isAfter(_now().toUtc());
+    if (item.state != SyncOutboxState.failed) return due;
+    final type = _errorType(item.lastError);
+    if (type == BackendUploadErrorType.jobTimeout && item.uploadJobId != null) {
+      return true;
+    }
     return item.retryCount <= 3 && due && type?.isRetryable == true;
   }
 
@@ -144,8 +206,30 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
             'Upload state has no job ID for common_file_id recovery.',
           );
         }
-        await _outbox.updateState(item.operationId, SyncOutboxState.processing);
-        final job = await _upload.pollUploadJob(jobId);
+        final job = await _upload.getUploadJobStatus(jobId);
+        switch (job.status) {
+          case TcBackendUploadJobStatus.waiting:
+            await _deferUploadStatus(
+              item.operationId,
+              SyncOutboxState.queued,
+              waitingRecheckDelay,
+            );
+            return;
+          case TcBackendUploadJobStatus.processing:
+            await _deferUploadStatus(
+              item.operationId,
+              SyncOutboxState.processing,
+              processingRecheckDelay,
+            );
+            return;
+          case TcBackendUploadJobStatus.failed:
+            throw TcBackendUploadException(
+              BackendUploadErrorType.jobFailed,
+              job.errorMessage ?? 'Upload job failed.',
+            );
+          case TcBackendUploadJobStatus.completed:
+            break;
+        }
         fileId ??= job.backendFileId;
         commonFileId ??= job.commonFileId;
         if (commonFileId == null) {
@@ -196,6 +280,36 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
       // Upload durability is authoritative here. Startup reconciliation repairs
       // the derived Catalog projection without replaying the upload.
     }
+  }
+
+  Future<void> _deferUploadStatus(
+    String operationId,
+    SyncOutboxState state,
+    Duration delay,
+  ) async {
+    final retryAt = _now().toUtc().add(delay);
+    await _outbox.updateState(operationId, state, nextRetryAt: retryAt);
+    _scheduleAt(retryAt);
+  }
+
+  void _scheduleAt(DateTime retryAt) {
+    final scheduler = scheduleDrain;
+    if (scheduler == null) return;
+    final utcRetryAt = retryAt.toUtc();
+    final current = _scheduledDrainAt;
+    if (current != null && !current.isAfter(utcRetryAt)) return;
+    _scheduledDrainAt = utcRetryAt;
+    final generation = ++_scheduleGeneration;
+    final delay = utcRetryAt.difference(_now().toUtc());
+    scheduler(delay.isNegative ? Duration.zero : delay, () async {
+      if (generation != _scheduleGeneration) return;
+      _scheduledDrainAt = null;
+      if (_draining) {
+        _scheduleAt(_now().toUtc().add(const Duration(seconds: 1)));
+        return;
+      }
+      await drain();
+    });
   }
 
   Future<void> _reconcileCatalogCaptureFromItem(SyncOutboxItem item) async {
@@ -324,17 +438,17 @@ class TcBackendSyncCoordinator implements TcBackendDrainRunner {
       2 => const Duration(seconds: 15),
       _ => const Duration(seconds: 60),
     };
-    final retryAt = type.isRetryable && retryCount <= 3
-        ? _now().toUtc().add(delay)
-        : null;
+    final retryable = type.isRetryable && retryCount <= 3;
+    final retryAt = retryable ? _now().toUtc().add(delay) : null;
     await _outbox.patch(item.operationId, {'retry_count': retryCount});
     await _outbox.updateState(
       item.operationId,
-      SyncOutboxState.failed,
+      retryable ? SyncOutboxState.queued : SyncOutboxState.failed,
       error:
           '${type.name}|$message${currentRevision == null ? '' : '|current_revision=$currentRevision'}',
       nextRetryAt: retryAt,
     );
+    if (retryAt != null) _scheduleAt(retryAt);
   }
 
   BackendUploadErrorType? _errorType(String? stored) {

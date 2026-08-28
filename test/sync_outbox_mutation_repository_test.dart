@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:astro_journal/data/models/sync_outbox_item.dart';
 import 'package:astro_journal/data/repositories/sync_outbox_repository_impl.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -95,6 +96,55 @@ void main() {
     final row = (await database.query('sync_outbox')).single;
     expect(row['state'], 'CANCELLED');
     expect(await repository.listPending(), isEmpty);
+  });
+
+  test('photo upload status lookup preserves WAITING as queued', () async {
+    await repository.create(
+      SyncOutboxItem(
+        operationId: 'upload-waiting',
+        localRecordId: 'local-1',
+        clientFileId: 'file-client',
+        clientRecordId: 'record-client',
+        uploadJobId: 'job-1',
+        payload: const {},
+      ),
+    );
+
+    final item = await repository.findPhotoUpload('local-1');
+
+    expect(item?.state, SyncOutboxState.queued);
+    expect(item?.uploadJobId, 'job-1');
+    expect(await repository.countQueued(), 1);
+    expect(await repository.countFailed(), 0);
+  });
+
+  test('failed photo can be retried without resetting other items', () async {
+    for (final id in ['target', 'other']) {
+      await repository.create(
+        SyncOutboxItem(
+          operationId: id,
+          localRecordId: 'local-$id',
+          clientFileId: 'file-$id',
+          clientRecordId: 'record-$id',
+          uploadJobId: 'job-$id',
+          state: SyncOutboxState.failed,
+          retryCount: 4,
+          lastError: 'jobFailed|failed',
+          payload: const {},
+        ),
+      );
+    }
+
+    await repository.retryFailedItem('target');
+
+    final rows = await database.query('sync_outbox', orderBy: 'operation_id');
+    final other = rows.firstWhere((row) => row['operation_id'] == 'other');
+    final target = rows.firstWhere((row) => row['operation_id'] == 'target');
+    expect(other['state'], 'FAILED');
+    expect(target['state'], 'QUEUED');
+    expect(target['retry_count'], 0);
+    expect(target['last_error'], isNull);
+    expect(target['upload_job_id'], 'job-target');
   });
 
   test('successful PATCH revision rebases later queued mutation', () async {
