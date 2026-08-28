@@ -16,6 +16,13 @@ Rect photoOverlayContainRect({required Size viewport, required Size source}) {
   return Alignment.center.inscribe(rendered, Offset.zero & viewport);
 }
 
+@visibleForTesting
+Offset photoOverlayDisplayCenter(
+  PhotoOverlayObject object, {
+  required double scaleX,
+  required double scaleY,
+}) => Offset(object.pixelX * scaleX, object.pixelY * scaleY);
+
 /// Resolves presentation geometry without changing the catalog-derived ring.
 ///
 /// The ring radii always remain the projected angular radii. A separate center
@@ -171,7 +178,11 @@ class _PhotoOverlayPainter extends CustomPainter {
       if (obj.isTarget && !showTarget) continue;
       if (!obj.isTarget && !showNearby) continue;
 
-      final center = Offset(obj.pixelX * scaleX, obj.pixelY * scaleY);
+      final center = photoOverlayDisplayCenter(
+        obj,
+        scaleX: scaleX,
+        scaleY: scaleY,
+      );
 
       if (obj.isTarget) {
         _drawTarget(canvas, center, obj, scale, size);
@@ -203,6 +214,7 @@ class _PhotoOverlayPainter extends CustomPainter {
         center,
         geometry.radiusX,
         geometry.radiusY,
+        obj.ellipseRotationRadians,
         paint,
         dashed: false,
       );
@@ -216,6 +228,7 @@ class _PhotoOverlayPainter extends CustomPainter {
       center: center,
       radiusX: _labelRadius(geometry.radiusX, geometry.drawCenterMarker),
       radiusY: _labelRadius(geometry.radiusY, geometry.drawCenterMarker),
+      ellipseRotationRadians: obj.ellipseRotationRadians,
       label: obj.displayLabel,
       color: _targetColor,
       fontSize: 11,
@@ -244,6 +257,7 @@ class _PhotoOverlayPainter extends CustomPainter {
         center,
         geometry.radiusX,
         geometry.radiusY,
+        obj.ellipseRotationRadians,
         paint,
         dashed: true,
       );
@@ -257,6 +271,7 @@ class _PhotoOverlayPainter extends CustomPainter {
       center: center,
       radiusX: _labelRadius(geometry.radiusX, geometry.drawCenterMarker),
       radiusY: _labelRadius(geometry.radiusY, geometry.drawCenterMarker),
+      ellipseRotationRadians: obj.ellipseRotationRadians,
       label: obj.name,
       color: _nearbyColor,
       fontSize: 9.5,
@@ -308,12 +323,21 @@ class _PhotoOverlayPainter extends CustomPainter {
     Offset center,
     double rx,
     double ry,
+    double rotationRadians,
     Paint paint, {
     required bool dashed,
   }) {
-    final rect = Rect.fromCenter(center: center, width: rx * 2, height: ry * 2);
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(rotationRadians);
+    final rect = Rect.fromCenter(
+      center: Offset.zero,
+      width: rx * 2,
+      height: ry * 2,
+    );
     if (!dashed) {
       canvas.drawOval(rect, paint);
+      canvas.restore();
       return;
     }
 
@@ -324,6 +348,7 @@ class _PhotoOverlayPainter extends CustomPainter {
       final sweep = 2 * math.pi / segments * dashRatio;
       canvas.drawArc(rect, start, sweep, false, paint);
     }
+    canvas.restore();
   }
 
   void _drawStellariumLabel(
@@ -331,6 +356,7 @@ class _PhotoOverlayPainter extends CustomPainter {
     required Offset center,
     required double radiusX,
     required double radiusY,
+    required double ellipseRotationRadians,
     required String label,
     required Color color,
     required double fontSize,
@@ -377,13 +403,21 @@ class _PhotoOverlayPainter extends CustomPainter {
     Offset clampPos(Offset o) =>
         Offset(o.dx.clamp(pad, maxX), o.dy.clamp(pad, maxY));
 
+    final cosRotation = math.cos(ellipseRotationRadians);
+    final sinRotation = math.sin(ellipseRotationRadians);
+    final extentX = math.sqrt(
+      math.pow(radiusX * cosRotation, 2) + math.pow(radiusY * sinRotation, 2),
+    );
+    final extentY = math.sqrt(
+      math.pow(radiusX * sinRotation, 2) + math.pow(radiusY * cosRotation, 2),
+    );
     final candidates = <Offset>[
-      clampPos(Offset(center.dx + radiusX + gap + leader, center.dy - th / 2)),
+      clampPos(Offset(center.dx + extentX + gap + leader, center.dy - th / 2)),
       clampPos(
-        Offset(center.dx - radiusX - gap - leader - tw, center.dy - th / 2),
+        Offset(center.dx - extentX - gap - leader - tw, center.dy - th / 2),
       ),
-      clampPos(Offset(center.dx - tw / 2, center.dy + radiusY + gap)),
-      clampPos(Offset(center.dx - tw / 2, center.dy - radiusY - gap - th)),
+      clampPos(Offset(center.dx - tw / 2, center.dy + extentY + gap)),
+      clampPos(Offset(center.dx - tw / 2, center.dy - extentY - gap - th)),
     ];
 
     Offset labelPos = candidates.first;
@@ -406,7 +440,13 @@ class _PhotoOverlayPainter extends CustomPainter {
     }
 
     final labelCenter = Offset(labelPos.dx + tw / 2, labelPos.dy + th / 2);
-    final edge = _ellipseEdgeToward(center, radiusX, radiusY, labelCenter);
+    final edge = _ellipseEdgeToward(
+      center,
+      radiusX,
+      radiusY,
+      ellipseRotationRadians,
+      labelCenter,
+    );
 
     final linePaint = Paint()
       ..color = color.withValues(alpha: 0.7)
@@ -420,17 +460,29 @@ class _PhotoOverlayPainter extends CustomPainter {
     Offset center,
     double rx,
     double ry,
+    double rotationRadians,
     Offset target,
   ) {
     final dx = target.dx - center.dx;
     final dy = target.dy - center.dy;
     if (dx.abs() < 1e-6 && dy.abs() < 1e-6) {
-      return center.translate(rx, 0);
+      return center.translate(
+        rx * math.cos(rotationRadians),
+        rx * math.sin(rotationRadians),
+      );
     }
-    final angle = math.atan2(dy, dx);
+    final cosRotation = math.cos(rotationRadians);
+    final sinRotation = math.sin(rotationRadians);
+    final localX = cosRotation * dx + sinRotation * dy;
+    final localY = -sinRotation * dx + cosRotation * dy;
+    final denominator = math.sqrt(
+      math.pow(localX / rx, 2) + math.pow(localY / ry, 2),
+    );
+    final edgeX = localX / denominator;
+    final edgeY = localY / denominator;
     return Offset(
-      center.dx + rx * math.cos(angle),
-      center.dy + ry * math.sin(angle),
+      center.dx + cosRotation * edgeX - sinRotation * edgeY,
+      center.dy + sinRotation * edgeX + cosRotation * edgeY,
     );
   }
 

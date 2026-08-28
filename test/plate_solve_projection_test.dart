@@ -204,6 +204,39 @@ void main() {
       expect(dxPos * dxNeg, lessThan(0));
     });
 
+    test('raster calibration keeps API orientation and raw FITS parity', () {
+      final eastPositive = PlateSolveProjection.worldToPixel(
+        centerRaDeg: 180,
+        centerDecDeg: 0,
+        targetRaDeg: 180.1,
+        targetDecDeg: 0,
+        orientationDeg: 0,
+        pixelScaleArcsec: 36,
+        imageWidth: 1000,
+        imageHeight: 1000,
+        parity: 1,
+      );
+      final eastNegative = PlateSolveProjection.worldToPixel(
+        centerRaDeg: 180,
+        centerDecDeg: 0,
+        targetRaDeg: 180.1,
+        targetDecDeg: 0,
+        orientationDeg: 0,
+        pixelScaleArcsec: 36,
+        imageWidth: 1000,
+        imageHeight: 1000,
+        parity: -1,
+      );
+
+      // Astrometry.net's JPEG/PNG calibration keeps raw FITS parity while
+      // reporting display orientation. Positive parity therefore puts east
+      // left; negative parity puts east right at orientation zero.
+      expect(eastPositive.x, lessThan(500));
+      expect(eastNegative.x, greaterThan(500));
+      expect(eastPositive.y, closeTo(500, 2));
+      expect(eastNegative.y, closeTo(500, 2));
+    });
+
     test('CD reconstruction matches tan_get_orientation', () {
       for (final orient in [0.0, 35.0, -80.0, 170.0]) {
         for (final parity in [1.0, -1.0]) {
@@ -297,7 +330,7 @@ void main() {
       expect(highDeclination.xDeg / equator.xDeg, closeTo(0.5, 0.002));
     });
 
-    test('rotation 0 90 180 follows reconstructed CD contract', () {
+    test('rotation 0 90 180 270 follows raster calibration contract', () {
       PixelOffset northAt(double orientation) =>
           PlateSolveProjection.worldToPixel(
             centerRaDeg: 180,
@@ -314,9 +347,11 @@ void main() {
       final at0 = northAt(0);
       final at90 = northAt(90);
       final at180 = northAt(180);
+      final at270 = northAt(270);
       expect(at0.y, greaterThan(500));
       expect(at90.x, lessThan(500));
       expect(at180.y, lessThan(500));
+      expect(at270.x, greaterThan(500));
     });
 
     test('rotation moves north vector around the image', () {
@@ -341,6 +376,147 @@ void main() {
       final d90y = (o90.y - 500).abs();
       expect(d0y, greaterThan(d0x));
       expect(d90x, greaterThan(d90y));
+    });
+
+    test('astronomical PA is projected through the same center transform', () {
+      final north = PlateSolveProjection.positionAngleToPixelRadians(
+        centerRaDeg: 10.6847083,
+        centerDecDeg: 41.26875,
+        targetRaDeg: 10.6847083,
+        targetDecDeg: 41.26875,
+        positionAngleDeg: 0,
+        orientationDeg: 0,
+        pixelScaleArcsec: 2,
+        imageWidth: 2000,
+        imageHeight: 1200,
+        parity: 1,
+      );
+      final east = PlateSolveProjection.positionAngleToPixelRadians(
+        centerRaDeg: 10.6847083,
+        centerDecDeg: 41.26875,
+        targetRaDeg: 10.6847083,
+        targetDecDeg: 41.26875,
+        positionAngleDeg: 90,
+        orientationDeg: 0,
+        pixelScaleArcsec: 2,
+        imageWidth: 2000,
+        imageHeight: 1200,
+        parity: 1,
+      );
+
+      expect(north, closeTo(math.pi / 2, 1e-6));
+      expect(east.abs(), closeTo(math.pi, 1e-6));
+    });
+
+    test('M31 M32 M110 follow the observed Seestar raster directions', () {
+      const scaleDeg = 10 / 3600;
+      const wcs = FitsWcsHeader(
+        crval1: 10.6847083,
+        crval2: 41.26875,
+        crpix1: 500.5,
+        crpix2: 500.5,
+        cd11: -scaleDeg,
+        cd12: 0,
+        cd21: 0,
+        cd22: scaleDeg,
+        imageW: 1000,
+        imageH: 1000,
+      );
+      PixelOffset project(double ra, double dec) =>
+          PlateSolveProjection.worldToPixelFromWcs(
+            wcs: wcs,
+            targetRaDeg: ra,
+            targetDecDeg: dec,
+          );
+
+      final m31 = project(10.6847083, 41.26875);
+      final m32 = project(10.6742708, 40.8651694);
+      final m110 = project(10.0918933, 41.6854156);
+
+      expect(m31.x, closeTo(500, 1e-6));
+      expect(m31.y, closeTo(500, 1e-6));
+      expect(m32.x, lessThan(m31.x)); // observed: slightly left of M31
+      expect(m32.y, greaterThan(m31.y)); // observed: below M31
+      expect(m110.x, lessThan(m31.x)); // observed: left of M31
+      expect(m110.y, lessThan(m31.y)); // observed: above M31
+      expect((m110.x - m31.x).abs(), greaterThan((m32.x - m31.x).abs()));
+      expect(m32.x - m31.x, closeTo(-2.84, 0.02));
+      expect(m32.y - m31.y, closeTo(145.29, 0.02));
+      expect(m110.x - m31.x, closeTo(-159.38, 0.02));
+      expect(m110.y - m31.y, closeTo(-150.55, 0.02));
+    });
+
+    test('scalar fallback places M110 upper-left and M32 lower-right', () {
+      PixelOffset project(double ra, double dec) =>
+          PlateSolveProjection.worldToPixel(
+            centerRaDeg: 10.6847083,
+            centerDecDeg: 41.26875,
+            targetRaDeg: ra,
+            targetDecDeg: dec,
+            orientationDeg: 75,
+            pixelScaleArcsec: 2.4,
+            imageWidth: 3000,
+            imageHeight: 2250,
+            parity: 1,
+          );
+
+      final m31 = project(10.6847083, 41.26875);
+      final m32 = project(10.6742708, 40.8651694);
+      final m110 = project(10.0918933, 41.6854156);
+
+      expect(m31.x, closeTo(1500, 1e-6));
+      expect(m31.y, closeTo(1125, 1e-6));
+      expect(m110.x, lessThan(m31.x));
+      expect(m110.y, lessThan(m31.y));
+      expect(m32.x, greaterThan(m31.x));
+      expect(m32.y, greaterThan(m31.y));
+    });
+
+    test('full WCS raster conversion reverses both FITS axes', () {
+      const wcs = FitsWcsHeader(
+        crval1: 180,
+        crval2: 0,
+        crpix1: 500.5,
+        crpix2: 500.5,
+        cd11: -0.01,
+        cd12: 0,
+        cd21: 0,
+        cd22: 0.01,
+      );
+      final westNorth = PlateSolveProjection.worldToPixel(
+        centerRaDeg: 180,
+        centerDecDeg: 0,
+        targetRaDeg: 179.9,
+        targetDecDeg: 0.1,
+        orientationDeg: 0,
+        pixelScaleArcsec: 36,
+        imageWidth: 1000,
+        imageHeight: 1000,
+        wcs: wcs,
+      );
+
+      expect(westNorth.x, lessThan(500));
+      expect(westNorth.y, lessThan(500));
+    });
+
+    test('M8 and M20 catalog coordinates preserve west/north relation', () {
+      PixelOffset project(double ra, double dec) =>
+          PlateSolveProjection.worldToPixel(
+            centerRaDeg: 270.9042,
+            centerDecDeg: -24.3867,
+            targetRaDeg: ra,
+            targetDecDeg: dec,
+            orientationDeg: 0,
+            pixelScaleArcsec: 10,
+            imageWidth: 1000,
+            imageHeight: 1000,
+            parity: 1,
+          );
+
+      final m8 = project(270.9042, -24.3867);
+      final m20 = project(270.6583, -23.0300);
+      expect(m20.x, greaterThan(m8.x)); // west
+      expect(m20.y, greaterThan(m8.y)); // north
     });
   });
 }

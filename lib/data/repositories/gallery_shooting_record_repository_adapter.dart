@@ -46,7 +46,7 @@ class GalleryObservationProjectionMapper {
 /// backend_record_id -> local_record_id outbox link. Filename/date guessing is
 /// intentionally not used.
 class GalleryShootingRecordRepositoryAdapter
-    implements ShootingRecordRepository {
+    implements ShootingRecordRepository, ShootingRecordDetailRefresher {
   factory GalleryShootingRecordRepositoryAdapter({
     required GalleryRepository galleryRepository,
     required ShootingRecordRepository localRepository,
@@ -143,11 +143,23 @@ class GalleryShootingRecordRepositoryAdapter
       id.startsWith('remote:') && _lastRemoteRecords.containsKey(id);
 
   @override
-  Future<ShootingRecord?> getById(String id) async {
+  Future<ShootingRecord?> getById(String id) => _getById(id);
+
+  @override
+  Future<ShootingRecord?> refreshById(String id) =>
+      _getById(id, forceRefresh: true);
+
+  Future<ShootingRecord?> _getById(
+    String id, {
+    bool forceRefresh = false,
+  }) async {
     final current = _lastRemoteRecords[id];
     final backendRecordId = current?.backendRecordId;
     if (current != null && backendRecordId != null) {
-      final item = await _galleryRepository.getById(backendRecordId);
+      final item = await _galleryRepository.getById(
+        backendRecordId,
+        forceRefresh: forceRefresh,
+      );
       if (item == null) return current;
       final catalog = await _catalogRepository.getAll(listOnly: true);
       final localRecord = await _localRepository.getById(id);

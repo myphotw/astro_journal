@@ -24,6 +24,7 @@ class PhotoOverlayObject {
     this.angularSizeMinor,
     this.rangeRadiusMajorPixel,
     this.rangeRadiusMinorPixel,
+    this.ellipseRotationRadians = 0,
   });
 
   /// Overlay 항목 식별자 (`catalogId`와 동일하게 사용해도 무방).
@@ -70,6 +71,9 @@ class PhotoOverlayObject {
 
   /// 단축을 사진 원본 픽셀 반지름으로 환산한 값. 없으면 원으로 표시한다.
   final double? rangeRadiusMinorPixel;
+
+  /// Canvas 기준 타원 장축 각도(radians, +방향은 화면에서 시계 방향).
+  final double ellipseRotationRadians;
 
   /// 하위 호환용 — 장축 반지름.
   double? get rangeRadiusPixel => rangeRadiusMajorPixel;

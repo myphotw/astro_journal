@@ -16,3 +16,9 @@ abstract class ShootingRecordRepository {
   Future<void> clearRepresentativeForObject(String celestialObjectId);
   Future<void> setRepresentative(String recordId);
 }
+
+/// Repository capability for bypassing a long-lived detail cache when an
+/// already-open screen needs the latest server projection.
+abstract interface class ShootingRecordDetailRefresher {
+  Future<ShootingRecord?> refreshById(String id);
+}

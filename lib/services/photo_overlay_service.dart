@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
+import '../core/constants/catalog_object_metadata_overrides.dart';
 import '../data/models/catalog_object.dart';
 import '../data/models/photo_overlay_object.dart';
 import '../data/models/plate_solve_result.dart';
@@ -50,6 +51,7 @@ class PhotoOverlayService {
   final CatalogRepository _catalogRepository;
 
   static const _tag = 'PhotoOverlayService';
+  static final Set<String> _wcsDebugLoggedRecordIds = <String>{};
 
   Future<PhotoOverlayResult> buildOverlay(ShootingRecord record) async {
     try {
@@ -171,6 +173,17 @@ class PhotoOverlayService {
         return a.isTarget ? -1 : 1;
       });
 
+      _logWcsRuntimeOnce(
+        record: record,
+        plate: plate,
+        wcs: wcs,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+        rotationDeg: rotationDeg,
+        parity: parity,
+        objects: objects,
+      );
+
       return PhotoOverlayResult(
         imageWidth: imageWidth,
         imageHeight: imageHeight,
@@ -217,9 +230,9 @@ class PhotoOverlayService {
 
     final isTarget = candidate.effectivePrimaryId == targetPrimaryId;
     final nameKey = candidate.displayName.toUpperCase().replaceAll(' ', '');
-    if (isTarget ||
-        nameKey.contains('M22') ||
-        nameKey.contains('IC1290')) {
+    if (kDebugMode &&
+        (isTarget ||
+            const {'M31', 'M32', 'M110', 'M8', 'M20'}.contains(nameKey))) {
       _logVerify(
         name: candidate.displayName,
         catalogRa: raDeg,
@@ -248,6 +261,27 @@ class PhotoOverlayService {
       fovWidthDeg: fovWidth,
       imageWidth: imageWidth,
     );
+    final catalogPositionAngle =
+        candidate.positionAngle ??
+        CatalogObjectMetadataOverrides.positionAngleDegreesForId(
+          candidate.displayName,
+        ) ??
+        CatalogObjectMetadataOverrides.positionAngleDegreesForId(candidate.id);
+    final ellipseRotation = catalogPositionAngle == null
+        ? 0.0
+        : PlateSolveProjection.positionAngleToPixelRadians(
+            centerRaDeg: centerRa,
+            centerDecDeg: centerDec,
+            targetRaDeg: raDeg,
+            targetDecDeg: decDeg,
+            positionAngleDeg: catalogPositionAngle,
+            orientationDeg: rotationDeg,
+            pixelScaleArcsec: pixelScale ?? 1.0,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight,
+            parity: parity,
+            wcs: wcs,
+          );
 
     return PhotoOverlayObject(
       id: candidate.id,
@@ -264,6 +298,7 @@ class PhotoOverlayService {
       angularSizeMinor: axes.minor,
       rangeRadiusMajorPixel: majorPx,
       rangeRadiusMinorPixel: minorPx ?? majorPx,
+      ellipseRotationRadians: ellipseRotation,
       isTarget: isTarget,
     );
   }
@@ -294,6 +329,73 @@ class PhotoOverlayService {
   static void _log(String message) {
     AppLogger.info(_tag, message);
     debugPrint('[$_tag] $message');
+  }
+
+  static void _logWcsRuntimeOnce({
+    required ShootingRecord record,
+    required PlateSolveResult plate,
+    required FitsWcsHeader? wcs,
+    required int imageWidth,
+    required int imageHeight,
+    required double rotationDeg,
+    required double parity,
+    required List<PhotoOverlayObject> objects,
+  }) {
+    if (!_wcsDebugLoggedRecordIds.add(record.id)) return;
+
+    PhotoOverlayObject? objectFor(String catalogId) {
+      final key = catalogId.toUpperCase();
+      for (final object in objects) {
+        if (object.catalogId.toUpperCase().replaceAll(' ', '') == key ||
+            object.name.toUpperCase().replaceAll(' ', '') == key) {
+          return object;
+        }
+      }
+      return null;
+    }
+
+    final m31 = objectFor('M31');
+    String coordinates(String id) {
+      final object = objectFor(id);
+      if (object == null) return '$id=missing';
+      final dx = m31 == null ? double.nan : object.pixelX - m31.pixelX;
+      final dy = m31 == null ? double.nan : object.pixelY - m31.pixelY;
+      return '$id={ra=${object.ra.toStringAsFixed(6)},'
+          'dec=${object.dec.toStringAsFixed(6)},'
+          'x=${object.pixelX.toStringAsFixed(2)},'
+          'y=${object.pixelY.toStringAsFixed(2)},'
+          'dx=${dx.toStringAsFixed(2)},dy=${dy.toStringAsFixed(2)}}';
+    }
+
+    final sanitizedRecordId = record.id.replaceAll(
+      RegExp(r'[^A-Za-z0-9:_-]'),
+      '',
+    );
+    final safeRecordId = sanitizedRecordId.substring(
+      0,
+      sanitizedRecordId.length.clamp(0, 48),
+    );
+    final fullWcs = wcs != null;
+    final branch = fullWcs
+        ? 'full_wcs/worldToPixelFromWcs'
+        : 'scalar_fallback/rasterCalibrationCdMatrix';
+    final centerRa = wcs?.crval1 ?? plate.centerRa;
+    final centerDec = wcs?.crval2 ?? plate.centerDec;
+
+    // Intentionally not gated by kDebugMode: this one-shot diagnostic must be
+    // visible through adb logcat in a release build. It contains no path/token.
+    debugPrint(
+      '[WCS_DEBUG] record_id=$safeRecordId '
+      'intrinsic=${imageWidth}x$imageHeight '
+      'hydrated_wcs=${plate.wcs != null} resolved_wcs=$fullWcs '
+      'IMAGEW=${wcs?.imageW ?? 'null'} IMAGEH=${wcs?.imageH ?? 'null'} '
+      'branch=$branch full_wcs_used=$fullWcs '
+      'scalar_fallback_used=${!fullWcs} '
+      'full_wcs_xy_center_inversion_executed=$fullWcs '
+      'center_ra=$centerRa center_dec=$centerDec '
+      'rotation=$rotationDeg parity=$parity '
+      '${coordinates('M31')} ${coordinates('M32')} ${coordinates('M110')}',
+    );
   }
 
   static FitsWcsHeader? _resolveWcs(PlateSolveResult plate) {

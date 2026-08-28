@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
@@ -7,6 +9,7 @@ import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/features/gallery/widgets/photo_overlay_view.dart';
 import 'package:astro_journal/services/photo_overlay_service.dart';
+import 'package:astro_journal/services/plate_solve/fits_wcs_parser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -65,6 +68,93 @@ void main() {
     );
 
     expect(rect, const Rect.fromLTWH(0, 250, 1000, 500));
+  });
+
+  test('BoxFit contain rect includes horizontal pillarbox offsets', () {
+    final rect = photoOverlayContainRect(
+      viewport: const Size(1000, 500),
+      source: const Size(500, 1000),
+    );
+
+    expect(rect, const Rect.fromLTWH(375, 0, 250, 500));
+  });
+
+  test('label and ellipse use the same projected display center', () {
+    final object = _overlayObject(majorRadius: 30, minorRadius: 10);
+    final center = photoOverlayDisplayCenter(object, scaleX: 0.5, scaleY: 0.5);
+
+    expect(center, const Offset(250, 125));
+  });
+
+  test('catalog PA is projected into the overlay ellipse rotation', () async {
+    final object = _object(
+      id: 'M31',
+      majorAxis: 190,
+      minorAxis: 60,
+    );
+    final result = await PhotoOverlayService(
+      _CatalogRepository([object]),
+    ).buildOverlay(_remoteRecord(celestialObjectId: 'M31'));
+
+    expect(result.objects.single.pixelX, closeTo(500, 1e-6));
+    expect(result.objects.single.pixelY, closeTo(250, 1e-6));
+    expect(
+      result.objects.single.ellipseRotationRadians,
+      closeTo(125 * math.pi / 180, 1e-5),
+    );
+  });
+
+  test('WCS runtime diagnostic reports the actual projection branch once', () async {
+    final messages = <String>[];
+    final originalDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) messages.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
+
+    final objects = [
+      _object(id: 'M31', ra: '0h 42m 44.3s', dec: '+41° 16m 09s'),
+      _object(id: 'M32', ra: '0h 42m 41.8s', dec: '+40° 51m 55s'),
+      _object(id: 'M110', ra: '0h 40m 22.1s', dec: '+41° 41m 07s'),
+    ];
+    const wcs = FitsWcsHeader(
+      crval1: 10.6847083,
+      crval2: 41.26875,
+      crpix1: 500.5,
+      crpix2: 500.5,
+      cd11: -0.0027777778,
+      cd12: 0,
+      cd21: 0,
+      cd22: 0.0027777778,
+    );
+    final record = _remoteRecord(
+      id: 'wcs-debug-record',
+      celestialObjectId: 'M31',
+      plateSolve: PlateSolveResult.success(
+        centerRa: 10.6847083,
+        centerDec: 41.26875,
+        rotation: 0,
+        parity: 1,
+        pixelScale: 10,
+        fovWidth: 2.7777778,
+        fovHeight: 2.7777778,
+        wcs: wcs,
+      ),
+    );
+    final service = PhotoOverlayService(_CatalogRepository(objects));
+
+    await service.buildOverlay(record);
+    await service.buildOverlay(record);
+
+    final logs = messages.where((line) => line.startsWith('[WCS_DEBUG]')).toList();
+    expect(logs, hasLength(1));
+    expect(logs.single, contains('record_id=wcs-debug-record'));
+    expect(logs.single, contains('IMAGEW=null IMAGEH=null'));
+    expect(logs.single, contains('branch=full_wcs/worldToPixelFromWcs'));
+    expect(logs.single, contains('full_wcs_xy_center_inversion_executed=true'));
+    expect(logs.single, contains('M31={ra='));
+    expect(logs.single, contains('M32={ra='));
+    expect(logs.single, contains('M110={ra='));
   });
 
   group('angular-size render geometry', () {
@@ -196,22 +286,27 @@ PhotoOverlayObject _overlayObject({double? majorRadius, double? minorRadius}) {
   );
 }
 
-ShootingRecord _remoteRecord({String celestialObjectId = 'M1'}) {
+ShootingRecord _remoteRecord({
+  String id = 'remote:record-1',
+  String celestialObjectId = 'M1',
+  PlateSolveResult? plateSolve,
+}) {
   return ShootingRecord(
-    id: 'remote:record-1',
+    id: id,
     celestialObjectId: celestialObjectId,
     capturedAt: DateTime.utc(2026, 8, 28),
     createdAt: DateTime.utc(2026, 8, 28),
     photoUri: 'https://backend.test/preview.jpg',
-    plateSolve: PlateSolveResult.success(
-      centerRa: 180,
-      centerDec: 0,
-      rotation: 0,
-      parity: 1,
-      pixelScale: 3.6,
-      fovWidth: 1,
-      fovHeight: 0.5,
-    ),
+    plateSolve: plateSolve ??
+        PlateSolveResult.success(
+          centerRa: 180,
+          centerDec: 0,
+          rotation: 0,
+          parity: 1,
+          pixelScale: 3.6,
+          fovWidth: 1,
+          fovHeight: 0.5,
+        ),
   );
 }
 
@@ -220,6 +315,8 @@ CatalogObject _object({
   String? angularSize,
   double? majorAxis,
   double? minorAxis,
+  String ra = '12h 00m',
+  String dec = '+00° 00m',
 }) {
   return CatalogObject(
     id: id,
@@ -228,8 +325,8 @@ CatalogObject _object({
     name: id,
     type: 'Nebula',
     constellation: 'Ori',
-    ra: '12h 00m',
-    dec: '+00° 00m',
+    ra: ra,
+    dec: dec,
     magnitude: '5',
     angularSize: angularSize,
     majorAxis: majorAxis,

@@ -59,11 +59,15 @@ class PlateSolveProjection {
 
   /// FITS CD + CRPIX + CRVAL → 표시 픽셀 (0-based, 좌상단 원점).
   ///
-  /// FITS는 픽셀 중심이 1-based. 표시 좌표는 `fits - 0.5`.
+  /// FITS 좌표는 Seestar가 표시하는 raster와 양 축 방향이 반대다.
+  /// 표시 크기를 알 수 있으면 이미지 중심을 기준으로 X/Y를 함께 반전한다.
   static PixelOffset worldToPixelFromWcs({
     required FitsWcsHeader wcs,
     required double targetRaDeg,
     required double targetDecDeg,
+    double? rasterWidth,
+    double? rasterHeight,
+    bool rasterizeFitsAxes = true,
   }) {
     final iwc = tangentIwcDeg(
       centerRaDeg: wcs.crval1,
@@ -90,7 +94,17 @@ class PlateSolveProjection {
 
     final fitsX = wcs.crpix1 + u;
     final fitsY = wcs.crpix2 + v;
-    return PixelOffset(fitsX - 0.5, fitsY - 0.5);
+    final fitsDisplayX = fitsX - 0.5;
+    final fitsDisplayY = fitsY - 0.5;
+    final displayWidth = rasterWidth ?? wcs.imageW;
+    final displayHeight = rasterHeight ?? wcs.imageH;
+    final displayX = rasterizeFitsAxes && displayWidth != null
+        ? displayWidth - fitsDisplayX
+        : fitsDisplayX;
+    final displayY = rasterizeFitsAxes && displayHeight != null
+        ? displayHeight - fitsDisplayY
+        : fitsDisplayY;
+    return PixelOffset(displayX, displayY);
   }
 
   /// orientation/parity/pixscale 로 CD를 재구성 (wcs 파일 없을 때).
@@ -121,6 +135,34 @@ class PlateSolveProjection {
     );
   }
 
+  /// Astrometry.net calibration API scalar values reconstructed for a raster
+  /// image (JPEG/PNG) whose origin is at the top-left.
+  ///
+  /// Astrometry.net flips `orientation` for JPEG/PNG display coordinates, but
+  /// returns the parity of the unflipped FITS CD matrix. Reusing [cdMatrix]
+  /// with those mixed conventions mirrors the east/west component. This
+  /// matrix keeps the API orientation and converts that raw parity into the
+  /// displayed raster coordinate system.
+  static ({double cd11, double cd12, double cd21, double cd22})
+  rasterCalibrationCdMatrix({
+    required double pixelScaleArcsec,
+    required double orientationDeg,
+    double parity = 1.0,
+  }) {
+    final s = pixelScaleArcsec / 3600.0;
+    final o = _toRad(orientationDeg);
+    final cosO = math.cos(o);
+    final sinO = math.sin(o);
+    final p = parity >= 0 ? 1.0 : -1.0;
+
+    return (
+      cd11: -p * s * cosO,
+      cd12: s * sinO,
+      cd21: -p * s * sinO,
+      cd22: -s * cosO,
+    );
+  }
+
   /// 폴백: calibration 스칼라로 변환 (CRPIX=이미지 중심 가정).
   static PixelOffset worldToPixel({
     required double centerRaDeg,
@@ -139,6 +181,8 @@ class PlateSolveProjection {
         wcs: wcs,
         targetRaDeg: targetRaDeg,
         targetDecDeg: targetDecDeg,
+        rasterWidth: imageWidth.toDouble(),
+        rasterHeight: imageHeight.toDouble(),
       );
     }
 
@@ -147,7 +191,7 @@ class PlateSolveProjection {
     }
 
     // crpix_center 가정: CRPIX=(W+1)/2,(H+1)/2 (FITS), CRVAL=field center
-    final cd = cdMatrix(
+    final cd = rasterCalibrationCdMatrix(
       pixelScaleArcsec: pixelScaleArcsec,
       orientationDeg: orientationDeg,
       parity: parity,
@@ -169,6 +213,81 @@ class PlateSolveProjection {
       wcs: header,
       targetRaDeg: targetRaDeg,
       targetDecDeg: targetDecDeg,
+      rasterizeFitsAxes: false,
+    );
+  }
+
+  /// Projects an astronomical position angle (north through east) into the
+  /// raster image and returns the clockwise Canvas angle in radians.
+  static double positionAngleToPixelRadians({
+    required double centerRaDeg,
+    required double centerDecDeg,
+    required double targetRaDeg,
+    required double targetDecDeg,
+    required double positionAngleDeg,
+    required double orientationDeg,
+    required double pixelScaleArcsec,
+    required int imageWidth,
+    required int imageHeight,
+    double parity = 1.0,
+    FitsWcsHeader? wcs,
+  }) {
+    final center = worldToPixel(
+      centerRaDeg: centerRaDeg,
+      centerDecDeg: centerDecDeg,
+      targetRaDeg: targetRaDeg,
+      targetDecDeg: targetDecDeg,
+      orientationDeg: orientationDeg,
+      pixelScaleArcsec: pixelScaleArcsec,
+      imageWidth: imageWidth,
+      imageHeight: imageHeight,
+      parity: parity,
+      wcs: wcs,
+    );
+    final endpoint = _destinationPoint(
+      raDeg: targetRaDeg,
+      decDeg: targetDecDeg,
+      bearingDeg: positionAngleDeg,
+      distanceDeg: 1 / 60,
+    );
+    final projected = worldToPixel(
+      centerRaDeg: centerRaDeg,
+      centerDecDeg: centerDecDeg,
+      targetRaDeg: endpoint.raDeg,
+      targetDecDeg: endpoint.decDeg,
+      orientationDeg: orientationDeg,
+      pixelScaleArcsec: pixelScaleArcsec,
+      imageWidth: imageWidth,
+      imageHeight: imageHeight,
+      parity: parity,
+      wcs: wcs,
+    );
+    return math.atan2(projected.y - center.y, projected.x - center.x);
+  }
+
+  static ({double raDeg, double decDeg}) _destinationPoint({
+    required double raDeg,
+    required double decDeg,
+    required double bearingDeg,
+    required double distanceDeg,
+  }) {
+    final ra = _toRad(raDeg);
+    final dec = _toRad(decDeg);
+    final bearing = _toRad(bearingDeg);
+    final distance = _toRad(distanceDeg);
+    final sinDec =
+        math.sin(dec) * math.cos(distance) +
+        math.cos(dec) * math.sin(distance) * math.cos(bearing);
+    final destinationDec = math.asin(sinDec.clamp(-1.0, 1.0));
+    final destinationRa =
+        ra +
+        math.atan2(
+          math.sin(bearing) * math.sin(distance) * math.cos(dec),
+          math.cos(distance) - math.sin(dec) * math.sin(destinationDec),
+        );
+    return (
+      raDeg: (_toDeg(destinationRa) + 360) % 360,
+      decDeg: _toDeg(destinationDec),
     );
   }
 
@@ -181,6 +300,7 @@ class PlateSolveProjection {
     required double rotationDeg,
     double parity = 1.0,
     double? pixelScaleArcsec,
+    bool rasterCalibration = false,
   }) {
     final iwc = tangentIwcDeg(
       centerRaDeg: centerRaDeg,
@@ -193,11 +313,17 @@ class PlateSolveProjection {
     final scale = (pixelScaleArcsec != null && pixelScaleArcsec > 0)
         ? pixelScaleArcsec
         : 1.0;
-    final cd = cdMatrix(
-      pixelScaleArcsec: scale,
-      orientationDeg: rotationDeg,
-      parity: parity,
-    );
+    final cd = rasterCalibration
+        ? rasterCalibrationCdMatrix(
+            pixelScaleArcsec: scale,
+            orientationDeg: rotationDeg,
+            parity: parity,
+          )
+        : cdMatrix(
+            pixelScaleArcsec: scale,
+            orientationDeg: rotationDeg,
+            parity: parity,
+          );
     final det = cd.cd11 * cd.cd22 - cd.cd12 * cd.cd21;
     if (det.abs() < 1e-30) return iwc;
 

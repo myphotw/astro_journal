@@ -36,6 +36,15 @@ import '../widgets/photo_overlay_view.dart';
 bool shouldShowManualPlateSolve(ShootingRecord record) =>
     record.photoUri != null && record.photoUri!.isNotEmpty;
 
+@visibleForTesting
+bool galleryDetailHasPendingNasSync(SyncOutboxItem? item) => switch (item?.state) {
+  SyncOutboxState.queued ||
+  SyncOutboxState.uploading ||
+  SyncOutboxState.processing ||
+  SyncOutboxState.recordCreating => true,
+  _ => false,
+};
+
 // ── GalleryDetailScreen ──────────────────────────────────────────────────────
 
 class GalleryDetailScreen extends StatefulWidget {
@@ -53,27 +62,19 @@ class GalleryDetailScreen extends StatefulWidget {
     final galleryViewModel = context.read<GalleryViewModel>();
     final syncCoordinator = context.read<TcBackendSyncCoordinator?>();
     final pullSyncCoordinator = context.read<TcBackendPullSyncCoordinator?>();
-    try {
-      await syncCoordinator?.refreshPhoto(record.id);
-      await pullSyncCoordinator?.drain();
-    } catch (error, stackTrace) {
-      AppLogger.error('GalleryDetail.Refresh', error, stackTrace);
-    }
-    final detailedRecord = await galleryViewModel.loadDetailRecord(record);
-    if (!context.mounted) return;
-    final hydratedRecords = records
-        .map((item) => item.id == record.id ? detailedRecord : item)
-        .toList(growable: false);
+    final outbox = context.read<SyncOutboxRepository?>();
+    final photoOutbox = outbox is PhotoSyncOutboxRepository
+        ? outbox as PhotoSyncOutboxRepository
+        : null;
     final photoRecords = GalleryDetailViewModel.photoRecordsFrom(
-      hydratedRecords,
+      records,
     );
     final index = GalleryDetailViewModel.indexOfRecord(
       photoRecords,
-      detailedRecord,
+      record,
     );
     if (index < 0) return;
     final overlayService = context.read<PhotoOverlayService>();
-
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => ChangeNotifierProvider(
@@ -81,6 +82,22 @@ class GalleryDetailScreen extends StatefulWidget {
             records: photoRecords,
             initialIndex: index,
             overlayService: overlayService,
+            recordRefresher: (current) async {
+              try {
+                await syncCoordinator?.refreshPhoto(current.id);
+                await pullSyncCoordinator?.drain();
+              } catch (error, stackTrace) {
+                AppLogger.error('GalleryDetail.LiveRefresh', error, stackTrace);
+              }
+              final refreshed = await galleryViewModel.refreshDetailRecord(
+                current,
+              );
+              final syncItem = await photoOutbox?.findPhotoUpload(current.id);
+              return GalleryDetailRefreshResult(
+                record: refreshed,
+                hasPendingNasSync: galleryDetailHasPendingNasSync(syncItem),
+              );
+            },
           ),
           child: const GalleryDetailScreen(),
         ),
@@ -92,7 +109,8 @@ class GalleryDetailScreen extends StatefulWidget {
   State<GalleryDetailScreen> createState() => _GalleryDetailScreenState();
 }
 
-class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
+class _GalleryDetailScreenState extends State<GalleryDetailScreen>
+    with WidgetsBindingObserver {
   PageController? _pageController;
   bool _editMode = false;
   bool _pageReady = false;
@@ -111,6 +129,9 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
   bool _isSaving = false;
   bool _controllersReady = false;
   late ShootingRecord _record;
+  GalleryDetailLiveRefreshController? _liveRefreshController;
+  GalleryDetailViewModel? _observedDetailVm;
+  GalleryViewModel? _observedGalleryVm;
 
   @override
   void didChangeDependencies() {
@@ -125,6 +146,59 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
         MetadataFieldTrace.logUiValues('GalleryDetail', _record.exif!);
       }
       _pageReady = true;
+      _bindLiveRefresh(detailVm, context.read<GalleryViewModel>());
+    }
+  }
+
+  void _bindLiveRefresh(
+    GalleryDetailViewModel detailVm,
+    GalleryViewModel galleryVm,
+  ) {
+    WidgetsBinding.instance.addObserver(this);
+    _observedDetailVm = detailVm..addListener(_onDetailChanged);
+    _observedGalleryVm = galleryVm..addListener(_onGalleryChanged);
+    _liveRefreshController = GalleryDetailLiveRefreshController(
+      interval: detailVm.liveRefreshInterval,
+      shouldRefresh: () => detailVm.needsLiveRefresh,
+      refresh: detailVm.refreshCurrentRecord,
+    )..start();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_liveRefreshController?.refreshNow(force: true));
+    });
+  }
+
+  void _onDetailChanged() {
+    _liveRefreshController?.synchronize();
+  }
+
+  void _onGalleryChanged() {
+    final detailVm = _observedDetailVm;
+    final galleryVm = _observedGalleryVm;
+    if (detailVm == null || galleryVm == null || detailVm.records.isEmpty) {
+      return;
+    }
+    final current = detailVm.currentRecord;
+    final latest = galleryVm.recordForId(current.id);
+    if (latest != null &&
+        (latest.plateSolveQueueStatus != current.plateSolveQueueStatus ||
+            latest.plateSolveJobId != current.plateSolveJobId ||
+            latest.plateSolve != current.plateSolve ||
+            latest.syncState != current.syncState ||
+            latest.backendRecordId != current.backendRecordId)) {
+      detailVm.updateRecord(latest);
+    }
+    _liveRefreshController?.synchronize();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _liveRefreshController?.resume();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      _liveRefreshController?.pause();
     }
   }
 
@@ -138,6 +212,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
     final detailVm = context.read<GalleryDetailViewModel>();
     detailVm.onPageChanged(index);
     setState(() => _syncRecord(detailVm.currentRecord));
+    _liveRefreshController?.resume();
   }
 
   void _initControllers() {
@@ -176,6 +251,10 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _liveRefreshController?.dispose();
+    _observedDetailVm?.removeListener(_onDetailChanged);
+    _observedGalleryVm?.removeListener(_onGalleryChanged);
     _pageController?.dispose();
     if (_controllersReady) {
       _equipmentCtrl.dispose();
@@ -924,20 +1003,26 @@ class _GalleryPlateSolveSectionState extends State<GalleryPlateSolveSection> {
   bool _dependenciesReady = false;
   bool _retryingSync = false;
   String? _syncRetryError;
+  int? _lastDetailRefreshRevision;
 
   ShootingRecord get record => widget.record;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_dependenciesReady) return;
-    _dependenciesReady = true;
-    final outbox = context.read<SyncOutboxRepository?>();
-    _outbox = outbox is PhotoSyncOutboxRepository
-        ? outbox as PhotoSyncOutboxRepository
-        : null;
-    _syncCoordinator = context.read<TcBackendSyncCoordinator?>();
-    _reloadSyncItem();
+    if (!_dependenciesReady) {
+      _dependenciesReady = true;
+      final outbox = context.read<SyncOutboxRepository?>();
+      _outbox = outbox is PhotoSyncOutboxRepository
+          ? outbox as PhotoSyncOutboxRepository
+          : null;
+      _syncCoordinator = context.read<TcBackendSyncCoordinator?>();
+    }
+    final revision = context.watch<GalleryDetailViewModel?>()?.refreshRevision;
+    if (_syncItem == null || revision != _lastDetailRefreshRevision) {
+      _lastDetailRefreshRevision = revision;
+      _reloadSyncItem();
+    }
   }
 
   void _reloadSyncItem() {

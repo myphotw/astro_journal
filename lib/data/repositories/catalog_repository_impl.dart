@@ -141,6 +141,7 @@ class CatalogRepositoryImpl
         targetRaDeg: raDeg,
         targetDecDeg: decDeg,
         rotationDeg: rotationDeg,
+        rasterCalibration: true,
       );
 
       final withinFov =

@@ -190,6 +190,7 @@ class _FakeCatalogRepository implements CatalogRepository {
         targetRaDeg: raDeg,
         targetDecDeg: decDeg,
         rotationDeg: rotationDeg,
+        rasterCalibration: true,
       );
       final withinFov = offset.xDeg.abs() <= fovWidthDeg / 2 &&
           offset.yDeg.abs() <= fovHeightDeg / 2;

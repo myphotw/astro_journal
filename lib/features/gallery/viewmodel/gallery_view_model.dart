@@ -398,6 +398,24 @@ class GalleryViewModel extends ChangeNotifier {
     }
   }
 
+  Future<ShootingRecord> refreshDetailRecord(ShootingRecord record) async {
+    try {
+      final repository = _shootingRecordRepository;
+      final ShootingRecord? detailed;
+      if (repository is ShootingRecordDetailRefresher) {
+        detailed = await (repository as ShootingRecordDetailRefresher)
+            .refreshById(record.id);
+      } else {
+        detailed = await repository.getById(record.id);
+      }
+      if (detailed == null) return record;
+      _replaceRecord(detailed);
+      return detailed;
+    } catch (_) {
+      return record;
+    }
+  }
+
   CatalogObject _remoteCatalogObject(ShootingRecord record) {
     final id = record.celestialObjectId;
     final upper = id.toUpperCase();
