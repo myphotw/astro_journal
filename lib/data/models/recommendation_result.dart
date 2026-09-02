@@ -16,6 +16,7 @@ class RecommendationResult {
     this.imagingAssessment,
     this.minimumExposure,
     this.recommendedExposure,
+    this.observingConditionScore = 0,
   });
 
   final CatalogObject object;
@@ -32,6 +33,12 @@ class RecommendationResult {
   final ImagingSuitabilityAssessment? imagingAssessment;
   final Duration? minimumExposure;
   final Duration? recommendedExposure;
+  final double observingConditionScore;
+
+  Duration? get recommendedTotalIntegration => recommendedExposure;
+
+  Duration? get recommendedDailyIntegration =>
+      imagingAssessment?.recommendedDailyExposure ?? recommendedExposure;
 
   /// Primary reason label (backward compatibility).
   String get reason => reasons.isNotEmpty ? reasons.first.label : '오늘 밤 관측 가능';
@@ -55,6 +62,7 @@ class RecommendationResult {
       imagingAssessment: imagingAssessment ?? this.imagingAssessment,
       minimumExposure: minimumExposure,
       recommendedExposure: recommendedExposure,
+      observingConditionScore: observingConditionScore,
     );
   }
 }

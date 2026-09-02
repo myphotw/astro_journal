@@ -1,4 +1,5 @@
 import '../../../core/constants/scheduler_priority_weights.dart';
+import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/observation_context.dart';
 import '../../../data/models/scored_observation_target.dart';
 import 'scoring/exposure_priority.dart';
@@ -26,9 +27,15 @@ class SchedulerPriorityCalculator {
     required DateTime referenceTime,
   }) {
     final window = target.window;
+    final assessment = target.imagingAssessment;
+    final recommendedForSession =
+        assessment?.trackingMode == TrackingMode.altAz
+            ? assessment?.recommendedDailyExposure ??
+                target.recommendedExposure
+            : target.recommendedExposure;
     final urgency = urgencyScore.calculate(
       window: window,
-      recommendedExposure: target.recommendedExposure,
+      recommendedExposure: recommendedForSession,
       referenceTime: referenceTime,
     );
     final moon = moonPriority.calculate(
@@ -42,7 +49,7 @@ class SchedulerPriorityCalculator {
     final observation = window.bestObservationScore;
     final exposure = exposurePriority.calculate(
       window: window,
-      recommendedExposure: target.recommendedExposure,
+      recommendedExposure: recommendedForSession,
     );
     final recommendation = target.score;
 

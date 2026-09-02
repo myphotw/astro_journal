@@ -21,6 +21,7 @@ class ObjectObservationWindow {
     this.urgencyScore = 0,
     this.schedulerPriority = 0,
     this.slotObservationScores = const {},
+    this.geometricSlotStarts = const [],
     this.feasibleWindowSummary,
     this.optimalFeasibleCloudCoverage,
     this.optimalFeasibleWindSpeed,
@@ -46,6 +47,10 @@ class ObjectObservationWindow {
   final double urgencyScore;
   final double schedulerPriority;
   final Map<DateTime, double> slotObservationScores;
+
+  /// Slots that pass altitude, azimuth, and site Horizon checks before
+  /// date-specific weather and Moon feasibility are applied.
+  final List<DateTime> geometricSlotStarts;
 
   /// User-facing summary, e.g. "오늘 밤 22:00~01:00만 촬영 가능".
   final String? feasibleWindowSummary;
@@ -87,6 +92,7 @@ class ObjectObservationWindow {
       urgencyScore: urgencyScore ?? this.urgencyScore,
       schedulerPriority: schedulerPriority ?? this.schedulerPriority,
       slotObservationScores: slotObservationScores,
+      geometricSlotStarts: geometricSlotStarts,
       feasibleWindowSummary: feasibleWindowSummary,
       optimalFeasibleCloudCoverage: optimalFeasibleCloudCoverage,
       optimalFeasibleWindSpeed: optimalFeasibleWindSpeed,

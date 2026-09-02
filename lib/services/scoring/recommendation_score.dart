@@ -69,4 +69,36 @@ class RecommendationScore {
 
     return weighted.clamp(0.0, 100.0);
   }
+
+  /// Condition-only score derived from the existing visibility, Moon, and
+  /// weather components. Horizon, obstruction, twilight, and continuous
+  /// visibility remain prerequisite gates represented by [window].
+  ///
+  /// This score is descriptive in the current release and does not add a new
+  /// ranking penalty on top of the existing composite score.
+  double calculateObservingCondition({
+    required CatalogObject object,
+    required ObservationContext context,
+    required ObjectObservationWindow window,
+    required DateTime evaluationTime,
+    required CelestialPositionService positionService,
+  }) {
+    final scoringContext = context.copyWith(currentTime: evaluationTime);
+    final visibility = visibilityScore.calculate(window: window);
+    final moon = moonScore.calculate(
+      object: object,
+      context: scoringContext,
+      positionService: positionService,
+      evaluationTime: evaluationTime,
+    );
+    final weather = weatherScore.calculate(window: window);
+    const totalWeight = RecommendationScoreWeights.visibility +
+        RecommendationScoreWeights.moon +
+        RecommendationScoreWeights.weather;
+    final weighted =
+        visibility * RecommendationScoreWeights.visibility +
+        moon * RecommendationScoreWeights.moon +
+        weather * RecommendationScoreWeights.weather;
+    return (weighted / totalWeight).clamp(0.0, 100.0);
+  }
 }

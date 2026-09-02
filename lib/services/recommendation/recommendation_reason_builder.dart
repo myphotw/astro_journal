@@ -4,7 +4,6 @@ import '../../data/models/catalog_object.dart';
 import '../../data/models/object_observation_window.dart';
 import '../../data/models/recommendation_reason.dart';
 import '../celestial_position_service.dart';
-import '../observation_score_service.dart';
 
 abstract final class RecommendationReasonBuilder {
   static const _optimalRaByMonth = [7, 9, 11, 13, 15, 17, 19, 21, 23, 1, 3, 5];
@@ -45,18 +44,6 @@ abstract final class RecommendationReasonBuilder {
         RecommendationReason(
           type: RecommendationReasonType.currentAltitude,
           label: '✓ 최적 고도 ${optimal.round()}°',
-        ),
-      );
-    }
-
-    final shootStart = window.recommendStartTime;
-    final shootEnd = window.observationEndTime;
-    if (shootStart != null && shootEnd != null) {
-      reasons.add(
-        RecommendationReason(
-          type: RecommendationReasonType.shootingWindow,
-          label:
-              '✓ 추천 촬영시간 ${ObservationScoreService.formatWindow(shootStart, shootEnd)}',
         ),
       );
     }

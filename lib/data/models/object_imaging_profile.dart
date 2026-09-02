@@ -5,6 +5,21 @@ import '../../core/constants/surface_brightness_class.dart';
 
 enum ImagingMetadataReliability { reliable, partial, missing }
 
+/// Runtime-only sensitivity to light pollution, derived from the existing
+/// object type and imaging profile. It is intentionally not persisted in the
+/// catalog database.
+enum TargetLightPollutionSensitivity { low, medium, high, veryHigh }
+
+extension TargetLightPollutionSensitivityLabel
+    on TargetLightPollutionSensitivity {
+  String get label => switch (this) {
+    TargetLightPollutionSensitivity.low => '낮음',
+    TargetLightPollutionSensitivity.medium => '보통',
+    TargetLightPollutionSensitivity.high => '높음',
+    TargetLightPollutionSensitivity.veryHigh => '매우 높음',
+  };
+}
+
 /// Per-target imaging characteristics used by exposure and score engines.
 class ObjectImagingProfile {
   const ObjectImagingProfile({
@@ -45,6 +60,33 @@ class ObjectImagingProfile {
   /// Runtime-only confidence derived from magnitude and angular-size fields.
   /// It is deliberately not persisted in SQLite.
   final ImagingMetadataReliability metadataReliability;
+
+  TargetLightPollutionSensitivity get lightPollutionSensitivity {
+    if (objectType == ObjectType.reflectionNebula ||
+        objectType == ObjectType.darkNebula ||
+        surfaceBrightnessClass == SurfaceBrightnessClass.extremeDim ||
+        surfaceBrightnessClass == SurfaceBrightnessClass.veryDim) {
+      return TargetLightPollutionSensitivity.veryHigh;
+    }
+
+    if (objectType == ObjectType.galaxyGroup ||
+        objectType == ObjectType.starCloud ||
+        objectType == ObjectType.milkyWay ||
+        surfaceBrightnessClass == SurfaceBrightnessClass.dim ||
+        minimumRecommendedBortle <= 3) {
+      return TargetLightPollutionSensitivity.high;
+    }
+
+    if ((supportsNarrowband &&
+            surfaceBrightnessClass.index <=
+                SurfaceBrightnessClass.normal.index) ||
+        surfaceBrightnessClass == SurfaceBrightnessClass.veryBright ||
+        surfaceBrightnessClass == SurfaceBrightnessClass.bright) {
+      return TargetLightPollutionSensitivity.low;
+    }
+
+    return TargetLightPollutionSensitivity.medium;
+  }
 
   ObjectImagingProfile copyWith({
     ObjectType? objectType,

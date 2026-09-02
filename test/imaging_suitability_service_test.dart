@@ -6,6 +6,7 @@ import 'package:astro_journal/core/constants/surface_brightness_class.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
+import 'package:astro_journal/data/models/object_imaging_profile.dart';
 import 'package:astro_journal/services/equipment/equipment_recommendation_service.dart';
 import 'package:astro_journal/services/imaging_suitability_service.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
@@ -219,6 +220,126 @@ void main() {
       expect(profile.estimatedSurfaceBrightness, isNull);
       expect(result.hasReliableSurfaceBrightness, isFalse);
       expect(result.quality.level, lessThanOrEqualTo(2));
+    });
+
+    test('high-Bortle emission target gains efficiency from Filter ON', () {
+      final target = object(
+        id: 'EMISSION',
+        type: ObjectType.emissionNebula,
+        magnitude: '6.0',
+        angularSize: "60' × 40'",
+      );
+      final profile = profileProvider.profileFor(target);
+      final on = suitabilityService.assess(
+        profile: profile,
+        bortle: 8,
+        trackingMode: TrackingMode.eq,
+        filterMode: FilterMode.on,
+      );
+      final off = suitabilityService.assess(
+        profile: profile,
+        bortle: 8,
+        trackingMode: TrackingMode.eq,
+        filterMode: FilterMode.off,
+      );
+
+      expect(on.filterEffectiveness, FilterEffectiveness.high);
+      expect(
+        on.targetLightPollutionSensitivity,
+        TargetLightPollutionSensitivity.low,
+      );
+      expect(on.imagingEfficiencyScore, greaterThan(off.imagingEfficiencyScore));
+      expect(on.suitabilityScore, on.imagingEfficiencyScore);
+    });
+
+    test('galaxy Filter ON benefit stays below emission-target benefit', () {
+      final emission = object(
+        id: 'EMISSION-COMPARE',
+        type: ObjectType.emissionNebula,
+        magnitude: '6.0',
+        angularSize: "60' × 40'",
+      );
+      final galaxy = object(
+        id: 'GALAXY-COMPARE',
+        type: ObjectType.galaxy,
+        magnitude: '9.0',
+        angularSize: "10' × 6'",
+      );
+
+      double benefit(CatalogObject target) {
+        final profile = profileProvider.profileFor(target);
+        final on = suitabilityService.assess(
+          profile: profile,
+          bortle: 8,
+          trackingMode: TrackingMode.eq,
+          filterMode: FilterMode.on,
+        );
+        final off = suitabilityService.assess(
+          profile: profile,
+          bortle: 8,
+          trackingMode: TrackingMode.eq,
+          filterMode: FilterMode.off,
+        );
+        return on.imagingEfficiencyScore - off.imagingEfficiencyScore;
+      }
+
+      final galaxyProfile = profileProvider.profileFor(galaxy);
+      expect(
+        suitabilityService.filterEffectivenessFor(galaxyProfile),
+        FilterEffectiveness.low,
+      );
+      expect(benefit(galaxy), lessThan(benefit(emission)));
+    });
+
+    test('reflection and dark nebula do not receive a large filter bonus', () {
+      final reflection = object(
+        id: 'REFLECTION',
+        type: ObjectType.reflectionNebula,
+        magnitude: '8.0',
+        angularSize: "30' × 20'",
+      );
+      final dark = object(
+        id: 'DARK',
+        type: ObjectType.darkNebula,
+        magnitude: '-',
+        angularSize: "30' × 20'",
+      );
+
+      final reflectionProfile = profileProvider.profileFor(reflection);
+      final darkProfile = profileProvider.profileFor(dark);
+      final reflectionOn = suitabilityService.assess(
+        profile: reflectionProfile,
+        bortle: 8,
+        trackingMode: TrackingMode.eq,
+        filterMode: FilterMode.on,
+      );
+      final reflectionOff = suitabilityService.assess(
+        profile: reflectionProfile,
+        bortle: 8,
+        trackingMode: TrackingMode.eq,
+        filterMode: FilterMode.off,
+      );
+      final darkOn = suitabilityService.assess(
+        profile: darkProfile,
+        bortle: 8,
+        trackingMode: TrackingMode.eq,
+        filterMode: FilterMode.on,
+      );
+      final darkOff = suitabilityService.assess(
+        profile: darkProfile,
+        bortle: 8,
+        trackingMode: TrackingMode.eq,
+        filterMode: FilterMode.off,
+      );
+
+      expect(reflectionOn.filterEffectiveness, FilterEffectiveness.low);
+      expect(darkOn.filterEffectiveness, FilterEffectiveness.none);
+      expect(
+        reflectionOn.imagingEfficiencyScore -
+            reflectionOff.imagingEfficiencyScore,
+        lessThan(3),
+      );
+      expect(darkOn.imagingEfficiencyScore, darkOff.imagingEfficiencyScore);
     });
   });
 }

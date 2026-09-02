@@ -31,6 +31,29 @@ abstract final class FieldOrientationCalculator {
     return (lst - raHours * 15 + 360) % 360;
   }
 
+  /// Signed Hour Angle in hours, normalized to -12h..+12h.
+  /// The sidereal calculation remains owned by [hourAngleDegrees].
+  static double signedHourAngleHours({
+    required double longitudeDeg,
+    required DateTime time,
+    required double raHours,
+  }) {
+    var degrees = hourAngleDegrees(
+      longitudeDeg: longitudeDeg,
+      time: time,
+      raHours: raHours,
+    );
+    if (degrees > 180) degrees -= 360;
+    return degrees / 15;
+  }
+
+  /// Smallest circular distance between two signed Hour Angles, in hours.
+  static double hourAngleDistanceHours(double first, double second) {
+    var distance = (first - second).abs() % 24;
+    if (distance > 12) distance = 24 - distance;
+    return distance;
+  }
+
   static double altAzFieldRotationDegrees({
     required double parallacticAngleDeg,
   }) => parallacticAngleDeg;
@@ -49,10 +72,7 @@ abstract final class FieldOrientationCalculator {
   }) {
     if (!windowEnd.isAfter(windowStart)) return 0;
 
-    double? previous;
-    var cumulative = 0.0;
-    var minimum = 0.0;
-    var maximum = 0.0;
+    final rotations = <double>[];
     var cursor = windowStart;
 
     while (!cursor.isAfter(windowEnd)) {
@@ -61,30 +81,39 @@ abstract final class FieldOrientationCalculator {
         time: cursor,
         raHours: raHours,
       );
-      final angle = altAzFieldRotationDegrees(
+      rotations.add(altAzFieldRotationDegrees(
         parallacticAngleDeg: parallacticAngleDegrees(
           latitudeDeg: latitudeDeg,
           hourAngleDeg: hourAngle,
           declinationDeg: declinationDeg,
         ),
-      );
-
-      if (previous != null) {
-        var delta = angle - previous;
-        while (delta > 180) {
-          delta -= 360;
-        }
-        while (delta < -180) {
-          delta += 360;
-        }
-        cumulative += delta;
-        minimum = math.min(minimum, cumulative);
-        maximum = math.max(maximum, cumulative);
-      }
-      previous = angle;
+      ));
       cursor = cursor.add(step);
     }
+    return unwrappedRotationSpanDegrees(rotations);
+  }
 
+  /// Total span of angular samples after removing +/-180 degree wrap jumps.
+  static double unwrappedRotationSpanDegrees(Iterable<double> angles) {
+    final samples = angles.toList(growable: false);
+    if (samples.length < 2) return 0;
+    var previous = samples.first;
+    var cumulative = 0.0;
+    var minimum = 0.0;
+    var maximum = 0.0;
+    for (final angle in samples.skip(1)) {
+      var delta = angle - previous;
+      while (delta > 180) {
+        delta -= 360;
+      }
+      while (delta < -180) {
+        delta += 360;
+      }
+      cumulative += delta;
+      minimum = math.min(minimum, cumulative);
+      maximum = math.max(maximum, cumulative);
+      previous = angle;
+    }
     return maximum - minimum;
   }
 

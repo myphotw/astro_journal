@@ -72,7 +72,7 @@ class SchedulerEngine {
         slots: slots,
         targets: prioritizedTargets,
         resultsById: input.resultsById,
-        siteSlotScores: input.context.siteSlotScores,
+        context: input.context,
       ),
       state: 'targets=${input.targets.length} slots=${slots.length}',
     );

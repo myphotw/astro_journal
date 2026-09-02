@@ -59,6 +59,7 @@ class ScheduleItem {
     required this.urgencyScore,
     required this.status,
     required this.result,
+    this.haMatchQuality,
   });
 
   final ScoredObservationTarget target;
@@ -73,6 +74,7 @@ class ScheduleItem {
   final double urgencyScore;
   final ScheduleItemStatus status;
   final RecommendationResult result;
+  final double? haMatchQuality;
 
   CatalogObject get catalogObject => target.object;
 

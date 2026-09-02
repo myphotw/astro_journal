@@ -1,7 +1,11 @@
+import '../../data/models/imaging_suitability_assessment.dart';
 import '../../data/models/object_observation_window.dart';
+import '../../data/models/observation_context.dart';
 import '../../data/models/recommendation_result.dart';
 import '../../data/models/scheduler_models.dart';
 import '../../data/models/scored_observation_target.dart';
+import '../celestial_position_service.dart';
+import '../equipment/alt_az_imaging_policy.dart';
 import '../scheduler_engine.dart';
 
 class _TargetAssignmentPlan {
@@ -17,7 +21,7 @@ abstract final class SchedulerAssignmentPlanner {
     required List<ScheduleSlot> slots,
     required List<ScoredObservationTarget> targets,
     required Map<String, RecommendationResult> resultsById,
-    Map<DateTime, double> siteSlotScores = const {},
+    required ObservationContext context,
   }) {
     final occupied = <DateTime>{};
     final items = <ScheduleItem>[];
@@ -41,7 +45,14 @@ abstract final class SchedulerAssignmentPlanner {
       if (recommendStart == null || observationEnd == null) continue;
 
       final minSlots = _slotCountFor(target.minimumExposure);
-      final recSlots = _slotCountFor(target.recommendedExposure);
+      final assessment = target.imagingAssessment;
+      final scheduledRecommendedExposure =
+          assessment?.trackingMode == TrackingMode.altAz
+              ? assessment?.recommendedDailyExposure ??
+                  target.recommendedExposure
+              : target.recommendedExposure;
+      if (scheduledRecommendedExposure <= Duration.zero) continue;
+      final recSlots = _slotCountFor(scheduledRecommendedExposure);
       final targetSlotStarts = window.slotObservationScores.keys.toSet();
 
       final candidateCenters = _rankCandidateCenters(
@@ -50,7 +61,8 @@ abstract final class SchedulerAssignmentPlanner {
         occupied: occupied,
         recommendStart: recommendStart,
         observationEnd: observationEnd,
-        siteSlotScores: siteSlotScores,
+        context: context,
+        target: target,
         targetSlotStarts: targetSlotStarts,
       );
 
@@ -89,7 +101,7 @@ abstract final class SchedulerAssignmentPlanner {
       final status = _resolveStatus(
         shootingDuration: shootingDuration,
         minimumExposure: target.minimumExposure,
-        recommendedExposure: target.recommendedExposure,
+        recommendedExposure: scheduledRecommendedExposure,
         windowMinutes: window.totalObservableMinutes,
       );
 
@@ -102,7 +114,7 @@ abstract final class SchedulerAssignmentPlanner {
           startTime: startTime,
           endTime: endTime,
           shootingDuration: shootingDuration,
-          recommendedDuration: target.recommendedExposure,
+          recommendedDuration: scheduledRecommendedExposure,
           optimalTime: chosenOptimal,
           optimalAltitude: window.optimalAltitude ?? window.peakAltitude ?? 0,
           recommendationScore: target.score,
@@ -110,6 +122,12 @@ abstract final class SchedulerAssignmentPlanner {
           urgencyScore: target.urgencyScore,
           status: status,
           result: result,
+          haMatchQuality: _haMatchQualityForBlock(
+            target: target,
+            context: context,
+            start: startTime,
+            end: endTime,
+          ),
         ),
       );
     }
@@ -129,7 +147,8 @@ abstract final class SchedulerAssignmentPlanner {
     required Set<DateTime> occupied,
     required DateTime recommendStart,
     required DateTime observationEnd,
-    Map<DateTime, double>? siteSlotScores,
+    required ObservationContext context,
+    required ScoredObservationTarget target,
     required Set<DateTime> targetSlotStarts,
   }) {
     final windowEnd = observationEnd.add(SchedulerEngine.slotDuration);
@@ -144,10 +163,17 @@ abstract final class SchedulerAssignmentPlanner {
         continue;
       }
 
-      final score =
+      final observationScore =
           window.slotObservationScores[slot.start] ??
-          siteSlotScores?[slot.start] ??
+          context.siteSlotScores[slot.start] ??
           window.bestObservationScore;
+      final haMatchQuality = _haMatchQualityAt(
+        target: target,
+        context: context,
+        time: slot.start,
+      );
+      final score = observationScore +
+          (haMatchQuality ?? 0) * AltAzImagingPolicy.schedulerHaBonusWeight;
       candidates.add((time: slot.start, score: score));
     }
 
@@ -268,6 +294,42 @@ abstract final class SchedulerAssignmentPlanner {
     final minutes = duration.inMinutes;
     if (minutes <= 0) return 1;
     return (minutes / SchedulerEngine.slotDuration.inMinutes).ceil();
+  }
+
+  static double? _haMatchQualityAt({
+    required ScoredObservationTarget target,
+    required ObservationContext context,
+    required DateTime time,
+  }) {
+    final assessment = target.imagingAssessment;
+    final preferred = assessment?.preferredHaWindow;
+    if (assessment == null ||
+        assessment.trackingMode != TrackingMode.altAz ||
+        preferred == null) {
+      return null;
+    }
+    return AltAzImagingPolicy.haMatchQuality(
+      preferred: preferred,
+      longitudeDeg: context.longitude,
+      candidateCenter: time,
+      raHours: CelestialPositionService.parseRaHours(target.object.ra),
+    );
+  }
+
+  static double? _haMatchQualityForBlock({
+    required ScoredObservationTarget target,
+    required ObservationContext context,
+    required DateTime start,
+    required DateTime end,
+  }) {
+    final center = start.add(
+      Duration(minutes: end.difference(start).inMinutes ~/ 2),
+    );
+    return _haMatchQualityAt(
+      target: target,
+      context: context,
+      time: center,
+    );
   }
 
   static ScheduleItemStatus _resolveStatus({

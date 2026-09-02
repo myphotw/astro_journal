@@ -13,6 +13,7 @@ class ScoredObservationTarget {
     required this.moonSeparation,
     required this.minimumExposure,
     required this.recommendedExposure,
+    this.observingConditionScore = 0,
     this.schedulerPriority = 0,
     this.urgencyScore = 0,
     this.imagingAssessment,
@@ -25,6 +26,7 @@ class ScoredObservationTarget {
   final double moonSeparation;
   final Duration minimumExposure;
   final Duration recommendedExposure;
+  final double observingConditionScore;
   final double schedulerPriority;
   final double urgencyScore;
   final ImagingSuitabilityAssessment? imagingAssessment;
@@ -34,6 +36,7 @@ class ScoredObservationTarget {
     double? score,
     double? schedulerPriority,
     double? urgencyScore,
+    double? observingConditionScore,
     ImagingSuitabilityAssessment? imagingAssessment,
   }) {
     return ScoredObservationTarget(
@@ -44,6 +47,8 @@ class ScoredObservationTarget {
       moonSeparation: moonSeparation,
       minimumExposure: minimumExposure,
       recommendedExposure: recommendedExposure,
+      observingConditionScore:
+          observingConditionScore ?? this.observingConditionScore,
       schedulerPriority: schedulerPriority ?? this.schedulerPriority,
       urgencyScore: urgencyScore ?? this.urgencyScore,
       imagingAssessment: imagingAssessment ?? this.imagingAssessment,

@@ -16,7 +16,7 @@ void main() {
       expect(GalleryDetailScreen.open, isNotNull);
       final source = File(
         'lib/features/gallery/view/gallery_detail_screen.dart',
-      ).readAsStringSync();
+      ).readAsStringSync().replaceAll('\r\n', '\n');
       final openStart = source.indexOf('static Future<void> open(');
       final pushStart = source.indexOf('await Navigator.of(context).push<void>(', openStart);
       final beforePush = source.substring(openStart, pushStart);

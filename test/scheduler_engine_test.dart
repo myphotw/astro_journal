@@ -4,12 +4,14 @@ import 'package:astro_journal/core/constants/object_type.dart';
 import 'package:astro_journal/core/constants/surface_brightness_class.dart';
 import 'package:astro_journal/core/constants/angular_size_class.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
+import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
 import 'package:astro_journal/data/models/object_imaging_profile.dart';
 import 'package:astro_journal/data/models/object_observation_window.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/recommendation_result.dart';
 import 'package:astro_journal/data/models/scored_observation_target.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
+import 'package:astro_journal/services/equipment/field_orientation_calculator.dart';
 import 'package:astro_journal/services/scheduler_engine.dart';
 import 'package:astro_journal/data/models/scheduler_models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +50,8 @@ void main() {
       Duration minimumExposure = const Duration(minutes: 30),
       Duration recommendedExposure = const Duration(minutes: 90),
       Map<DateTime, double> slotObservationScores = const {},
+      ImagingSuitabilityAssessment? imagingAssessment,
+      DateTime? windowStart,
     }) {
       const object = CatalogObject(
         id: 'm42',
@@ -60,8 +64,8 @@ void main() {
         dec: '-05° 23m',
         magnitude: '4.0',
       );
-      final start = DateTime(2026, 7, 1, 21, 0);
-      final optimal = optimalTime ?? DateTime(2026, 7, 1, 22, 20);
+      final start = windowStart ?? DateTime(2026, 7, 1, 21, 0);
+      final optimal = optimalTime ?? start.add(const Duration(minutes: 80));
       return ScoredObservationTarget(
         object: object,
         window: ObjectObservationWindow(
@@ -92,6 +96,25 @@ void main() {
         moonSeparation: 90,
         minimumExposure: minimumExposure,
         recommendedExposure: recommendedExposure,
+        imagingAssessment: imagingAssessment,
+      );
+    }
+
+    ImagingSuitabilityAssessment assessment({
+      required TrackingMode trackingMode,
+      required Duration dailyDuration,
+      TargetPreferredHaWindow? preferredHaWindow,
+    }) {
+      return ImagingSuitabilityAssessment(
+        quality: ExpectedResultQuality.mainStructure,
+        filterMode: FilterMode.on,
+        trackingMode: trackingMode,
+        suitabilityScore: 80,
+        scoreMultiplier: 1,
+        reason: 'test',
+        hasReliableSurfaceBrightness: true,
+        recommendedDailyExposure: dailyDuration,
+        preferredHaWindow: preferredHaWindow,
       );
     }
 
@@ -303,6 +326,209 @@ void main() {
       );
 
       expect(result.items, isEmpty);
+    });
+
+    test('Alt-Az uses daily duration and preserves 10-minute slots', () {
+      final start = DateTime(2026, 7, 1, 20);
+      final end = DateTime(2026, 7, 2, 0, 30);
+      final session = buildSession(start: start, end: end);
+      final context = buildContext(start: start, end: end);
+      final target = buildTarget(
+        imagingAssessment: assessment(
+          trackingMode: TrackingMode.altAz,
+          dailyDuration: const Duration(minutes: 40),
+        ),
+      );
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: context,
+          session: session,
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: start,
+        ),
+      );
+
+      expect(result.items, hasLength(1));
+      expect(
+        result.items.single.recommendedDuration,
+        const Duration(minutes: 40),
+      );
+      expect(result.items.single.shootingDuration.inMinutes % 10, 0);
+    });
+
+    test('EQ ignores an injected daily limit and keeps total duration', () {
+      final start = DateTime(2026, 7, 1, 20);
+      final end = DateTime(2026, 7, 2, 0, 30);
+      final session = buildSession(start: start, end: end);
+      final context = buildContext(start: start, end: end);
+      final target = buildTarget(
+        imagingAssessment: assessment(
+          trackingMode: TrackingMode.eq,
+          dailyDuration: const Duration(minutes: 30),
+        ),
+      );
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: context,
+          session: session,
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: start,
+        ),
+      );
+
+      expect(result.items, hasLength(1));
+      expect(
+        result.items.single.recommendedDuration,
+        const Duration(minutes: 90),
+      );
+      expect(result.items.single.haMatchQuality, isNull);
+    });
+
+    test('Alt-Az prefers matching HA only among feasible target slots', () {
+      final start = DateTime(2026, 7, 1, 20);
+      final end = DateTime(2026, 7, 2, 0, 30);
+      final session = buildSession(start: start, end: end);
+      final context = buildContext(start: start, end: end);
+      final preferredCenter = DateTime(2026, 7, 1, 22, 10);
+      final preferredHa = FieldOrientationCalculator.signedHourAngleHours(
+        longitudeDeg: context.longitude,
+        time: preferredCenter,
+        raHours: 5 + 35 / 60,
+      );
+      final feasible = <DateTime, double>{
+        for (var minute = 0; minute < 60; minute += 10)
+          DateTime(2026, 7, 1, 22).add(Duration(minutes: minute)): 70,
+      };
+      final target = buildTarget(
+        optimalTime: DateTime(2026, 7, 1, 21),
+        minimumExposure: const Duration(minutes: 30),
+        recommendedExposure: const Duration(minutes: 30),
+        slotObservationScores: feasible,
+        imagingAssessment: assessment(
+          trackingMode: TrackingMode.altAz,
+          dailyDuration: const Duration(minutes: 30),
+          preferredHaWindow: TargetPreferredHaWindow(
+            startHours: preferredHa - 0.25,
+            endHours: preferredHa + 0.25,
+            centerHours: preferredHa,
+            durationMinutes: 30,
+          ),
+        ),
+      );
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: context,
+          session: session,
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: start,
+        ),
+      );
+
+      expect(result.items, hasLength(1));
+      final item = result.items.single;
+      expect(item.haMatchQuality, isNotNull);
+      expect(item.haMatchQuality!, greaterThan(90));
+      for (
+        var slot = item.startTime;
+        slot.isBefore(item.endTime);
+        slot = slot.add(SchedulerEngine.slotDuration)
+      ) {
+        expect(feasible, contains(slot));
+      }
+    });
+
+    test('nearby dates schedule the same target at a similar HA', () {
+      final firstSession = buildSession(
+        start: DateTime(2026, 7, 1, 20),
+        end: DateTime(2026, 7, 2, 0, 30),
+      );
+      final secondSession = buildSession(
+        start: DateTime(2026, 7, 2, 19, 50),
+        end: DateTime(2026, 7, 3, 0, 20),
+      );
+      final firstContext = buildContext(
+        start: firstSession.start,
+        end: firstSession.end,
+      );
+      final secondContext = buildContext(
+        start: secondSession.start,
+        end: secondSession.end,
+      );
+      final preferredCenter = DateTime(2026, 7, 1, 22, 10);
+      final preferredHa = FieldOrientationCalculator.signedHourAngleHours(
+        longitudeDeg: firstContext.longitude,
+        time: preferredCenter,
+        raHours: 5 + 35 / 60,
+      );
+      final preferredWindow = TargetPreferredHaWindow(
+        startHours: preferredHa - 0.25,
+        endHours: preferredHa + 0.25,
+        centerHours: preferredHa,
+        durationMinutes: 30,
+      );
+
+      ScoredObservationTarget targetFor(DateTime dayStart) => buildTarget(
+            windowStart: dayStart,
+            minimumExposure: const Duration(minutes: 30),
+            recommendedExposure: const Duration(minutes: 30),
+            imagingAssessment: assessment(
+              trackingMode: TrackingMode.altAz,
+              dailyDuration: const Duration(minutes: 30),
+              preferredHaWindow: preferredWindow,
+            ),
+          );
+
+      final firstTarget = targetFor(DateTime(2026, 7, 1, 21));
+      final secondTarget = targetFor(DateTime(2026, 7, 2, 20, 50));
+      final first = engine.buildSchedule(
+        SchedulerInput(
+          context: firstContext,
+          session: firstSession,
+          targets: [firstTarget],
+          resultsById: {
+            firstTarget.object.id: buildResult(firstTarget),
+          },
+          referenceTime: firstSession.start,
+        ),
+      );
+      final second = engine.buildSchedule(
+        SchedulerInput(
+          context: secondContext,
+          session: secondSession,
+          targets: [secondTarget],
+          resultsById: {
+            secondTarget.object.id: buildResult(secondTarget),
+          },
+          referenceTime: secondSession.start,
+        ),
+      );
+
+      expect(first.items, hasLength(1));
+      expect(second.items, hasLength(1));
+      double scheduledHa(ScheduleItem item, ObservationContext context) {
+        final center = item.startTime.add(
+          Duration(minutes: item.shootingDuration.inMinutes ~/ 2),
+        );
+        return FieldOrientationCalculator.signedHourAngleHours(
+          longitudeDeg: context.longitude,
+          time: center,
+          raHours: 5 + 35 / 60,
+        );
+      }
+
+      expect(
+        FieldOrientationCalculator.hourAngleDistanceHours(
+          scheduledHa(first.items.single, firstContext),
+          scheduledHa(second.items.single, secondContext),
+        ),
+        lessThanOrEqualTo(0.2),
+      );
     });
   });
 }

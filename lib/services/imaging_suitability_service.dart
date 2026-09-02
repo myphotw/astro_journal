@@ -14,15 +14,22 @@ class ImagingSuitabilityService {
     required ObjectImagingProfile profile,
     required int bortle,
     TrackingMode trackingMode = TrackingMode.altAz,
+    FilterMode? filterMode,
     ImagingEquipmentFit? equipmentFit,
     Duration? recommendedExposure,
+    Duration? recommendedDailyExposure,
+    TargetPreferredHaWindow? preferredHaWindow,
+    bool dailyDurationLimitedByFieldRotation = false,
+    double dailyFieldRotationSpanDegrees = 0,
     double? targetAltitude,
     double moonIllumination = 0,
     double moonSeparation = 180,
     double cloudCover = 0,
     double fieldRotationSpanDegrees = 0,
   }) {
-    final filterMode = recommendedFilterMode(profile);
+    final resolvedFilterMode = filterMode ?? recommendedFilterMode(profile);
+    final filterEffectiveness = filterEffectivenessFor(profile);
+    final lightPollutionSensitivity = profile.lightPollutionSensitivity;
     final framingRecommendation = _framingRecommendation(equipmentFit);
     final mosaicMode =
         framingRecommendation == FramingRecommendation.mosaicRequired &&
@@ -36,7 +43,8 @@ class ImagingSuitabilityService {
         profile.surfaceBrightnessClass.index >=
         SurfaceBrightnessClass.dim.index;
     final narrowbandRelief =
-        filterMode == FilterMode.on && profile.supportsNarrowband;
+        resolvedFilterMode == FilterMode.on &&
+        filterEffectiveness.index >= FilterEffectiveness.medium.index;
 
     if (urbanSky && lowSurfaceBrightness) {
       var lightPollutionPenalty = bortle >= 8 ? 2 : 1;
@@ -86,6 +94,7 @@ class ImagingSuitabilityService {
     final highAltitude = (targetAltitude ?? 0) >= 65;
     final altAzRotationRisk =
         trackingMode == TrackingMode.altAz &&
+        !dailyDurationLimitedByFieldRotation &&
         longExposure &&
         (highAltitude || fieldRotationSpanDegrees >= 20);
     if (altAzRotationRisk) {
@@ -130,7 +139,8 @@ class ImagingSuitabilityService {
     final skyFactor = _skyQualityFactor(
       profile: profile,
       bortle: bortle,
-      filterMode: filterMode,
+      filterMode: resolvedFilterMode,
+      filterEffectiveness: filterEffectiveness,
     );
     final framingFactor = extremelyTiny
         ? 0.65
@@ -157,15 +167,16 @@ class ImagingSuitabilityService {
 
     return ImagingSuitabilityAssessment(
       quality: quality,
-      filterMode: filterMode,
+      filterMode: resolvedFilterMode,
       mosaicMode: mosaicMode,
       trackingMode: trackingMode,
       suitabilityScore: suitabilityScore,
+      imagingEfficiencyScore: suitabilityScore,
       scoreMultiplier: multiplier.clamp(0.2, 1.0).toDouble(),
       reason: _reason(
         profile: profile,
         bortle: bortle,
-        filterMode: filterMode,
+        filterMode: resolvedFilterMode,
         mosaicMode: mosaicMode,
         framingRecommendation: framingRecommendation,
         screenFillPercent: screenFillPercent,
@@ -173,6 +184,13 @@ class ImagingSuitabilityService {
         altAzRotationRisk: altAzRotationRisk,
       ),
       hasReliableSurfaceBrightness: hasReliableSurfaceBrightness,
+      targetLightPollutionSensitivity: lightPollutionSensitivity,
+      filterEffectiveness: filterEffectiveness,
+      recommendedDailyExposure: recommendedDailyExposure,
+      preferredHaWindow: preferredHaWindow,
+      dailyDurationLimitedByFieldRotation:
+          dailyDurationLimitedByFieldRotation,
+      dailyFieldRotationSpanDegrees: dailyFieldRotationSpanDegrees,
       fieldRotationSpanDegrees: fieldRotationSpanDegrees,
     );
   }
@@ -191,21 +209,43 @@ class ImagingSuitabilityService {
     required ObjectImagingProfile profile,
     required int bortle,
     required FilterMode filterMode,
+    required FilterEffectiveness filterEffectiveness,
   }) {
-    var maximumPenalty = switch (profile.surfaceBrightnessClass) {
-      SurfaceBrightnessClass.extremeDim => 0.24,
-      SurfaceBrightnessClass.veryDim => 0.20,
-      SurfaceBrightnessClass.dim => 0.16,
-      SurfaceBrightnessClass.normal
+    final sensitivity = profile.lightPollutionSensitivity;
+    var maximumPenalty = switch (sensitivity) {
+      TargetLightPollutionSensitivity.veryHigh =>
+        switch (profile.surfaceBrightnessClass) {
+          SurfaceBrightnessClass.extremeDim => 0.24,
+          SurfaceBrightnessClass.veryDim => 0.20,
+          _ => 0.16,
+        },
+      TargetLightPollutionSensitivity.high =>
+        profile.surfaceBrightnessClass == SurfaceBrightnessClass.dim
+            ? 0.16
+            : 0.10,
+      TargetLightPollutionSensitivity.medium
           when profile.objectType == ObjectType.galaxy =>
         0.10,
-      SurfaceBrightnessClass.bright
+      TargetLightPollutionSensitivity.low
           when profile.objectType == ObjectType.galaxy =>
         0.06,
       _ => 0.0,
     };
-    if (filterMode == FilterMode.on && profile.supportsNarrowband) {
-      maximumPenalty *= 0.55;
+
+    // Keep filter benefit inside the existing sky factor. No additional
+    // Bortle multiplier is applied to the final recommendation score.
+    if (maximumPenalty == 0 &&
+        filterMode == FilterMode.off &&
+        filterEffectiveness == FilterEffectiveness.high) {
+      maximumPenalty = 0.06;
+    }
+    if (filterMode == FilterMode.on) {
+      maximumPenalty *= switch (filterEffectiveness) {
+        FilterEffectiveness.high => 0.0,
+        FilterEffectiveness.medium => 0.55,
+        FilterEffectiveness.low => 0.9,
+        FilterEffectiveness.none => 1.0,
+      };
     }
     final pollutionRatio = ((bortle.clamp(1, 9) - 1) / 8).toDouble();
     return 1 - maximumPenalty * pollutionRatio;
@@ -219,6 +259,23 @@ class ImagingSuitabilityService {
       ObjectType.complexNebula || ObjectType.nebulaWithCluster =>
         profile.supportsNarrowband ? FilterMode.on : FilterMode.off,
       _ => FilterMode.off,
+    };
+  }
+
+  FilterEffectiveness filterEffectivenessFor(ObjectImagingProfile profile) {
+    return switch (profile.objectType) {
+      ObjectType.emissionNebula ||
+      ObjectType.planetaryNebula ||
+      ObjectType.supernovaRemnant => FilterEffectiveness.high,
+      ObjectType.complexNebula || ObjectType.nebulaWithCluster =>
+        profile.supportsNarrowband
+            ? FilterEffectiveness.medium
+            : FilterEffectiveness.low,
+      ObjectType.galaxy ||
+      ObjectType.galaxyGroup ||
+      ObjectType.reflectionNebula => FilterEffectiveness.low,
+      ObjectType.darkNebula => FilterEffectiveness.none,
+      _ => FilterEffectiveness.none,
     };
   }
 

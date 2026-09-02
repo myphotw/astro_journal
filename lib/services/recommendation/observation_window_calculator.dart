@@ -157,6 +157,11 @@ class ObservationWindowCalculator {
     );
 
     final siteWindow = context.observationWindow;
+    final geometricSlotStarts = visiblePoints
+        .map((point) => _alignToSlot(point.time))
+        .toSet()
+        .toList()
+      ..sort();
     final slotScores = <DateTime, double>{};
     final pointBySlot = <DateTime, CelestialTimePoint>{};
     final lightPollutionScore = const LightPollutionScore().calculate(
@@ -360,6 +365,7 @@ class ObservationWindowCalculator {
         moonSafeMinutes: moonSafeMinutes,
         bestObservationScore: bestScore.clamp(0, 100),
         slotObservationScores: filteredScores,
+        geometricSlotStarts: geometricSlotStarts,
         feasibleWindowSummary: feasibleSummary,
         optimalFeasibleCloudCoverage: optimalWeather?.cloudCover,
         optimalFeasibleWindSpeed: optimalWeather?.windSpeed,

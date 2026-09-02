@@ -8,15 +8,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
+import '../../../data/models/object_imaging_profile.dart';
 import '../../../data/models/object_observation_window.dart';
-import '../../../data/models/observation_context.dart';
 import '../../../data/models/observation_score_contribution.dart';
 import '../../../data/models/observation_status.dart';
 import '../../../data/models/recommendation_result.dart';
 import '../../../data/models/scheduler_models.dart';
 import '../../../data/models/observation_quality_component.dart';
-import '../../../services/exposure_policy.dart';
-import '../../../services/object_imaging_profile_provider.dart';
 import '../../../services/observation_score_service.dart';
 import '../../../shared/widgets/catalog_equipment_chips_row.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
@@ -47,30 +45,72 @@ String _formatDateTime(DateTime dt) {
   return '${l.month}/${l.day} ${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
 }
 
+String _scoreLevelLabel(double score) {
+  if (score >= 75) return '높음';
+  if (score >= 50) return '보통';
+  return '낮음';
+}
+
 String? _resolveExposureTimeLineLabel(
-  BuildContext context,
-  HomeViewModel homeVm,
   RecommendationResult recommended,
 ) {
-  final ObservationContext? sessionContext = homeVm.lastSessionContext;
-  if (sessionContext == null) return null;
-
-  final policy = context.read<ExposurePolicy>();
-  final profileProvider = context.read<ObjectImagingProfileProvider>();
-  final profile = profileProvider.profileFor(recommended.object);
-
-  final minimum = policy.calculateMinimumExposure(
-    bortle: sessionContext.bortle,
-    brightness: sessionContext.brightness,
-    profile: profile,
-  );
-  final recommendedExposure = policy.calculateRecommendedExposure(
-    bortle: sessionContext.bortle,
-    brightness: sessionContext.brightness,
-    profile: profile,
-  );
-
+  final minimum = recommended.minimumExposure;
+  final recommendedExposure = recommended.recommendedExposure;
+  if (minimum == null || recommendedExposure == null) return null;
   return '${minimum.inMinutes}분 / ${recommendedExposure.inMinutes}분';
+}
+
+class _OptimalShootingInterval {
+  const _OptimalShootingInterval({
+    required this.start,
+    required this.end,
+    required this.supportsConsistentFraming,
+  });
+
+  final DateTime start;
+  final DateTime end;
+  final bool supportsConsistentFraming;
+}
+
+_OptimalShootingInterval? _resolveOptimalShootingInterval(
+  RecommendationResult recommended,
+) {
+  final preferred = recommended.imagingAssessment?.preferredHaWindow;
+  final preferredStart = preferred?.todayStartTime;
+  final preferredEnd = preferred?.todayEndTime;
+  if (preferredStart != null &&
+      preferredEnd != null &&
+      preferredEnd.isAfter(preferredStart)) {
+    return _OptimalShootingInterval(
+      start: preferredStart,
+      end: preferredEnd,
+      supportsConsistentFraming: true,
+    );
+  }
+
+  final window = recommended.observationWindow;
+  final optimalStart = window?.optimalStartTime;
+  final optimalEnd = window?.optimalEndTime;
+  if (optimalStart == null ||
+      optimalEnd == null ||
+      !optimalEnd.isAfter(optimalStart)) {
+    return null;
+  }
+  return _OptimalShootingInterval(
+    start: optimalStart,
+    end: optimalEnd,
+    supportsConsistentFraming: false,
+  );
+}
+
+ScheduleItem? _scheduleItemFor(
+  List<ScheduleItem> items,
+  String catalogObjectId,
+) {
+  for (final item in items) {
+    if (item.catalogObject.id == catalogObjectId) return item;
+  }
+  return null;
 }
 
 // ── HomeScreen ───────────────────────────────────────────────────────────────
@@ -2209,18 +2249,7 @@ class _RecommendCompactCard extends StatelessWidget {
                   ],
                   if (assessment != null) ...[
                     const SizedBox(height: 3),
-                    Text(
-                      '필터 ${assessment.filterMode.label} · '
-                      '모자이크 ${assessment.mosaicMode.label} · '
-                      '${assessment.quality.starLabel} ${assessment.quality.label}',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 9,
-                        height: 1.2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    RecommendationImagingStatusChips(assessment: assessment),
                   ],
                   const SizedBox(height: 2),
                   if (w != null)
@@ -2329,6 +2358,76 @@ class _RecommendCompactCard extends StatelessWidget {
   }
 }
 
+class RecommendationImagingStatusChips extends StatelessWidget {
+  const RecommendationImagingStatusChips({
+    super.key,
+    required this.assessment,
+  });
+
+  final ImagingSuitabilityAssessment assessment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 4,
+      runSpacing: 3,
+      children: [
+        _RecommendationStatusChip(
+          key: Key('recommendation-filter-${assessment.filterMode.name}'),
+          label: '필터 ${assessment.filterMode.label}',
+          color: assessment.filterMode == FilterMode.on
+              ? AppColors.solar
+              : AppColors.textSecondary,
+        ),
+        if (assessment.mosaicMode == MosaicMode.on)
+          const _RecommendationStatusChip(
+            key: Key('recommendation-mosaic-on'),
+            label: '모자이크',
+            color: AppColors.ic,
+          ),
+        _RecommendationStatusChip(
+          key: const Key('recommendation-quality'),
+          label:
+              '${assessment.quality.starLabel} ${assessment.quality.label}',
+          color: AppColors.textSecondary,
+        ),
+      ],
+    );
+  }
+}
+
+class _RecommendationStatusChip extends StatelessWidget {
+  const _RecommendationStatusChip({
+    super.key,
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withAlpha(28),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withAlpha(90)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          height: 1.1,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 // ── 추천 상세 시트 ───────────────────────────────────────────────────────────
 
 class _TodayEquipmentRecommendationBlock extends StatelessWidget {
@@ -2363,6 +2462,13 @@ class _RecommendDetailSheet extends StatelessWidget {
     final isPlanned = homeVm.isPlanned(recommended.object.id);
     final assessment = recommended.imagingAssessment;
     final todayEquipment = homeVm.todayEquipmentRecommendationFor(
+      recommended.object.id,
+    );
+    final optimalShootingInterval = _resolveOptimalShootingInterval(
+      recommended,
+    );
+    final scheduledItem = _scheduleItemFor(
+      homeVm.scheduleItems,
       recommended.object.id,
     );
 
@@ -2483,10 +2589,12 @@ class _RecommendDetailSheet extends StatelessWidget {
                 window: recommended.observationWindow!,
                 moonSeparation: recommended.moonSeparation,
                 exposureTimeLineLabel: _resolveExposureTimeLineLabel(
-                  context,
-                  homeVm,
                   recommended,
                 ),
+                optimalShootingInterval: optimalShootingInterval,
+                scheduledItem: scheduledItem,
+                dailyDurationLimitedByFieldRotation:
+                    assessment?.dailyDurationLimitedByFieldRotation ?? false,
               ),
             if (recommended.observationWindow != null)
               const SizedBox(height: AppTheme.spacingMd),
@@ -2504,13 +2612,31 @@ class _RecommendDetailSheet extends StatelessWidget {
                     ),
                     _InfoRow(label: '모드', value: assessment.trackingMode.label),
                     _InfoRow(label: '필터', value: assessment.filterMode.label),
-                    _InfoRow(label: '모자이크', value: assessment.mosaicMode.label),
-                    if (recommended.recommendedExposure != null)
-                      _InfoRow(
-                        label: '추천 촬영',
-                        value:
-                            '${recommended.recommendedExposure!.inMinutes}분 이상',
+                    _InfoRow(
+                      label: '광해 민감도',
+                      value:
+                          assessment.targetLightPollutionSensitivity.label,
+                    ),
+                    _InfoRow(
+                      label: '필터 효과',
+                      value: assessment.filterEffectiveness.label,
+                    ),
+                    _InfoRow(
+                      label: '모자이크',
+                      value: assessment.mosaicMode.label,
+                    ),
+                    _InfoRow(
+                      label: '관측조건',
+                      value: _scoreLevelLabel(
+                        recommended.observingConditionScore,
                       ),
+                    ),
+                    _InfoRow(
+                      label: '촬영효율',
+                      value: _scoreLevelLabel(
+                        assessment.imagingEfficiencyScore,
+                      ),
+                    ),
                     _InfoRow(
                       label: '예상 결과',
                       value:
@@ -3139,6 +3265,9 @@ class _SessionTableCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = item.catalogObject.catalog.accentColor;
+    final filterMode =
+        item.result.imagingAssessment?.filterMode ??
+        item.target.imagingAssessment?.filterMode;
 
     return InkWell(
       onTap: onTap,
@@ -3201,13 +3330,33 @@ class _SessionTableCell extends StatelessWidget {
               '★' * item.starCount,
               style: TextStyle(color: color.withAlpha(200), fontSize: 9),
             ),
-            Text(
-              item.status.label,
-              style: TextStyle(
-                color: color,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.status.label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (filterMode != null) ...[
+                  const SizedBox(width: 4),
+                  _RecommendationStatusChip(
+                    key: Key(
+                      'schedule-filter-${item.catalogObject.id}-${filterMode.name}',
+                    ),
+                    label: '필터 ${filterMode.label}',
+                    color: filterMode == FilterMode.on
+                        ? AppColors.solar
+                        : AppColors.textSecondary,
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -3222,11 +3371,17 @@ class _ObservationWindowSection extends StatelessWidget {
   const _ObservationWindowSection({
     required this.window,
     required this.moonSeparation,
+    required this.optimalShootingInterval,
+    required this.scheduledItem,
+    required this.dailyDurationLimitedByFieldRotation,
     this.exposureTimeLineLabel,
   });
 
   final ObjectObservationWindow window;
   final double moonSeparation;
+  final _OptimalShootingInterval? optimalShootingInterval;
+  final ScheduleItem? scheduledItem;
+  final bool dailyDurationLimitedByFieldRotation;
   final String? exposureTimeLineLabel;
 
   @override
@@ -3237,6 +3392,34 @@ class _ObservationWindowSection extends StatelessWidget {
       title: '오늘 밤 관측 정보',
       child: Column(
         children: [
+          if (optimalShootingInterval != null)
+            _TimeGuidanceBlock(
+              title: '최적 촬영 구간',
+              value:
+                  '${_formatTime(optimalShootingInterval!.start)} ~ '
+                  '${_formatTime(optimalShootingInterval!.end)} · '
+                  '약 ${optimalShootingInterval!.end.difference(optimalShootingInterval!.start).inMinutes}분',
+              description: optimalShootingInterval!.supportsConsistentFraming
+                  ? dailyDurationLimitedByFieldRotation
+                        ? '여러 날 촬영해도 비슷한 구도를 유지하기 좋은 시간입니다.'
+                        : '오늘은 가장자리 손실을 줄이려면 해당 구간 안에서 촬영하는 것이 좋습니다.'
+                  : '오늘 관측 조건에서 가장 안정적인 촬영 구간입니다.',
+            ),
+          if (scheduledItem != null)
+            _TimeGuidanceBlock(
+              title: '스케줄 배정',
+              value:
+                  '${_formatTime(scheduledItem!.startTime)} ~ '
+                  '${_formatTime(scheduledItem!.endTime)} · '
+                  '${scheduledItem!.shootingDuration.inMinutes}분',
+              description: '다른 촬영 대상까지 고려해 오늘 밤 실제 배정된 시간입니다.',
+            ),
+          if (exposureTimeLineLabel != null)
+            _TimeGuidanceBlock(
+              title: '적분시간 (최소 / 권장)',
+              value: exposureTimeLineLabel!,
+              description: '좋은 결과를 얻기 위한 이 대상의 일반적인 총 촬영량입니다.',
+            ),
           if (window.feasibleWindowSummary != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
@@ -3262,32 +3445,13 @@ class _ObservationWindowSection extends StatelessWidget {
             ),
           _InfoRow(label: '현재 고도', value: '${window.currentAltitude.round()}°'),
           _InfoRow(label: '현재 방위각', value: '${window.currentAzimuth.round()}°'),
-          if (window.recommendStartTime != null)
-            _InfoRow(
-              label: '추천 시작',
-              value: _formatTime(window.recommendStartTime!),
-            ),
-          if (window.optimalStartTime != null && window.optimalEndTime != null)
-            _InfoRow(
-              label: '최적 시간',
-              value:
-                  '${_formatTime(window.optimalStartTime!)} ~ ${_formatTime(window.optimalEndTime!)}',
-            ),
           if (window.peakAltitude != null && window.peakAltitudeTime != null)
             _InfoRow(
               label: '최고 고도',
               value:
                   '${window.peakAltitude!.round()}° (${_formatTime(window.peakAltitudeTime!)})',
             ),
-          if (exposureTimeLineLabel != null)
-            _InfoRow(label: '촬영시간(최소/권장)', value: exposureTimeLineLabel!),
           _InfoRow(label: '달과 거리', value: '${moonSeparation.round()}°'),
-          if (window.observationEndTime != null)
-            _InfoRow(
-              label: '관측 종료',
-              value: _formatTime(window.observationEndTime!),
-            ),
-          _InfoRow(label: '총 관측 시간', value: window.totalObservableLabel),
           if (window.isCurrentlyVisible)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -3311,6 +3475,64 @@ class _ObservationWindowSection extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _TimeGuidanceBlock extends StatelessWidget {
+  const _TimeGuidanceBlock({
+    required this.title,
+    required this.value,
+    required this.description,
+  });
+
+  final String title;
+  final String value;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppTheme.spacingSm),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppTheme.spacingXs),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              description,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

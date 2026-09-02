@@ -157,9 +157,9 @@ class PlateSolveProjection {
 
     return (
       cd11: -p * s * cosO,
-      cd12: s * sinO,
-      cd21: -p * s * sinO,
-      cd22: -s * cosO,
+      cd12: -p * s * sinO,
+      cd21: -s * sinO,
+      cd22: s * cosO,
     );
   }
 

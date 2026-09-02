@@ -446,7 +446,7 @@ void main() {
       expect(m110.y - m31.y, closeTo(-150.55, 0.02));
     });
 
-    test('scalar fallback places M110 upper-left and M32 lower-right', () {
+    test('scalar fallback follows orientation 75 raster basis', () {
       PixelOffset project(double ra, double dec) =>
           PlateSolveProjection.worldToPixel(
             centerRaDeg: 10.6847083,
@@ -466,10 +466,11 @@ void main() {
 
       expect(m31.x, closeTo(1500, 1e-6));
       expect(m31.y, closeTo(1125, 1e-6));
+      // Scalar orientation/parity raster basis, not the observed full-WCS view.
       expect(m110.x, lessThan(m31.x));
-      expect(m110.y, lessThan(m31.y));
+      expect(m110.y, greaterThan(m31.y));
       expect(m32.x, greaterThan(m31.x));
-      expect(m32.y, greaterThan(m31.y));
+      expect(m32.y, lessThan(m31.y));
     });
 
     test('full WCS raster conversion reverses both FITS axes', () {

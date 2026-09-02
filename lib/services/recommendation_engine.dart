@@ -17,7 +17,7 @@ import '../data/models/tonight_observation_session.dart';
 import 'app_logger.dart';
 import 'celestial_position_service.dart';
 import 'exposure_policy.dart';
-import 'equipment/field_orientation_calculator.dart';
+import 'equipment/alt_az_imaging_policy.dart';
 import 'imaging_suitability_service.dart';
 import 'object_imaging_profile_provider.dart';
 import 'recommendation/feasibility_exclusion_messages.dart';
@@ -40,13 +40,16 @@ class RecommendationEngine {
     RecommendationScore? recommendationScore,
     ObservationWindowCalculator? windowCalculator,
     ImagingSuitabilityService? imagingSuitabilityService,
+    AltAzImagingPolicy? altAzImagingPolicy,
   }) : _recommendationScore =
            recommendationScore ?? const RecommendationScore(),
        _windowCalculator =
            windowCalculator ??
            ObservationWindowCalculator(_celestialPositionService),
        _imagingSuitabilityService =
-           imagingSuitabilityService ?? const ImagingSuitabilityService();
+           imagingSuitabilityService ?? const ImagingSuitabilityService(),
+       _altAzImagingPolicy =
+           altAzImagingPolicy ?? const AltAzImagingPolicy();
 
   final CelestialPositionService _celestialPositionService;
   final ExposurePolicy _exposurePolicy;
@@ -55,6 +58,7 @@ class RecommendationEngine {
   final RecommendationScore _recommendationScore;
   final ObservationWindowCalculator _windowCalculator;
   final ImagingSuitabilityService _imagingSuitabilityService;
+  final AltAzImagingPolicy _altAzImagingPolicy;
 
   Future<RecommendationBuildResult> build({
     required List<CatalogObject> catalog,
@@ -197,13 +201,14 @@ class RecommendationEngine {
       diagnostics?.candidate.start();
       final window = windowResult.window!;
       final equipmentFit = equipmentFitResolver?.call(object, window);
-      final rotationSpan = trackingMode == TrackingMode.altAz
-          ? _fieldRotationSpan(
-              object: object,
-              context: evalContext,
-              window: window,
-            )
-          : 0.0;
+      final altAzPlan = _altAzImagingPolicy.calculate(
+        object: object,
+        context: evalContext,
+        window: window,
+        trackingMode: trackingMode,
+        minimumExposure: minimumExposure,
+        recommendedTotalExposure: recommendedExposure,
+      );
       final assessment = _imagingSuitabilityService.assess(
         profile: profile,
         bortle: _exposurePolicy.resolveBortle(
@@ -213,13 +218,18 @@ class RecommendationEngine {
         trackingMode: trackingMode,
         equipmentFit: equipmentFit,
         recommendedExposure: recommendedExposure,
+        recommendedDailyExposure: altAzPlan.recommendedDailyExposure,
+        preferredHaWindow: altAzPlan.preferredHaWindow,
+        dailyDurationLimitedByFieldRotation:
+            altAzPlan.dailyDurationLimitedByFieldRotation,
+        dailyFieldRotationSpanDegrees: altAzPlan.fieldRotationSpanDegrees,
         targetAltitude: window.peakAltitude ?? window.currentAltitude,
         moonIllumination: evalContext.moonIllumination,
         moonSeparation: windowResult.moonSeparation,
         cloudCover:
             (window.optimalFeasibleCloudCoverage ?? evalContext.cloudCover)
                 .toDouble(),
-        fieldRotationSpanDegrees: rotationSpan,
+        fieldRotationSpanDegrees: altAzPlan.fieldRotationSpanDegrees,
       );
       final evaluationTime =
           window.optimalTime ?? window.peakAltitudeTime ?? session.start;
@@ -227,6 +237,14 @@ class RecommendationEngine {
         object: object,
         context: evalContext,
         profile: profile,
+        window: window,
+        evaluationTime: evaluationTime,
+        positionService: _celestialPositionService,
+      );
+      final observingConditionScore =
+          _recommendationScore.calculateObservingCondition(
+        object: object,
+        context: evalContext,
         window: window,
         evaluationTime: evaluationTime,
         positionService: _celestialPositionService,
@@ -248,6 +266,7 @@ class RecommendationEngine {
           moonSeparation: windowResult.moonSeparation,
           minimumExposure: minimumExposure,
           recommendedExposure: recommendedExposure,
+          observingConditionScore: observingConditionScore,
           imagingAssessment: assessment,
         ),
       );
@@ -316,6 +335,7 @@ class RecommendationEngine {
             imagingAssessment: candidate.imagingAssessment,
             minimumExposure: candidate.minimumExposure,
             recommendedExposure: candidate.recommendedExposure,
+            observingConditionScore: candidate.observingConditionScore,
           ),
         )
         .toList();
@@ -359,28 +379,6 @@ class RecommendationEngine {
       candidateCount: candidates.length,
     );
     return result;
-  }
-
-  double _fieldRotationSpan({
-    required CatalogObject object,
-    required ObservationContext context,
-    required ObjectObservationWindow window,
-  }) {
-    final start =
-        window.recommendStartTime ??
-        window.optimalStartTime ??
-        window.peakAltitudeTime;
-    final end = window.observationEndTime ?? window.optimalEndTime;
-    if (start == null || end == null || !end.isAfter(start)) return 0;
-
-    return FieldOrientationCalculator.fieldRotationSpanDuringWindow(
-      latitudeDeg: context.latitude,
-      longitudeDeg: context.longitude,
-      raHours: CelestialPositionService.parseRaHours(object.ra),
-      declinationDeg: CelestialPositionService.parseDecDeg(object.dec),
-      windowStart: start,
-      windowEnd: end,
-    );
   }
 
   /// 관측 불가 시에도 추천·스케줄을 보여주기 위한 기상 무시 컨텍스트.
