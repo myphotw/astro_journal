@@ -80,6 +80,12 @@ class AppStartupViewModel extends ChangeNotifier {
   bool get isReady => _isReady;
   String? get errorMessage => _errorMessage;
 
+  /// Windows의 첫 화면은 사진 등록 작업공간이다. 추천 전체 계산과
+  /// 카탈로그 보조 인덱스는 첫 화면을 그리는 데 필요하지 않으므로,
+  /// 모바일과 달리 Splash를 막지 않고 해당 화면이 필요할 때 준비한다.
+  bool get _deferSecondaryWorkForWindows =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
   Future<void> run() async {
     if (_isRunning || _isReady) return;
     _isRunning = true;
@@ -137,17 +143,26 @@ class AppStartupViewModel extends ChangeNotifier {
         action: () => _homeViewModel.load(deferHeavyWork: true),
       );
 
-      // 메인 진입 전 홈/카탈로그 무거운 작업을 끝낸다 → 첫 화면 버벅임 방지.
-      _tagline = '추천 대상을 계산하는 중...';
-      notifyListeners();
-      await yieldForSplashAnimation();
-      try {
-        await _homeViewModel.finishDeferredHeavyWork();
+      if (_deferSecondaryWorkForWindows) {
+        // Windows는 첫 진입이 사진 등록이므로 아래 두 작업을 기다릴
+        // 이유가 없다. RecommendationEngine의 전체 Catalog 순회와
+        // 검색 인덱스/장비 chip 구축은 해당 기능을 여는 시점에 수행한다.
+        _tagline = '사진 등록 화면을 준비하는 중...';
+        notifyListeners();
         await yieldForSplashAnimation();
-        await _catalogViewModel.finishDeferredHeavyWork();
+      } else {
+        // 모바일 홈은 진입 직후 추천을 표시하므로 기존처럼 준비를 완료한다.
+        _tagline = '추천 대상을 계산하는 중...';
+        notifyListeners();
         await yieldForSplashAnimation();
-      } catch (_) {
-        // 실패해도 메인은 진입 — 탭에서 재시도
+        try {
+          await _homeViewModel.finishDeferredHeavyWork();
+          await yieldForSplashAnimation();
+          await _catalogViewModel.finishDeferredHeavyWork();
+          await yieldForSplashAnimation();
+        } catch (_) {
+          // 실패해도 메인은 진입 — 탭에서 재시도
+        }
       }
 
       PaintingBinding.instance.imageCache.maximumSize = 240;
@@ -169,8 +184,11 @@ class AppStartupViewModel extends ChangeNotifier {
     _isRunning = false;
     notifyListeners();
 
-    // 부가 탭(갤러리/통계/성도)만 메인 진입 후 워밍업
-    unawaited(_warmSecondaryTabs());
+    // Windows의 첫 화면은 사진 등록이며 부가 탭은 선택 시 lazy load한다.
+    // 모바일은 기존 워밍업 동작을 그대로 유지한다.
+    if (!_deferSecondaryWorkForWindows) {
+      unawaited(_warmSecondaryTabs());
+    }
   }
 
   Future<void> _warmSecondaryTabs() async {

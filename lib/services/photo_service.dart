@@ -110,6 +110,19 @@ class PhotoService {
     return results;
   }
 
+  /// 플랫폼별 파일 선택 UI와 분리된 경로 기반 복사 진입점.
+  ///
+  /// Windows 등록 화면처럼 시스템 파일 선택기가 반환한 경로도 모바일과
+  /// 동일하게 앱 관리 저장소로 복사하고, 이후 메타데이터 파이프라인을
+  /// 지연 실행할 수 있게 한다.
+  Future<List<PhotoPickResult>> copyFilePathsWithoutExif(
+    List<String> paths,
+  ) {
+    return copyPickedFilesWithoutExif(
+      paths.map(File.new).toList(growable: false),
+    );
+  }
+
   Future<PhotoPickResult?> _copyPickedFile(
     XFile picked, {
     bool extractExif = true,

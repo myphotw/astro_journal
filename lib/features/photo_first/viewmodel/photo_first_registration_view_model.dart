@@ -73,6 +73,29 @@ class PhotoFirstRegistrationViewModel extends ChangeNotifier {
     return _registrationService.enrichPayload(stub);
   }
 
+  /// Windows 등 시스템 파일 선택기가 반환한 경로를 기존 등록 파이프라인의
+  /// 지연 분석 payload로 변환한다.
+  Future<List<PhotoRegistrationPayload>> copyFilePathsOnly(
+    List<String> paths,
+  ) async {
+    _isProcessing = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      if (_allObjects.isEmpty) {
+        await loadCatalog();
+      }
+      return await _registrationService.copyFilePathsOnly(paths);
+    } catch (error) {
+      _errorMessage = error.toString();
+      return [];
+    } finally {
+      _isProcessing = false;
+      notifyListeners();
+    }
+  }
+
   CatalogObject? resolveTarget(String? targetName) {
     return _catalogSearchService.resolveTarget(targetName, _allObjects);
   }

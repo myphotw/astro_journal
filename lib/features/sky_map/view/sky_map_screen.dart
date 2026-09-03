@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -346,6 +347,23 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
                 // GestureDetector.onScale* 는 트랙패드 pan을 zoom으로 오인하므로 사용하지 않음.
                 onPointerSignal: (event) {
                   if (event is! PointerScrollEvent) return;
+                  if (!kIsWeb &&
+                      defaultTargetPlatform == TargetPlatform.windows &&
+                      event.scrollDelta.dy != 0) {
+                    // Windows wheel: 위=확대, 아래=축소. 이벤트 단위가
+                    // 장치마다 달라 delta 크기를 완만한 배율로 정규화한다.
+                    final rawAmount = event.scrollDelta.dy.abs() / 80;
+                    final amount = rawAmount < 0.15
+                        ? 0.15
+                        : (rawAmount > 1.0 ? 1.0 : rawAmount);
+                    final factor = 1 + amount * 0.25;
+                    vm.setViewHeightDeg(
+                      event.scrollDelta.dy < 0
+                          ? vm.viewHeightDeg / factor
+                          : vm.viewHeightDeg * factor,
+                    );
+                    return;
+                  }
                   final delta = Offset(
                     -event.scrollDelta.dx,
                     -event.scrollDelta.dy,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -21,6 +22,7 @@ import 'services/recommendation_settings_service.dart';
 import 'services/splash_image_service.dart';
 import 'services/tc_backend_startup_resume_service.dart';
 import 'shared/widgets/main_shell.dart';
+import 'shared/widgets/pc_main_shell.dart';
 
 class AstroJournalApp extends StatelessWidget {
   const AstroJournalApp({super.key});
@@ -39,7 +41,7 @@ class AstroJournalApp extends StatelessWidget {
   }
 }
 
-/// Provider 준비 후 주요 데이터를 preload하고, 완료되면 [MainShell]로 페이드 진입한다.
+/// Provider 준비 후 주요 데이터를 preload하고, 완료되면 플랫폼 Shell로 페이드 진입한다.
 class _AppStartupGate extends StatefulWidget {
   const _AppStartupGate();
 
@@ -98,12 +100,19 @@ class _AppStartupGateState extends State<_AppStartupGate> {
         return FadeTransition(opacity: animation, child: child);
       },
       child: _showMain
-          ? const MainShell(key: ValueKey<String>('main_shell'))
+          ? _mainShell()
           : AstroSplashScreen(
               key: const ValueKey<String>('astro_splash'),
               startup: _startup,
               splashImageService: context.read<SplashImageService>(),
             ),
     );
+  }
+
+  Widget _mainShell() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return const PcMainShell(key: ValueKey<String>('pc_main_shell'));
+    }
+    return const MainShell(key: ValueKey<String>('main_shell'));
   }
 }

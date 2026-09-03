@@ -163,6 +163,27 @@ class PhotoRegistrationService {
     ];
   }
 
+  /// 시스템 파일 선택기가 제공한 경로를 현재 local-first 등록 형식으로
+  /// 변환한다. 선택 UI는 호출 화면이 맡고, 복사·메타데이터·저장 계약은
+  /// 모바일 등록과 공유한다.
+  Future<List<PhotoRegistrationPayload>> copyFilePathsOnly(
+    List<String> paths,
+  ) async {
+    if (paths.isEmpty) return [];
+
+    final picked = await photoService.copyFilePathsWithoutExif(paths);
+    return [
+      for (final item in picked)
+        PhotoRegistrationPayload(
+          photoId: item.id,
+          localPath: item.localPath,
+          originalFilename: item.originalFilename,
+          exifInfo: item.exifInfo,
+          metadata: const PhotoMetadata(),
+        ),
+    ];
+  }
+
   /// 갤러리 화면에서 여러 장 선택 후 각각 메타데이터 파이프라인을 실행한다.
   Future<List<PhotoRegistrationPayload>> pickMultipleAndPrepare(
     BuildContext context,

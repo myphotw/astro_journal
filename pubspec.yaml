@@ -65,6 +65,8 @@ dependencies:
 
   # 백업 파일 선택
   file_picker: ^10.3.8
+  # Windows 파일 Drag & Drop
+  desktop_drop: ^0.8.4
 
   # 백업 파일 공유/내보내기
   share_plus: ^10.1.4
@@ -80,6 +82,11 @@ dependencies:
   google_maps_flutter: ^2.10.0
   google_maps_flutter_android: ^2.19.0
   google_maps_flutter_platform_interface: ^2.14.0
+
+  # Cross-platform Windows light-pollution map. Android/iOS continue to use
+  # the native Google Maps implementation.
+  flutter_map: ^8.3.2
+  latlong2: ^0.9.1
 
   # Google Maps 앱 실행
   url_launcher: ^6.3.1

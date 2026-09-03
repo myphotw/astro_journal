@@ -14,6 +14,9 @@ Future<void> initSqflite() async {
 
   if (Platform.isAndroid) {
     await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
+  }
+
+  if (Platform.isAndroid || Platform.isWindows) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }

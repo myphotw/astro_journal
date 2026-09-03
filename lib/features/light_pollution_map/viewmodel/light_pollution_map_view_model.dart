@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -193,6 +194,14 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   }
 
   LightPollutionTileProvider? get tileProvider => _tileProvider;
+
+  /// Provides the existing cached Bortle tile bytes to the Windows map view.
+  /// The calculation and disk-cache policy stay owned by [LightPollutionTileProvider].
+  Future<Uint8List?> getLightPollutionTileBytes(int x, int y, int zoom) {
+    final provider = _tileProvider;
+    if (provider == null) return Future<Uint8List?>.value(null);
+    return provider.getTileBytes(x, y, zoom);
+  }
 
   LatLng get mapCenter => _condition != null
       ? LatLng(_condition!.latitude, _condition!.longitude)

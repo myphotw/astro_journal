@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,7 @@ import '../../../data/models/observation_condition.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../shared/widgets/google_map_gate.dart';
 import '../viewmodel/light_pollution_map_view_model.dart';
+import 'windows_light_pollution_map_screen.dart';
 import '../widgets/light_pollution_legend.dart';
 import '../widgets/light_pollution_favorite_name_dialog.dart';
 import '../widgets/light_pollution_location_card.dart';
@@ -225,6 +227,10 @@ class _LightPollutionMapScreenState extends State<LightPollutionMapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return WindowsLightPollutionMapScreen(isActive: widget.isActive);
+    }
+
     PerformanceProbe.event(
       'widget.light_pollution_map.build',
       state: 'active=${widget.isActive} mounted=$_mapMounted',
