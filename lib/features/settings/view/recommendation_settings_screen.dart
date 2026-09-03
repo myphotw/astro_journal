@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/catalog_type.dart';
+import '../../../core/constants/object_type.dart';
 import '../../../core/constants/recommendation_priority_mode.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
@@ -38,6 +39,7 @@ class _RecommendationSettingsScreenState
   ];
 
   late Set<CatalogType> _enabledCatalogs;
+  late Set<ObjectType> _enabledObjectTypes;
   late RecommendationPriorityMode _priorityMode;
 
   bool _isLoading = true;
@@ -60,6 +62,7 @@ class _RecommendationSettingsScreenState
     if (!mounted) return;
     setState(() {
       _enabledCatalogs = Set.of(settings.enabledCatalogs);
+      _enabledObjectTypes = Set.of(settings.enabledObjectTypes);
       _priorityMode = settings.priorityMode;
       _isLoading = false;
     });
@@ -75,6 +78,7 @@ class _RecommendationSettingsScreenState
     try {
       final settings = RecommendationSettings(
         enabledCatalogs: Set.of(_enabledCatalogs),
+        enabledObjectTypes: Set.of(_enabledObjectTypes),
         azimuthStart: 0,
         azimuthEnd: 359,
         minAltitude: 0,
@@ -143,11 +147,45 @@ class _RecommendationSettingsScreenState
               children: [
                 _buildCatalogSection(),
                 const SizedBox(height: AppTheme.spacingXl),
+                _buildObjectTypeSection(),
+                const SizedBox(height: AppTheme.spacingXl),
                 _buildPrioritySection(),
                 const SizedBox(height: AppTheme.spacingXl),
                 _buildNote(),
               ],
             ),
+    );
+  }
+
+  Widget _buildObjectTypeSection() {
+    return _Section(
+      icon: Icons.auto_awesome_motion_outlined,
+      title: '천체 종류',
+      subtitle: '선택하지 않으면 모든 종류를 추천합니다.',
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: ObjectType.values.map((type) {
+          final selected = _enabledObjectTypes.contains(type);
+          return FilterChip(
+            label: Text(type.label),
+            selected: selected,
+            onSelected: (value) => setState(() {
+              if (value) {
+                _enabledObjectTypes.add(type);
+              } else {
+                _enabledObjectTypes.remove(type);
+              }
+            }),
+            selectedColor: AppColors.messier,
+            checkmarkColor: AppColors.background,
+            labelStyle: TextStyle(
+              color: selected ? AppColors.background : AppColors.textPrimary,
+              fontSize: 12,
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 

@@ -10,6 +10,7 @@ import '../../../data/models/catalog_object.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/catalog_exposure_guidance_section.dart';
+import '../../../shared/widgets/catalog_imaging_availability_section.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
 import '../../gallery/view/gallery_detail_screen.dart';
@@ -238,6 +239,14 @@ class _CatalogDetailPage extends StatelessWidget {
           _DescriptionCard(description: object.detailDescription!),
         ],
         if (viewModel.exposureGuidance != null) ...[
+          const SizedBox(height: 12),
+          CatalogImagingAvailabilitySection(
+            sites: viewModel.observationSites,
+            selectedSite: viewModel.selectedObservationSite,
+            availability: viewModel.imagingAvailability,
+            isLoading: viewModel.isAvailabilityLoading,
+            onSelectSite: viewModel.selectObservationSite,
+          ),
           const SizedBox(height: 12),
           CatalogExposureGuidanceSection(guidance: viewModel.exposureGuidance!),
         ],

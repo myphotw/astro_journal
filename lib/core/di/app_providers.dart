@@ -38,6 +38,7 @@ import '../../features/main/viewmodel/main_back_navigation_view_model.dart';
 import '../../features/horizon_scan/services/device_orientation_service.dart';
 import '../../features/observation_site/viewmodel/active_observation_site_view_model.dart';
 import '../../features/settings/viewmodel/equipment_view_model.dart';
+import '../../services/target_imaging_availability_service.dart';
 import '../../features/settings/viewmodel/settings_view_model.dart';
 import '../../features/settings/viewmodel/tc_backend_view_model.dart';
 import '../../services/stats_analytics_service.dart';
@@ -294,6 +295,11 @@ class AppProviders {
       profileProvider,
       schedulerEngine,
     );
+    final targetImagingAvailabilityService = TargetImagingAvailabilityService(
+      observationEngine,
+      recommendationEngine,
+      weatherService: weatherService,
+    );
     final tilePreloadService = LightPollutionTilePreloadService(
       shootingRecordRepository,
       observationConditionService,
@@ -502,6 +508,9 @@ class AppProviders {
       ),
       Provider<ObservationEngine>.value(value: observationEngine),
       Provider<RecommendationEngine>.value(value: recommendationEngine),
+      Provider<TargetImagingAvailabilityService>.value(
+        value: targetImagingAvailabilityService,
+      ),
       Provider<SchedulerEngine>.value(value: schedulerEngine),
       Provider<StatsAnalyticsService>.value(value: statsAnalyticsService),
       Provider<SplashImageService>.value(value: splashImageService),

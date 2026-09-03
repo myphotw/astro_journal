@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:uuid/uuid.dart';
@@ -18,6 +20,9 @@ import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
 
 import '../../../data/repositories/shooting_record_repository.dart';
+import '../../../data/repositories/observation_site_repository.dart';
+import '../../../data/models/observation_site.dart';
+import '../../../data/models/target_imaging_availability.dart';
 
 import '../../../services/app_logger.dart';
 
@@ -34,6 +39,7 @@ import '../../../services/metadata_service.dart';
 import '../../../services/object_imaging_profile_provider.dart';
 
 import '../../../services/photo_registration_service.dart';
+import '../../../services/target_imaging_availability_service.dart';
 
 class CatalogDetailViewModel extends ChangeNotifier {
   factory CatalogDetailViewModel(
@@ -59,6 +65,8 @@ class CatalogDetailViewModel extends ChangeNotifier {
     CatalogExposureGuidanceBuilder? exposureGuidanceBuilder,
     List<CatalogObject>? navigationObjects,
     CatalogCaptureProjectionService? captureProjection,
+    ObservationSiteRepository? observationSiteRepository,
+    TargetImagingAvailabilityService? availabilityService,
   }) => CatalogDetailViewModel._(
     shootingRecordRepository,
     catalogRepository,
@@ -71,6 +79,8 @@ class CatalogDetailViewModel extends ChangeNotifier {
     exposurePolicy,
     exposureGuidanceBuilder ?? const CatalogExposureGuidanceBuilder(),
     captureProjection,
+    observationSiteRepository,
+    availabilityService,
     List<CatalogObject>.from(navigationObjects ?? [object]),
     _resolveInitialIndex(object, navigationObjects),
   );
@@ -87,6 +97,8 @@ class CatalogDetailViewModel extends ChangeNotifier {
     this._exposurePolicy,
     this._exposureGuidanceBuilder,
     this._captureProjection,
+    this._observationSiteRepository,
+    this._availabilityService,
     this._objects,
     this._currentIndex,
   );
@@ -112,6 +124,9 @@ class CatalogDetailViewModel extends ChangeNotifier {
   final CatalogExposureGuidanceBuilder _exposureGuidanceBuilder;
 
   final CatalogCaptureProjectionService? _captureProjection;
+
+  final ObservationSiteRepository? _observationSiteRepository;
+  final TargetImagingAvailabilityService? _availabilityService;
 
   final List<CatalogObject> _objects;
 
@@ -141,6 +156,11 @@ class CatalogDetailViewModel extends ChangeNotifier {
   Duration? _recommendedExposure;
 
   CatalogExposureGuidance? _exposureGuidance;
+
+  List<ObservationSite> _observationSites = const [];
+  ObservationSite? _selectedObservationSite;
+  TargetImagingAvailability? _imagingAvailability;
+  bool _isAvailabilityLoading = false;
 
   List<CatalogObject> get objects => List.unmodifiable(_objects);
 
@@ -183,6 +203,11 @@ class CatalogDetailViewModel extends ChangeNotifier {
   Duration? get recommendedExposure => _recommendedExposure;
 
   CatalogExposureGuidance? get exposureGuidance => _exposureGuidance;
+  List<ObservationSite> get observationSites =>
+      List.unmodifiable(_observationSites);
+  ObservationSite? get selectedObservationSite => _selectedObservationSite;
+  TargetImagingAvailability? get imagingAvailability => _imagingAvailability;
+  bool get isAvailabilityLoading => _isAvailabilityLoading;
 
   String? get exposureTimeLineLabel {
     final min = _minimumExposure;
@@ -244,6 +269,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
     _recommendedExposure = null;
 
     _exposureGuidance = null;
+    _imagingAvailability = null;
   }
 
   Future<void> load() async {
@@ -284,11 +310,55 @@ class CatalogDetailViewModel extends ChangeNotifier {
       await _loadEquipmentRecommendation();
 
       await _loadBaseExposureInfo();
+      unawaited(_loadImagingAvailability());
     } catch (error) {
       _errorMessage = error.toString();
     } finally {
       _isLoading = false;
 
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectObservationSite(String siteId) async {
+    final selected = _observationSites.where((site) => site.id == siteId);
+    if (selected.isEmpty || selected.first.id == _selectedObservationSite?.id) {
+      return;
+    }
+    _selectedObservationSite = selected.first;
+    await _loadBaseExposureInfo(referenceBortle: _selectedObservationSite?.bortle);
+    await _loadImagingAvailability();
+  }
+
+  Future<void> _loadImagingAvailability() async {
+    final repository = _observationSiteRepository;
+    final service = _availabilityService;
+    if (repository == null || service == null) return;
+    _isAvailabilityLoading = true;
+    notifyListeners();
+    try {
+      _observationSites = await repository.list();
+      final currentId = _selectedObservationSite?.id;
+      ObservationSite? matchingSite;
+      for (final candidate in _observationSites) {
+        if (candidate.id == currentId) {
+          matchingSite = candidate;
+          break;
+        }
+      }
+      _selectedObservationSite = matchingSite;
+      _selectedObservationSite ??=
+          _observationSites.isEmpty ? null : _observationSites.first;
+      final site = _selectedObservationSite;
+      await _loadBaseExposureInfo(referenceBortle: site?.bortle);
+      _imagingAvailability = site == null
+          ? null
+          : await service.evaluate(object: object, site: site);
+    } catch (error, stackTrace) {
+      AppLogger.error('CatalogDetail.Availability', error, stackTrace);
+      _imagingAvailability = null;
+    } finally {
+      _isAvailabilityLoading = false;
       notifyListeners();
     }
   }
@@ -300,7 +370,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
         .recommendForObject(object: object, equipment: equipment);
   }
 
-  Future<void> _loadBaseExposureInfo() async {
+  Future<void> _loadBaseExposureInfo({int? referenceBortle}) async {
     _minimumExposure = null;
 
     _recommendedExposure = null;
@@ -312,7 +382,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
       final profile = _profileProvider.profileFor(object);
 
-      final bortle = settings.referenceBortle;
+      final bortle = referenceBortle ?? settings.referenceBortle;
 
       _minimumExposure = _exposurePolicy.calculateMinimumExposure(
         bortle: bortle,

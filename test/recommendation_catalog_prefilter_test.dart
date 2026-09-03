@@ -1,4 +1,5 @@
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/core/constants/object_type.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/object_imaging_profile.dart';
 import 'package:astro_journal/data/models/object_observation_window.dart';
@@ -94,8 +95,9 @@ void main() {
   ];
 
   Future<({List<CatalogType> calls, List<CatalogType> scheduled})> run(
-    Set<CatalogType> enabled,
-  ) async {
+    Set<CatalogType> enabled, {
+    Set<ObjectType> objectTypes = const {},
+  }) async {
     final calculator = _CountingWindowCalculator();
     final engine = RecommendationEngine(
       CelestialPositionService(),
@@ -108,6 +110,7 @@ void main() {
       catalog: catalog,
       settings: RecommendationSettings(
         enabledCatalogs: enabled,
+        enabledObjectTypes: objectTypes,
         azimuthStart: 0,
         azimuthEnd: 359,
         minAltitude: 0,
@@ -166,6 +169,65 @@ void main() {
       CatalogType.ic,
       CatalogType.caldwell,
     ]);
+  });
+
+  test('object type filter is applied with the catalog filter before windows', () async {
+    final calculator = _CountingWindowCalculator();
+    final engine = RecommendationEngine(
+      CelestialPositionService(),
+      const ExposurePolicy(),
+      const ObjectImagingProfileProvider(),
+      const SchedulerEngine(),
+      windowCalculator: calculator,
+    );
+    final typedCatalog = [
+      _object('M31', CatalogType.messier, 31, type: '은하'),
+      _object('M42', CatalogType.messier, 42, type: '발광성운'),
+      _object('NGC7000', CatalogType.ngc, 7000, type: '발광성운'),
+    ];
+
+    final result = await engine.build(
+      catalog: typedCatalog,
+      settings: RecommendationSettings(
+        enabledCatalogs: {CatalogType.messier},
+        enabledObjectTypes: {ObjectType.galaxy},
+        azimuthStart: 0,
+        azimuthEnd: 359,
+        minAltitude: 0,
+        maxAltitude: 90,
+      ),
+      context: context,
+      session: session,
+      referenceTime: session.start,
+    );
+
+    expect(calculator.calls, [CatalogType.messier]);
+    expect(result.allRecommendations.single.object.id, 'M31');
+  });
+
+  test('object type filter alone keeps every selected catalog candidate of that type', () async {
+    final result = await run(
+      {CatalogType.messier, CatalogType.ngc, CatalogType.ic, CatalogType.caldwell},
+      objectTypes: {ObjectType.emissionNebula},
+    );
+
+    // The shared fixture has only emission-nebula deep-sky entries.
+    expect(result.calls, containsAll(<CatalogType>[
+      CatalogType.messier,
+      CatalogType.ngc,
+      CatalogType.ic,
+      CatalogType.caldwell,
+    ]));
+  });
+
+  test('a catalog and type combination with no match skips window calculation', () async {
+    final result = await run(
+      {CatalogType.messier},
+      objectTypes: {ObjectType.planet},
+    );
+
+    expect(result.calls, isEmpty);
+    expect(result.scheduled, isEmpty);
   });
 
   test(

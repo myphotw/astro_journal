@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants/catalog_type.dart';
+import '../core/constants/object_type.dart';
 import '../core/constants/recommendation_priority_mode.dart';
 
 /// 추천 대상 필터 설정 값 객체.
@@ -11,11 +12,16 @@ class RecommendationSettings {
     required this.azimuthEnd,
     required this.minAltitude,
     required this.maxAltitude,
+    this.enabledObjectTypes = const {},
     this.priorityMode = RecommendationPriorityMode.uncapturedFirst,
   });
 
   /// 추천에 포함할 카탈로그 집합.
   final Set<CatalogType> enabledCatalogs;
+
+  /// 추천 후보에 포함할 천체 종류. 비어 있으면 모든 종류를 허용한다.
+  /// 카탈로그 선택과 독립적으로 함께 적용된다.
+  final Set<ObjectType> enabledObjectTypes;
 
   /// 관측 가능 방위각 시작 (0–359°).
   final int azimuthStart;
@@ -66,6 +72,7 @@ class RecommendationSettings {
 
   RecommendationSettings copyWith({
     Set<CatalogType>? enabledCatalogs,
+    Set<ObjectType>? enabledObjectTypes,
     int? azimuthStart,
     int? azimuthEnd,
     int? minAltitude,
@@ -74,6 +81,7 @@ class RecommendationSettings {
   }) {
     return RecommendationSettings(
       enabledCatalogs: enabledCatalogs ?? Set.of(this.enabledCatalogs),
+      enabledObjectTypes: enabledObjectTypes ?? Set.of(this.enabledObjectTypes),
       azimuthStart: azimuthStart ?? this.azimuthStart,
       azimuthEnd: azimuthEnd ?? this.azimuthEnd,
       minAltitude: minAltitude ?? this.minAltitude,
@@ -86,6 +94,7 @@ class RecommendationSettings {
 /// 추천 대상 설정을 SharedPreferences에 저장/로드하는 서비스.
 class RecommendationSettingsService {
   static const _keyCatalogs = 'rec_catalogs_v1';
+  static const _keyObjectTypes = 'rec_object_types_v1';
   static const _keyPriorityMode = 'rec_priority_mode_v1';
 
   Future<RecommendationSettings> load() async {
@@ -106,8 +115,17 @@ class RecommendationSettingsService {
           .toSet();
     }
 
+    final objectTypes = (prefs.getStringList(_keyObjectTypes) ?? const [])
+        .map(
+          (value) => ObjectType.values.where((type) => type.name == value),
+        )
+        .where((matches) => matches.isNotEmpty)
+        .map((matches) => matches.first)
+        .toSet();
+
     return RecommendationSettings(
       enabledCatalogs: catalogs,
+      enabledObjectTypes: objectTypes,
       // 관측 방향은 ActiveObservationSite/Horizon이 소유한다. 과거 전역
       // 방위각 설정은 읽지 않고 전체 범위를 안전한 호환값으로 사용한다.
       azimuthStart: 0,
@@ -126,6 +144,10 @@ class RecommendationSettingsService {
     await prefs.setStringList(
       _keyCatalogs,
       settings.enabledCatalogs.map((c) => c.value).toList(),
+    );
+    await prefs.setStringList(
+      _keyObjectTypes,
+      settings.enabledObjectTypes.map((type) => type.name).toList(),
     );
     await prefs.setString(_keyPriorityMode, settings.priorityMode.storageValue);
   }

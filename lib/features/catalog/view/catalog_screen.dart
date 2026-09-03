@@ -18,11 +18,13 @@ import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/gallery_shooting_record_repository_adapter.dart';
 import '../../../data/repositories/shooting_record_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
+import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/exposure_policy.dart';
 import '../../../services/base_exposure_settings_service.dart';
 import '../../../services/object_imaging_profile_provider.dart';
 import '../../../services/photo_registration_service.dart';
+import '../../../services/target_imaging_availability_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
@@ -202,6 +204,8 @@ class _CatalogScreenState extends State<CatalogScreen>
       exposurePolicy,
       navigationObjects: navigationObjects,
       captureProjection: context.read<CatalogCaptureProjectionService>(),
+      observationSiteRepository: context.read<ObservationSiteRepository>(),
+      availabilityService: context.read<TargetImagingAvailabilityService>(),
     );
 
     final dataChanged = await Navigator.of(context)
@@ -704,6 +708,10 @@ class _AddCatalogEntryScreenState extends State<_AddCatalogEntryScreen> {
               context.read<ExposurePolicy>(),
               captureProjection: context
                   .read<CatalogCaptureProjectionService>(),
+              observationSiteRepository: context
+                  .read<ObservationSiteRepository>(),
+              availabilityService: context
+                  .read<TargetImagingAvailabilityService>(),
             ),
             child: const CatalogDetailScreen(),
           ),

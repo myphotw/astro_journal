@@ -410,7 +410,12 @@ class RecommendationEngine {
     RecommendationSettings settings,
   ) {
     final userFiltered = catalog
-        .where((object) => settings.enabledCatalogs.contains(object.catalog))
+        .where(
+          (object) =>
+              settings.enabledCatalogs.contains(object.catalog) &&
+              (settings.enabledObjectTypes.isEmpty ||
+                  settings.enabledObjectTypes.contains(object.resolvedObjectType)),
+        )
         .toList(growable: false);
     final cheapEligible = userFiltered
         .where(
