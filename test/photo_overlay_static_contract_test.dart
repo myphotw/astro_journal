@@ -87,11 +87,7 @@ void main() {
   });
 
   test('catalog PA is projected into the overlay ellipse rotation', () async {
-    final object = _object(
-      id: 'M31',
-      majorAxis: 190,
-      minorAxis: 60,
-    );
+    final object = _object(id: 'M31', majorAxis: 190, minorAxis: 60);
     final result = await PhotoOverlayService(
       _CatalogRepository([object]),
     ).buildOverlay(_remoteRecord(celestialObjectId: 'M31'));
@@ -104,58 +100,200 @@ void main() {
     );
   });
 
-  test('WCS runtime diagnostic reports the actual projection branch once', () async {
-    final messages = <String>[];
-    final originalDebugPrint = debugPrint;
-    debugPrint = (message, {wrapWidth}) {
-      if (message != null) messages.add(message);
-    };
-    addTearDown(() => debugPrint = originalDebugPrint);
+  test('full WCS raster scales to the Gallery source raster', () async {
+    final result =
+        await PhotoOverlayService(
+          _CatalogRepository([_object(id: 'M1')]),
+        ).buildOverlay(
+          _remoteRecord(
+            plateSolve: PlateSolveResult.success(
+              centerRa: 180,
+              centerDec: 0,
+              pixelScale: 3.6,
+              fovWidth: 2,
+              fovHeight: 1,
+              imageWidth: 2000,
+              imageHeight: 1000,
+              wcs: const FitsWcsHeader(
+                crval1: 180,
+                crval2: 0,
+                crpix1: 500.5,
+                crpix2: 250.5,
+                cd11: -0.001,
+                cd12: 0,
+                cd21: 0,
+                cd22: 0.001,
+                imageW: 1000,
+                imageH: 500,
+              ),
+            ),
+          ),
+        );
 
-    final objects = [
-      _object(id: 'M31', ra: '0h 42m 44.3s', dec: '+41° 16m 09s'),
-      _object(id: 'M32', ra: '0h 42m 41.8s', dec: '+40° 51m 55s'),
-      _object(id: 'M110', ra: '0h 40m 22.1s', dec: '+41° 41m 07s'),
-    ];
-    const wcs = FitsWcsHeader(
-      crval1: 10.6847083,
-      crval2: 41.26875,
-      crpix1: 500.5,
-      crpix2: 500.5,
-      cd11: -0.0027777778,
-      cd12: 0,
-      cd21: 0,
-      cd22: 0.0027777778,
+    expect(result.objects.single.pixelX, closeTo(1000, 1e-6));
+    expect(result.objects.single.pixelY, closeTo(500, 1e-6));
+  });
+
+  test(
+    'full WCS uses the linked original EXIF orientation for Gallery preview',
+    () async {
+      final objects = [
+        _object(id: 'CENTER', positionAngle: 0),
+        _object(id: 'NORTH', dec: '+00° 06m'),
+      ];
+      final service = PhotoOverlayService(
+        _CatalogRepository(objects),
+        exifOrientationReader: (path) async {
+          expect(path, r'C:\managed\m31.jpg');
+          return 4;
+        },
+      );
+      final result = await service.buildOverlay(
+        _remoteRecord(
+          celestialObjectId: 'CENTER',
+          photoUri: r'C:\managed\m31.jpg',
+          previewUrl: 'https://backend.test/preview.jpg',
+          plateSolve: PlateSolveResult.success(
+            centerRa: 180,
+            centerDec: 0,
+            pixelScale: 3.6,
+            fovWidth: 1,
+            fovHeight: 0.5,
+            imageWidth: 1000,
+            imageHeight: 500,
+            wcs: const FitsWcsHeader(
+              crval1: 180,
+              crval2: 0,
+              crpix1: 500.5,
+              crpix2: 250.5,
+              cd11: -0.001,
+              cd12: 0,
+              cd21: 0,
+              cd22: 0.001,
+              imageW: 1000,
+              imageH: 500,
+            ),
+          ),
+        ),
+      );
+      final byId = {for (final object in result.objects) object.id: object};
+
+      expect(byId['CENTER']?.pixelX, closeTo(500, 1e-6));
+      expect(byId['CENTER']?.pixelY, closeTo(250, 1e-6));
+      expect(
+        byId['CENTER']?.ellipseRotationRadians,
+        closeTo(math.pi / 2, 1e-6),
+      );
+      expect(byId['NORTH']!.pixelX, closeTo(500, 0.01));
+      expect(byId['NORTH']!.pixelY, greaterThan(byId['CENTER']!.pixelY));
+    },
+  );
+
+  test('remote-only full WCS does not guess an EXIF transform', () async {
+    var orientationReads = 0;
+    final service = PhotoOverlayService(
+      _CatalogRepository([
+        _object(id: 'CENTER'),
+        _object(id: 'NORTH', dec: '+00° 06m'),
+      ]),
+      exifOrientationReader: (_) async {
+        orientationReads++;
+        return 4;
+      },
     );
-    final record = _remoteRecord(
-      id: 'wcs-debug-record',
-      celestialObjectId: 'M31',
-      plateSolve: PlateSolveResult.success(
-        centerRa: 10.6847083,
-        centerDec: 41.26875,
-        rotation: 0,
-        parity: 1,
-        pixelScale: 10,
-        fovWidth: 2.7777778,
-        fovHeight: 2.7777778,
-        wcs: wcs,
+    final result = await service.buildOverlay(
+      _remoteRecord(
+        celestialObjectId: 'CENTER',
+        previewUrl: 'https://backend.test/preview.jpg',
+        plateSolve: PlateSolveResult.success(
+          centerRa: 180,
+          centerDec: 0,
+          pixelScale: 3.6,
+          fovWidth: 1,
+          fovHeight: 0.5,
+          imageWidth: 1000,
+          imageHeight: 500,
+          wcs: const FitsWcsHeader(
+            crval1: 180,
+            crval2: 0,
+            crpix1: 500.5,
+            crpix2: 250.5,
+            cd11: -0.001,
+            cd12: 0,
+            cd21: 0,
+            cd22: 0.001,
+            imageW: 1000,
+            imageH: 500,
+          ),
+        ),
       ),
     );
-    final service = PhotoOverlayService(_CatalogRepository(objects));
+    final byId = {for (final object in result.objects) object.id: object};
 
-    await service.buildOverlay(record);
-    await service.buildOverlay(record);
-
-    final logs = messages.where((line) => line.startsWith('[WCS_DEBUG]')).toList();
-    expect(logs, hasLength(1));
-    expect(logs.single, contains('record_id=wcs-debug-record'));
-    expect(logs.single, contains('IMAGEW=null IMAGEH=null'));
-    expect(logs.single, contains('branch=full_wcs/worldToPixelFromWcs'));
-    expect(logs.single, contains('full_wcs_xy_center_inversion_executed=true'));
-    expect(logs.single, contains('M31={ra='));
-    expect(logs.single, contains('M32={ra='));
-    expect(logs.single, contains('M110={ra='));
+    expect(orientationReads, 0);
+    expect(byId['NORTH']!.pixelY, lessThan(byId['CENTER']!.pixelY));
   });
+
+  test(
+    'WCS runtime diagnostic reports the actual projection branch once',
+    () async {
+      final messages = <String>[];
+      final originalDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) messages.add(message);
+      };
+      addTearDown(() => debugPrint = originalDebugPrint);
+
+      final objects = [
+        _object(id: 'M31', ra: '0h 42m 44.3s', dec: '+41° 16m 09s'),
+        _object(id: 'M32', ra: '0h 42m 41.8s', dec: '+40° 51m 55s'),
+        _object(id: 'M110', ra: '0h 40m 22.1s', dec: '+41° 41m 07s'),
+      ];
+      const wcs = FitsWcsHeader(
+        crval1: 10.6847083,
+        crval2: 41.26875,
+        crpix1: 500.5,
+        crpix2: 500.5,
+        cd11: -0.0027777778,
+        cd12: 0,
+        cd21: 0,
+        cd22: 0.0027777778,
+      );
+      final record = _remoteRecord(
+        id: 'wcs-debug-record',
+        celestialObjectId: 'M31',
+        plateSolve: PlateSolveResult.success(
+          centerRa: 10.6847083,
+          centerDec: 41.26875,
+          rotation: 0,
+          parity: 1,
+          pixelScale: 10,
+          fovWidth: 2.7777778,
+          fovHeight: 2.7777778,
+          wcs: wcs,
+        ),
+      );
+      final service = PhotoOverlayService(_CatalogRepository(objects));
+
+      await service.buildOverlay(record);
+      await service.buildOverlay(record);
+
+      final logs = messages
+          .where((line) => line.startsWith('[WCS_DEBUG]'))
+          .toList();
+      expect(logs, hasLength(1));
+      expect(logs.single, contains('record_id=wcs-debug-record'));
+      expect(logs.single, contains('IMAGEW=null IMAGEH=null'));
+      expect(logs.single, contains('branch=full_wcs/worldToPixelFromWcs'));
+      expect(logs.single, contains('fits_to_flutter=x_identity_y_flip'));
+      expect(logs.single, contains('sip_inverse=none'));
+      expect(logs.single, contains('orientation_source=unavailable'));
+      expect(logs.single, contains('gallery_transform=identity_scale'));
+      expect(logs.single, contains('M31={ra='));
+      expect(logs.single, contains('M32={ra='));
+      expect(logs.single, contains('M110={ra='));
+    },
+  );
 
   group('angular-size render geometry', () {
     test('2px radius is not enlarged and gets a separate center marker', () {
@@ -290,14 +428,18 @@ ShootingRecord _remoteRecord({
   String id = 'remote:record-1',
   String celestialObjectId = 'M1',
   PlateSolveResult? plateSolve,
+  String photoUri = 'https://backend.test/preview.jpg',
+  String? previewUrl,
 }) {
   return ShootingRecord(
     id: id,
     celestialObjectId: celestialObjectId,
     capturedAt: DateTime.utc(2026, 8, 28),
     createdAt: DateTime.utc(2026, 8, 28),
-    photoUri: 'https://backend.test/preview.jpg',
-    plateSolve: plateSolve ??
+    photoUri: photoUri,
+    previewUrl: previewUrl,
+    plateSolve:
+        plateSolve ??
         PlateSolveResult.success(
           centerRa: 180,
           centerDec: 0,
@@ -315,6 +457,7 @@ CatalogObject _object({
   String? angularSize,
   double? majorAxis,
   double? minorAxis,
+  double? positionAngle,
   String ra = '12h 00m',
   String dec = '+00° 00m',
 }) {
@@ -331,6 +474,7 @@ CatalogObject _object({
     angularSize: angularSize,
     majorAxis: majorAxis,
     minorAxis: minorAxis,
+    positionAngle: positionAngle,
   );
 }
 

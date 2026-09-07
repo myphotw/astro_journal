@@ -51,8 +51,9 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     // Astro Gallery's `file_id` is the SHA-256 asset identity. Plate Solve
     // requires the positive CommonFile database identity exposed as `file_id`
     // by the canonical ObservationRecord API. Keep the two identities separate
-    // and only enrich a detail response when Gallery did not already provide
-    // `common_file_id`.
+    // and only enrich fields that Gallery did not already provide. A valid
+    // Gallery Plate Solve status/result is canonical and must not be replaced
+    // by an older ObservationRecord snapshot fetched for identity recovery.
     final needsCommonFileId = _positiveInt(json['common_file_id']) == null;
     final plateSolveStatus = _string(json['plate_solve_status'])?.toUpperCase();
     final needsPlateSolveStatus = plateSolveStatus == null;
@@ -90,14 +91,16 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
           if (commonFileId != null) json['common_file_id'] = commonFileId;
         }
         final recordPlateSolveStatus = _string(record['plate_solve_status']);
-        if (recordPlateSolveStatus != null) {
+        if (needsPlateSolveStatus && recordPlateSolveStatus != null) {
           json['plate_solve_status'] = recordPlateSolveStatus;
         }
         final plateSolveJobId = _string(record['plate_solve_job_id']);
-        if (plateSolveJobId != null) {
+        if ((needsPlateSolveStatus || needsPlateSolveJobId) &&
+            plateSolveJobId != null) {
           json['plate_solve_job_id'] = plateSolveJobId;
         }
-        if (record['plate_solve_result'] is Map) {
+        if ((needsPlateSolveStatus || needsPlateSolveResult) &&
+            record['plate_solve_result'] is Map) {
           json['plate_solve_result'] = record['plate_solve_result'];
         }
       } on RemoteGalleryException catch (error) {
@@ -111,12 +114,27 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
                 'parsed_common_file_id=null',
           );
         }
-        // Gallery detail remains usable when identity recovery is unavailable.
-        // Plate Solve status remains unknown rather than being conflated with
-        // the backend WAITING state.
+        // Gallery detail remains usable when fallback enrichment is
+        // unavailable; its canonical fields stay unchanged.
       }
     }
-    return _item(json);
+    final item = _item(json);
+    final plateSolvePayload = json['plate_solve_result'];
+    final payloadHasWcs = plateSolvePayload is Map &&
+        (plateSolvePayload['wcs'] is Map ||
+            plateSolvePayload['fits_wcs'] is Map ||
+            plateSolvePayload['fitsWcs'] is Map);
+    if (plateSolvePayload is Map) {
+      AppLogger.info(
+        'RemoteGalleryDataSource',
+        '[WCS_DEBUG] gallery_detail backend_record_id=$recordId '
+            'payload_wcs=$payloadHasWcs '
+            'mapper_wcs=${item.plateSolve?.wcs != null} '
+            'gallery_image=${item.plateSolve?.imageWidth ?? "null"}x'
+            '${item.plateSolve?.imageHeight ?? "null"}',
+      );
+    }
+    return item;
   }
 
   Future<dynamic> _get(String path, {Map<String, String>? query}) async {

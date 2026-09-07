@@ -57,10 +57,10 @@ class PlateSolveProjection {
     return TangentPlaneOffset(_toDeg(xRad), _toDeg(yRad));
   }
 
-  /// FITS CD + CRPIX + CRVAL → 표시 픽셀 (0-based, 좌상단 원점).
+  /// FITS WCS → Flutter 표시 픽셀 (0-based, 좌상단 원점).
   ///
-  /// FITS 좌표는 Seestar가 표시하는 raster와 양 축 방향이 반대다.
-  /// 표시 크기를 알 수 있으면 이미지 중심을 기준으로 X/Y를 함께 반전한다.
+  /// FITS의 1-based pixel center에서 0.5를 빼고, Y축만 한 번
+  /// 뒤집는다. CD 행렬에 포함된 회전/parity는 다시 적용하지 않는다.
   static PixelOffset worldToPixelFromWcs({
     required FitsWcsHeader wcs,
     required double targetRaDeg,
@@ -69,42 +69,105 @@ class PlateSolveProjection {
     double? rasterHeight,
     bool rasterizeFitsAxes = true,
   }) {
+    return _tryWorldToPixelFromWcs(
+          wcs: wcs,
+          targetRaDeg: targetRaDeg,
+          targetDecDeg: targetDecDeg,
+          rasterHeight: rasterHeight,
+          rasterizeFitsAxes: rasterizeFitsAxes,
+        ) ??
+        _wcsReferencePixel(
+          wcs,
+          rasterHeight: rasterHeight,
+          rasterizeFitsAxes: rasterizeFitsAxes,
+        );
+  }
+
+  static PixelOffset? _tryWorldToPixelFromWcs({
+    required FitsWcsHeader wcs,
+    required double targetRaDeg,
+    required double targetDecDeg,
+    double? rasterHeight,
+    required bool rasterizeFitsAxes,
+  }) {
+    if (!wcs.isValid) return null;
     final iwc = tangentIwcDeg(
       centerRaDeg: wcs.crval1,
       centerDecDeg: wcs.crval2,
       targetRaDeg: targetRaDeg,
       targetDecDeg: targetDecDeg,
     );
-    if (iwc.xDeg.isNaN || iwc.yDeg.isNaN) {
-      return PixelOffset(wcs.crpix1 - 0.5, wcs.crpix2 - 0.5);
-    }
+    if (!iwc.xDeg.isFinite || !iwc.yDeg.isFinite) return null;
 
     final det = wcs.cd11 * wcs.cd22 - wcs.cd12 * wcs.cd21;
-    if (det.abs() < 1e-30) {
-      return PixelOffset(wcs.crpix1 - 0.5, wcs.crpix2 - 0.5);
-    }
+    if (!det.isFinite || det.abs() < 1e-30) return null;
 
     final inv11 = wcs.cd22 / det;
     final inv12 = -wcs.cd12 / det;
     final inv21 = -wcs.cd21 / det;
     final inv22 = wcs.cd11 / det;
 
-    final u = inv11 * iwc.xDeg + inv12 * iwc.yDeg;
-    final v = inv21 * iwc.xDeg + inv22 * iwc.yDeg;
+    final distortedU = inv11 * iwc.xDeg + inv12 * iwc.yDeg;
+    final distortedV = inv21 * iwc.xDeg + inv22 * iwc.yDeg;
+    if (!distortedU.isFinite || !distortedV.isFinite) return null;
 
-    final fitsX = wcs.crpix1 + u;
-    final fitsY = wcs.crpix2 + v;
+    final undistorted = _inverseSip(wcs.sip, distortedU, distortedV);
+    if (undistorted == null) return null;
+
+    final fitsX = wcs.crpix1 + undistorted.$1;
+    final fitsY = wcs.crpix2 + undistorted.$2;
     final fitsDisplayX = fitsX - 0.5;
     final fitsDisplayY = fitsY - 0.5;
-    final displayWidth = rasterWidth ?? wcs.imageW;
-    final displayHeight = rasterHeight ?? wcs.imageH;
-    final displayX = rasterizeFitsAxes && displayWidth != null
-        ? displayWidth - fitsDisplayX
-        : fitsDisplayX;
+    final displayHeight = rasterHeight ?? wcs.rasterHeight;
+    final displayX = fitsDisplayX;
     final displayY = rasterizeFitsAxes && displayHeight != null
         ? displayHeight - fitsDisplayY
         : fitsDisplayY;
+    if (!displayX.isFinite || !displayY.isFinite) return null;
     return PixelOffset(displayX, displayY);
+  }
+
+  static (double, double)? _inverseSip(
+    FitsSipDistortion? sip,
+    double distortedU,
+    double distortedV,
+  ) {
+    if (sip == null) return (distortedU, distortedV);
+    if (!sip.isValid) return null;
+
+    if (sip.hasInverse) {
+      final u = distortedU + sip.evaluateAp(distortedU, distortedV);
+      final v = distortedV + sip.evaluateBp(distortedU, distortedV);
+      return u.isFinite && v.isFinite ? (u, v) : null;
+    }
+
+    if (!sip.hasForward) return null;
+    var u = distortedU;
+    var v = distortedV;
+    const maxIterations = 20;
+    const convergencePixels = 1e-7;
+    for (var iteration = 0; iteration < maxIterations; iteration++) {
+      final nextU = distortedU - sip.evaluateA(u, v);
+      final nextV = distortedV - sip.evaluateB(u, v);
+      if (!nextU.isFinite || !nextV.isFinite) return null;
+      final delta = math.max((nextU - u).abs(), (nextV - v).abs());
+      u = nextU;
+      v = nextV;
+      if (delta <= convergencePixels) return (u, v);
+    }
+    return null;
+  }
+
+  static PixelOffset _wcsReferencePixel(
+    FitsWcsHeader wcs, {
+    double? rasterHeight,
+    required bool rasterizeFitsAxes,
+  }) {
+    final x = wcs.crpix1 - 0.5;
+    final fitsY = wcs.crpix2 - 0.5;
+    final height = rasterHeight ?? wcs.rasterHeight;
+    final y = rasterizeFitsAxes && height != null ? height - fitsY : fitsY;
+    return PixelOffset(x, y);
   }
 
   /// orientation/parity/pixscale 로 CD를 재구성 (wcs 파일 없을 때).
@@ -177,13 +240,14 @@ class PlateSolveProjection {
     FitsWcsHeader? wcs,
   }) {
     if (wcs != null && wcs.isValid) {
-      return worldToPixelFromWcs(
+      final fullWcsPixel = _tryWorldToPixelFromWcs(
         wcs: wcs,
         targetRaDeg: targetRaDeg,
         targetDecDeg: targetDecDeg,
-        rasterWidth: imageWidth.toDouble(),
         rasterHeight: imageHeight.toDouble(),
+        rasterizeFitsAxes: true,
       );
+      if (fullWcsPixel != null) return fullWcsPixel;
     }
 
     if (pixelScaleArcsec <= 0 || imageWidth <= 0 || imageHeight <= 0) {

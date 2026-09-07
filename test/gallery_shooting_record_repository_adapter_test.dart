@@ -4,6 +4,7 @@ import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/exif_info.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
+import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_shooting_record_repository_adapter.dart';
@@ -595,6 +596,25 @@ void main() {
       expect(outbox.cancelledLocalIds, ['local-1']);
     },
   );
+
+  test('local-only record keeps its local Plate Solve state', () async {
+    final local = _local('local-1', 'M42', capturedAt).copyWith(
+      plateSolveQueueStatus: PlateSolveQueueStatus.waiting,
+    );
+    final result = harness(
+      snapshot: const GallerySnapshot(
+        items: [],
+        source: GallerySnapshotSource.none,
+        backendEnabled: false,
+      ),
+      local: [local],
+    );
+
+    final record = (await result.adapter.getAll()).single;
+
+    expect(record.backendRecordId, isNull);
+    expect(record.plateSolveQueueStatus, PlateSolveQueueStatus.waiting);
+  });
 
   test('Gallery last local photo delete clears Catalog projection', () async {
     final result = harness(

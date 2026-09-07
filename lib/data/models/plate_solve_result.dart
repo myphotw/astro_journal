@@ -236,38 +236,41 @@ class PlateSolveResult {
       };
 
   factory PlateSolveResult.fromJson(Map<String, dynamic> json) {
-    final solvedAtStr = json['solvedAt'] as String?;
+    final solvedAtStr = _string(json['solvedAt'] ?? json['solved_at']);
     FitsWcsHeader? header;
-    final wcsJson = json['wcs'];
-    if (wcsJson is Map<String, dynamic>) {
+    final wcsJson = json['wcs'] ?? json['fits_wcs'] ?? json['fitsWcs'];
+    if (wcsJson is Map) {
       try {
-        header = FitsWcsHeader.fromJson(wcsJson);
+        header = FitsWcsHeader.fromJson(Map<String, dynamic>.from(wcsJson));
       } catch (_) {
         header = null;
       }
     }
     return PlateSolveResult._(
       status: _statusFromJson(json),
-      centerRa: (json['centerRa'] as num?)?.toDouble(),
-      centerDec: (json['centerDec'] as num?)?.toDouble(),
-      rotation: (json['rotation'] as num?)?.toDouble(),
-      parity: (json['parity'] as num?)?.toDouble(),
-      pixelScale: (json['pixelScale'] as num?)?.toDouble(),
-      fovWidth: (json['fovWidth'] as num?)?.toDouble(),
-      fovHeight: (json['fovHeight'] as num?)?.toDouble(),
-      imageWidth: (json['imageWidth'] as num?)?.toInt(),
-      imageHeight: (json['imageHeight'] as num?)?.toInt(),
+      centerRa: _double(json['centerRa'] ?? json['ra']),
+      centerDec: _double(json['centerDec'] ?? json['dec']),
+      rotation: _double(json['rotation']),
+      parity: _double(json['parity']),
+      pixelScale: _double(json['pixelScale'] ?? json['pixel_scale']),
+      fovWidth: _double(json['fovWidth'] ?? json['field_width']),
+      fovHeight: _double(json['fovHeight'] ?? json['field_height']),
+      imageWidth: _int(json['imageWidth'] ?? json['image_width']),
+      imageHeight: _int(json['imageHeight'] ?? json['image_height']),
       wcs: header,
-      solver: json['solver'] as String?,
+      solver: _string(json['solver']),
       solvedAt: solvedAtStr != null ? DateTime.tryParse(solvedAtStr) : null,
-      errorMessage: json['errorMessage'] as String?,
-      rawWcsJson: json['rawWcsJson'] as String?,
-      solveMode: _modeFromJson(json['solveMode'] as String?),
-      targetObject: json['targetObject'] as String?,
-      inputRa: (json['inputRa'] as num?)?.toDouble(),
-      inputDec: (json['inputDec'] as num?)?.toDouble(),
-      solveTimeMs: (json['solveTime'] as num?)?.toInt() ??
-          (json['solveTimeMs'] as num?)?.toInt(),
+      errorMessage: _string(json['errorMessage'] ?? json['error_message']),
+      rawWcsJson: _string(json['rawWcsJson'] ?? json['raw_wcs_json']),
+      solveMode: _modeFromJson(
+        _string(json['solveMode'] ?? json['solve_mode']),
+      ),
+      targetObject: _string(json['targetObject'] ?? json['target_object']),
+      inputRa: _double(json['inputRa'] ?? json['input_ra']),
+      inputDec: _double(json['inputDec'] ?? json['input_dec']),
+      solveTimeMs: _int(
+        json['solveTime'] ?? json['solveTimeMs'] ?? json['solve_time_ms'],
+      ),
     );
   }
 
@@ -290,6 +293,19 @@ class PlateSolveResult {
       (m) => m.name == raw,
       orElse: () => PlateSolveMode.blind,
     );
+  }
+
+  static double? _double(Object? value) => value is num
+      ? value.toDouble()
+      : double.tryParse(value?.toString() ?? '');
+
+  static int? _int(Object? value) => value is num
+      ? value.toInt()
+      : int.tryParse(value?.toString() ?? '');
+
+  static String? _string(Object? value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
   }
 
   static String encode(PlateSolveResult result) => jsonEncode(result.toJson());

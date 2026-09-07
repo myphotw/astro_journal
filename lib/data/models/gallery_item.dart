@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'plate_solve_queue.dart';
 import 'plate_solve_result.dart';
 
@@ -196,7 +198,10 @@ class GalleryItem {
     if (value is! Map) return null;
     final json = Map<String, dynamic>.from(value);
     if (json.containsKey('status') || json.containsKey('centerRa')) {
-      return PlateSolveResult.fromJson(json);
+      return PlateSolveResult.fromJson({
+        ...json,
+        'rawWcsJson': json['rawWcsJson'] ?? jsonEncode(json),
+      });
     }
     return PlateSolveResult.fromJson({
       'status': PlateSolveStatus.success.name,
@@ -207,6 +212,10 @@ class GalleryItem {
       'fovWidth': _double(json['field_width']),
       'fovHeight': _double(json['field_height']),
       'parity': _double(json['parity']),
+      'imageWidth': _optionalInt(json['image_width']),
+      'imageHeight': _optionalInt(json['image_height']),
+      'wcs': json['wcs'] ?? json['fits_wcs'] ?? json['fitsWcs'],
+      'rawWcsJson': jsonEncode(json),
     });
   }
 

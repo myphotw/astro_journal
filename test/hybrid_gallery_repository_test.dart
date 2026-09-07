@@ -6,6 +6,7 @@ import 'package:astro_journal/data/models/gallery_item.dart';
 import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:astro_journal/data/models/plate_solve_result.dart';
 import 'package:astro_journal/data/repositories/hybrid_gallery_repository.dart';
+import 'package:astro_journal/services/plate_solve/fits_wcs_parser.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -50,6 +51,57 @@ void main() {
     final result = await repository().getAll();
 
     expect(result.single.backendFileId, 'cached');
+    expect(remote.galleryCalls, 0);
+  });
+
+  test('cache round-trip preserves full WCS, SIP, and dimensions', () async {
+    await settings.save(
+      const TcBackendSettings(baseUrl: 'https://backend.test', enabled: false),
+    );
+    final item = _item(
+      'wcs',
+      plateSolveStatus: PlateSolveQueueStatus.completed,
+      plateSolve: PlateSolveResult.success(
+        centerRa: 9.21934408057,
+        centerDec: 42.0312821138,
+        imageWidth: 1080,
+        imageHeight: 1920,
+        wcs: const FitsWcsHeader(
+          crval1: 9.21934408057,
+          crval2: 42.0312821138,
+          crpix1: 340.218953451,
+          crpix2: 330.937591553,
+          cd11: -0.000579367118527,
+          cd12: 0.00195210532111,
+          cd21: -0.00195175170014,
+          cd22: -0.000577940651391,
+          imageW: 1080,
+          imageH: 1920,
+          ctype1: 'RA---TAN-SIP',
+          ctype2: 'DEC--TAN-SIP',
+          sip: FitsSipDistortion(
+            aOrder: 2,
+            bOrder: 2,
+            apOrder: 2,
+            bpOrder: 2,
+            a: {'1_1': 1.09837440879e-6},
+            b: {'1_1': 9.34627359294e-7},
+            ap: {'0_0': -9.35011261859e-5},
+            bp: {'0_0': -0.000184023072769},
+          ),
+        ),
+      ),
+    );
+    cache.putItems('astro:gallery:list', [item], now);
+
+    final result = (await repository().getAll()).single.plateSolve!;
+
+    expect(result.imageWidth, 1080);
+    expect(result.imageHeight, 1920);
+    expect(result.wcs?.rasterWidth, 1080);
+    expect(result.wcs?.rasterHeight, 1920);
+    expect(result.wcs?.sip?.a['1_1'], 1.09837440879e-6);
+    expect(result.wcs?.sip?.bp['0_0'], -0.000184023072769);
     expect(remote.galleryCalls, 0);
   });
 
@@ -183,6 +235,139 @@ void main() {
       expect(result?.commonFileId, 178);
     },
   );
+
+  test(
+    'remote COMPLETED replaces stale WAITING and survives cache restart',
+    () async {
+      cache.entries['astro:gallery:detail:record-status'] = GalleryCacheEntry(
+        key: 'astro:gallery:detail:record-status',
+        payloadJson: jsonEncode(
+          _item(
+            'status',
+            commonFileId: 178,
+            plateSolveStatus: PlateSolveQueueStatus.waiting,
+            plateSolveJobId: 'job-1',
+          ).toJson(),
+        ),
+        cachedAt: now,
+      );
+      remote.detail = _item(
+        'status',
+        commonFileId: 178,
+        plateSolveStatus: PlateSolveQueueStatus.completed,
+        plateSolveJobId: 'job-1',
+        plateSolve: PlateSolveResult.success(
+          centerRa: 9.21934408057,
+          centerDec: 42.0312821138,
+          imageWidth: 1080,
+          imageHeight: 1920,
+          wcs: const FitsWcsHeader(
+            crval1: 9.21934408057,
+            crval2: 42.0312821138,
+            crpix1: 340.218953451,
+            crpix2: 330.937591553,
+            cd11: -0.000579367118527,
+            cd12: 0.00195210532111,
+            cd21: -0.00195175170014,
+            cd22: -0.000577940651391,
+            imageW: 1080,
+            imageH: 1920,
+            ctype1: 'RA---TAN-SIP',
+            ctype2: 'DEC--TAN-SIP',
+            sip: FitsSipDistortion(
+              aOrder: 2,
+              bOrder: 2,
+              apOrder: 2,
+              bpOrder: 2,
+              a: {'1_1': 1.09837440879e-6},
+              b: {'1_1': 9.34627359294e-7},
+              ap: {'0_0': -9.35011261859e-5},
+              bp: {'0_0': -0.000184023072769},
+            ),
+          ),
+        ),
+      );
+
+      final refreshed = await repository().getById(
+        'record-status',
+        forceRefresh: true,
+      );
+
+      expect(refreshed?.plateSolveStatus, PlateSolveQueueStatus.completed);
+      expect(refreshed?.plateSolve?.wcs?.rasterWidth, 1080);
+      expect(refreshed?.plateSolve?.wcs?.sip?.bp['0_0'], -0.000184023072769);
+
+      await settings.save(
+        const TcBackendSettings(
+          baseUrl: 'https://backend.test',
+          enabled: false,
+        ),
+      );
+      final afterRestart = await repository().getById('record-status');
+
+      expect(afterRestart?.plateSolveStatus, PlateSolveQueueStatus.completed);
+      expect(afterRestart?.plateSolve?.imageWidth, 1080);
+      expect(afterRestart?.plateSolve?.imageHeight, 1920);
+      expect(afterRestart?.plateSolve?.wcs?.sip?.a['1_1'], 1.09837440879e-6);
+    },
+  );
+
+  test('valid remote processing and failed statuses replace WAITING', () async {
+    for (final status in const [
+      PlateSolveQueueStatus.processing,
+      PlateSolveQueueStatus.failed,
+    ]) {
+      final id = status.name;
+      cache.entries['astro:gallery:detail:record-$id'] = GalleryCacheEntry(
+        key: 'astro:gallery:detail:record-$id',
+        payloadJson: jsonEncode(
+          _item(
+            id,
+            commonFileId: 178,
+            plateSolveStatus: PlateSolveQueueStatus.waiting,
+            plateSolveJobId: 'job-1',
+          ).toJson(),
+        ),
+        cachedAt: now,
+      );
+      remote.detail = _item(
+        id,
+        commonFileId: 178,
+        plateSolveStatus: status,
+        plateSolveJobId: 'job-1',
+      );
+
+      final result = await repository().getById(
+        'record-$id',
+        forceRefresh: true,
+      );
+
+      expect(result?.plateSolveStatus, status);
+    }
+  });
+
+  test('missing remote status keeps cached local WAITING', () async {
+    cache.entries['astro:gallery:detail:record-missing'] = GalleryCacheEntry(
+      key: 'astro:gallery:detail:record-missing',
+      payloadJson: jsonEncode(
+        _item(
+          'missing',
+          commonFileId: 178,
+          plateSolveStatus: PlateSolveQueueStatus.waiting,
+          plateSolveJobId: 'job-1',
+        ).toJson(),
+      ),
+      cachedAt: now,
+    );
+    remote.detail = _item('missing', commonFileId: 178);
+
+    final result = await repository().getById(
+      'record-missing',
+      forceRefresh: true,
+    );
+
+    expect(result?.plateSolveStatus, PlateSolveQueueStatus.waiting);
+  });
 
   test('legacy Common Gallery cache key is not reused', () async {
     await settings.save(

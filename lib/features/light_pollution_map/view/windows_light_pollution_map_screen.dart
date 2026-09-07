@@ -228,7 +228,10 @@ class _WindowsLightPollutionMapScreenState
                       loadTileBytes: vm.getLightPollutionTileBytes,
                     ),
                     maxNativeZoom: 19,
-                    opacity: LightPollutionTileConstants.overlayOpacity,
+                    tileBuilder: (_, tileWidget, _) => Opacity(
+                      opacity: LightPollutionTileConstants.overlayOpacity,
+                      child: tileWidget,
+                    ),
                   ),
                 if (widget.isActive)
                   flutter_map.MarkerLayer(markers: _markers(vm)),

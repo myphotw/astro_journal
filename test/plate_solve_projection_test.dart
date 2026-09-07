@@ -49,6 +49,23 @@ void main() {
       expect(scaled.cd11, closeTo(-0.0005, 1e-12));
       expect(scaled.cd22, closeTo(0.0005, 1e-12));
     });
+
+    test('parses canonical TAN-SIP JSON and preserves its metadata', () {
+      final wcs = FitsWcsHeader.fromJson(_actualM31Wcs().toJson());
+
+      expect(wcs.schemaVersion, 1);
+      expect(wcs.ctype1, 'RA---TAN-SIP');
+      expect(wcs.ctype2, 'DEC--TAN-SIP');
+      expect(wcs.cunit1, 'deg');
+      expect(wcs.radesys, 'ICRS');
+      expect(wcs.rasterWidth, 1080);
+      expect(wcs.rasterHeight, 1920);
+      expect(wcs.sip?.aOrder, 2);
+      expect(wcs.sip?.apOrder, 2);
+      expect(wcs.sip?.a['1_1'], closeTo(1.09837440879e-6, 1e-18));
+      expect(wcs.sip?.bp['0_0'], closeTo(-0.000184023072769, 1e-18));
+      expect(wcs.sipInverseMode, 'ap_bp');
+    });
   });
 
   group('PlateSolveProjection WCS', () {
@@ -408,7 +425,7 @@ void main() {
       expect(east.abs(), closeTo(math.pi, 1e-6));
     });
 
-    test('M31 M32 M110 follow the observed Seestar raster directions', () {
+    test('simple full WCS follows FITS-to-Flutter axis contract', () {
       const scaleDeg = 10 / 3600;
       const wcs = FitsWcsHeader(
         crval1: 10.6847083,
@@ -435,14 +452,14 @@ void main() {
 
       expect(m31.x, closeTo(500, 1e-6));
       expect(m31.y, closeTo(500, 1e-6));
-      expect(m32.x, lessThan(m31.x)); // observed: slightly left of M31
-      expect(m32.y, greaterThan(m31.y)); // observed: below M31
-      expect(m110.x, lessThan(m31.x)); // observed: left of M31
-      expect(m110.y, lessThan(m31.y)); // observed: above M31
+      expect(m32.x, greaterThan(m31.x));
+      expect(m32.y, greaterThan(m31.y));
+      expect(m110.x, greaterThan(m31.x));
+      expect(m110.y, lessThan(m31.y));
       expect((m110.x - m31.x).abs(), greaterThan((m32.x - m31.x).abs()));
-      expect(m32.x - m31.x, closeTo(-2.84, 0.02));
+      expect(m32.x - m31.x, closeTo(2.84, 0.02));
       expect(m32.y - m31.y, closeTo(145.29, 0.02));
-      expect(m110.x - m31.x, closeTo(-159.38, 0.02));
+      expect(m110.x - m31.x, closeTo(159.38, 0.02));
       expect(m110.y - m31.y, closeTo(-150.55, 0.02));
     });
 
@@ -473,7 +490,7 @@ void main() {
       expect(m32.y, lessThan(m31.y));
     });
 
-    test('full WCS raster conversion reverses both FITS axes', () {
+    test('full WCS keeps FITS X and flips FITS Y exactly once', () {
       const wcs = FitsWcsHeader(
         crval1: 180,
         crval2: 0,
@@ -496,8 +513,175 @@ void main() {
         wcs: wcs,
       );
 
-      expect(westNorth.x, lessThan(500));
+      expect(westNorth.x, greaterThan(500));
       expect(westNorth.y, lessThan(500));
+    });
+
+    test('equivalent scalar and full WCS raster bases have one orientation', () {
+      const pixelScale = 3.6;
+      const orientation = 35.0;
+      final rasterCd = PlateSolveProjection.rasterCalibrationCdMatrix(
+        pixelScaleArcsec: pixelScale,
+        orientationDeg: orientation,
+        parity: 1,
+      );
+      final fullWcs = FitsWcsHeader(
+        crval1: 180,
+        crval2: 0,
+        crpix1: 500.5,
+        crpix2: 500.5,
+        cd11: rasterCd.cd11,
+        cd12: rasterCd.cd12,
+        // FITS Y increases upward; the raster basis increases downward.
+        cd21: -rasterCd.cd21,
+        cd22: -rasterCd.cd22,
+        imageW: 1000,
+        imageH: 1000,
+      );
+      PixelOffset project(FitsWcsHeader? wcs) =>
+          PlateSolveProjection.worldToPixel(
+            centerRaDeg: 180,
+            centerDecDeg: 0,
+            targetRaDeg: 180.1,
+            targetDecDeg: 0.1,
+            orientationDeg: orientation,
+            pixelScaleArcsec: pixelScale,
+            imageWidth: 1000,
+            imageHeight: 1000,
+            parity: 1,
+            wcs: wcs,
+          );
+
+      final scalar = project(null);
+      final full = project(fullWcs);
+
+      expect(full.x, closeTo(scalar.x, 1e-9));
+      expect(full.y, closeTo(scalar.y, 1e-9));
+    });
+
+    test('actual M31 TAN-SIP fixture matches canonical raster coordinates', () {
+      final wcs = _actualM31Wcs();
+      PixelOffset project(double ra, double dec) =>
+          PlateSolveProjection.worldToPixelFromWcs(
+            wcs: wcs,
+            targetRaDeg: ra,
+            targetDecDeg: dec,
+          );
+
+      final reference = project(wcs.crval1, wcs.crval2);
+      final m31 = project(10.75, 41.266667);
+      final m32 = project(10.75, 40.866667);
+      final m110 = project(10, 41.683333);
+      final m31ThroughPriorityPath = PlateSolveProjection.worldToPixel(
+        centerRaDeg: 0,
+        centerDecDeg: 0,
+        targetRaDeg: 10.75,
+        targetDecDeg: 41.266667,
+        orientationDeg: 173,
+        pixelScaleArcsec: 99,
+        imageWidth: 1080,
+        imageHeight: 1920,
+        parity: -1,
+        wcs: wcs,
+      );
+
+      expect(reference.x, closeTo(wcs.crpix1 - 0.5, 0.001));
+      expect(
+        reference.y,
+        closeTo(1920 - (wcs.crpix2 - 0.5), 0.001),
+      );
+      expect(m31.x, closeTo(534.417035, 0.001));
+      expect(m31.y, closeTo(942.722675, 0.001));
+      expect(m31ThroughPriorityPath.x, closeTo(m31.x, 1e-9));
+      expect(m31ThroughPriorityPath.y, closeTo(m31.y, 1e-9));
+      expect(m32.x, closeTo(721.670827, 0.001));
+      expect(m32.y, closeTo(883.617345, 0.001));
+      expect(m110.x, closeTo(421.008174, 0.001));
+      expect(m110.y, closeTo(1266.864234, 0.001));
+      expect(m32.y, lessThan(m31.y));
+      expect(m110.y, greaterThan(m31.y));
+      expect(m32.y, lessThan(1920 / 2));
+      expect(m110.y, greaterThan(1920 / 2));
+    });
+
+    test('A/B iterative SIP agrees with AP/BP inverse SIP', () {
+      final inverseWcs = _actualM31Wcs();
+      final iterativeWcs = _actualM31Wcs(includeInverseSip: false);
+
+      for (final target in const [
+        (10.75, 41.266667),
+        (10.75, 40.866667),
+        (10.0, 41.683333),
+      ]) {
+        final inverse = PlateSolveProjection.worldToPixelFromWcs(
+          wcs: inverseWcs,
+          targetRaDeg: target.$1,
+          targetDecDeg: target.$2,
+        );
+        final iterative = PlateSolveProjection.worldToPixelFromWcs(
+          wcs: iterativeWcs,
+          targetRaDeg: target.$1,
+          targetDecDeg: target.$2,
+        );
+        expect(iterative.x, closeTo(inverse.x, 0.001));
+        expect(iterative.y, closeTo(inverse.y, 0.001));
+      }
+      expect(iterativeWcs.sipInverseMode, 'iterative_ab');
+    });
+
+    test('unsupported or malformed full WCS uses scalar fallback', () {
+      const args = (
+        centerRa: 180.0,
+        centerDec: 0.0,
+        targetRa: 180.1,
+        targetDec: 0.1,
+      );
+      PixelOffset project(FitsWcsHeader? wcs) =>
+          PlateSolveProjection.worldToPixel(
+            centerRaDeg: args.centerRa,
+            centerDecDeg: args.centerDec,
+            targetRaDeg: args.targetRa,
+            targetDecDeg: args.targetDec,
+            orientationDeg: 35,
+            pixelScaleArcsec: 36,
+            imageWidth: 1000,
+            imageHeight: 1000,
+            parity: -1,
+            wcs: wcs,
+          );
+
+      final scalar = project(null);
+      final unsupported = project(
+        const FitsWcsHeader(
+          crval1: 180,
+          crval2: 0,
+          crpix1: 500.5,
+          crpix2: 500.5,
+          cd11: -0.01,
+          cd12: 0,
+          cd21: 0,
+          cd22: 0.01,
+          ctype1: 'RA---SIN',
+          ctype2: 'DEC--SIN',
+        ),
+      );
+      final malformed = project(
+        const FitsWcsHeader(
+          crval1: 180,
+          crval2: 0,
+          crpix1: 500.5,
+          crpix2: 500.5,
+          cd11: 0,
+          cd12: 0,
+          cd21: 0,
+          cd22: 0,
+        ),
+      );
+
+      expect(unsupported.x, closeTo(scalar.x, 1e-9));
+      expect(unsupported.y, closeTo(scalar.y, 1e-9));
+      expect(malformed.x, closeTo(scalar.x, 1e-9));
+      expect(malformed.y, closeTo(scalar.y, 1e-9));
     });
 
     test('M8 and M20 catalog coordinates preserve west/north relation', () {
@@ -521,3 +705,61 @@ void main() {
     });
   });
 }
+
+FitsWcsHeader _actualM31Wcs({bool includeInverseSip = true}) => FitsWcsHeader(
+  schemaVersion: 1,
+  ctype1: 'RA---TAN-SIP',
+  ctype2: 'DEC--TAN-SIP',
+  cunit1: 'deg',
+  cunit2: 'deg',
+  radesys: 'ICRS',
+  equinox: 2000,
+  lonpole: 180,
+  latpole: 0,
+  crval1: 9.21934408057,
+  crval2: 42.0312821138,
+  crpix1: 340.218953451,
+  crpix2: 330.937591553,
+  cd11: -0.000579367118527,
+  cd12: 0.00195210532111,
+  cd21: -0.00195175170014,
+  cd22: -0.000577940651391,
+  imageW: 1080,
+  imageH: 1920,
+  sip: FitsSipDistortion(
+    aOrder: 2,
+    bOrder: 2,
+    apOrder: includeInverseSip ? 2 : null,
+    bpOrder: includeInverseSip ? 2 : null,
+    a: const {
+      '0_2': 1.44520948456e-7,
+      '1_1': 1.09837440879e-6,
+      '2_0': 2.66098335077e-7,
+    },
+    b: const {
+      '0_2': 8.67112680520e-7,
+      '1_1': 9.34627359294e-7,
+      '2_0': -7.18506651066e-8,
+    },
+    ap: includeInverseSip
+        ? const {
+            '0_0': -9.35011261859e-5,
+            '0_1': -7.52363367675e-7,
+            '0_2': -1.43252017526e-7,
+            '1_0': -6.38035749293e-7,
+            '1_1': -1.09447877538e-6,
+            '2_0': -2.64877551137e-7,
+          }
+        : const {},
+    bp: includeInverseSip
+        ? const {
+            '0_0': -0.000184023072769,
+            '0_1': -1.78506946696e-6,
+            '0_2': -8.63343488731e-7,
+            '1_0': -4.49986325398e-7,
+            '1_1': -9.29981211853e-7,
+            '2_0': 7.23148649129e-8,
+          }
+        : const {},
+  ),
+);

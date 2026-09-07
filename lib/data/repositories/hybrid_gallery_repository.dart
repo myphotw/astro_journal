@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../services/app_logger.dart';
 import '../../services/tc_backend_settings_service.dart';
 import '../datasources/gallery_cache_local_datasource.dart';
 import '../datasources/remote_gallery_datasource.dart';
@@ -125,6 +126,14 @@ class HybridGalleryRepository implements GalleryRepository {
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     final cached = await _cache.read(key);
     final cachedItem = _cachedItem(cached);
+    if (cachedItem?.plateSolve != null) {
+      AppLogger.info(
+        'HybridGalleryRepository',
+        '[WCS_DEBUG] gallery_cache_read '
+            'backend_record_id=$backendRecordId '
+            'wcs=${cachedItem?.plateSolve?.wcs != null}',
+      );
+    }
     if (!settings.enabled || baseUrl == null) return cachedItem;
     // Older/current Gallery detail cache entries can legitimately lack the
     // numeric CommonFile identity because Astro Gallery exposes only its
@@ -144,6 +153,14 @@ class HybridGalleryRepository implements GalleryRepository {
         plateSolveJobId: fetched.plateSolveJobId ?? cachedItem?.plateSolveJobId,
         plateSolve: fetched.plateSolve ?? cachedItem?.plateSolve,
       );
+      if (synced.plateSolve != null) {
+        AppLogger.info(
+          'HybridGalleryRepository',
+          '[WCS_DEBUG] gallery_cache_write '
+              'backend_record_id=$backendRecordId '
+              'wcs=${synced.plateSolve?.wcs != null}',
+        );
+      }
       await _write(key, synced.toJson());
       return synced;
     } on RemoteGalleryException {
@@ -355,7 +372,14 @@ class HybridGalleryRepository implements GalleryRepository {
     final status = item!.plateSolveStatus;
     if (status == null) return true;
     if (item.plateSolveJobId == null) return false;
-    return status != PlateSolveQueueStatus.completed || item.plateSolve != null;
+    if (status != PlateSolveQueueStatus.completed) return true;
+    final result = item.plateSolve;
+    if (result == null) return false;
+    // A legacy detail cache can contain scalar solve data without proving that
+    // the current Gallery detail `wcs` contract was checked. Rehydrate it once;
+    // the current mapper preserves the backend payload in rawWcsJson even when
+    // an older backend record legitimately has wcs=null.
+    return result.hasFullWcs || (result.rawWcsJson?.isNotEmpty ?? false);
   }
 
   List<GalleryItem> _cachedItems(GalleryCacheEntry? entry) {
