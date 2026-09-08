@@ -497,7 +497,14 @@ void main() {
         await tester.pump();
 
         expect(find.byKey(const Key('plate-solve-processing')), findsOneWidget);
-        expect(find.text('Plate Solve 처리 중…'), findsOneWidget);
+        expect(find.text('Plate Solve 처리 중'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('plate-solve-processing')),
+            matching: find.byKey(const Key('plate-solve-progress')),
+          ),
+          findsOneWidget,
+        );
         expect(find.text('Plate Solve 실행'), findsNothing);
       },
     );
@@ -547,11 +554,88 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      // Resolve the outbox FutureBuilder once. The WAITING spinners are
+      // intentionally indeterminate, so pumpAndSettle must not be used here.
+      await tester.pump();
 
       expect(find.text('NAS 동기화 대기'), findsOneWidget);
       expect(find.text('Plate Solve 대기'), findsOneWidget);
-      expect(find.text('동기화 실패'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('nas-sync-status')),
+          matching: find.byKey(const Key('nas-sync-progress')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('plate-solve-waiting')),
+          matching: find.byKey(const Key('plate-solve-progress')),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('NAS 동기화 실패'), findsNothing);
+    });
+
+    testWidgets('completed NAS and Plate Solve states show check icons', (
+      tester,
+    ) async {
+      final record = ShootingRecord(
+        id: 'completed-photo',
+        celestialObjectId: 'M31',
+        capturedAt: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        photoUri: '/completed.jpg',
+        backendRecordId: 'record-1',
+        plateSolveQueueStatus: PlateSolveQueueStatus.completed,
+      );
+      shootingRecordRepository.items[record.id] = record;
+      await galleryViewModel.load();
+      final plateSolveViewModel = buildViewModel(
+        provider: _RecordingPlateSolveProvider(
+          PlateSolveResult.failure(errorMessage: 'unused'),
+        ),
+      );
+      final outbox = _PhotoStatusOutbox(
+        SyncOutboxItem(
+          operationId: 'upload-completed',
+          localRecordId: record.id,
+          clientFileId: 'client-file',
+          clientRecordId: 'client-record',
+          state: SyncOutboxState.synced,
+          backendRecordId: 'record-1',
+          payload: const {},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(
+              value: galleryViewModel,
+            ),
+            ChangeNotifierProvider<PlateSolveViewModel>.value(
+              value: plateSolveViewModel,
+            ),
+            Provider<SyncOutboxRepository>.value(value: outbox),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: GalleryPlateSolveSection(record: record)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('NAS 동기화 완료'), findsOneWidget);
+      expect(find.byKey(const Key('nas-sync-completed-icon')), findsOneWidget);
+      expect(find.text('Plate Solve 완료'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('plate-solve-completed')),
+          matching: find.byIcon(Icons.check_circle_outline),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('photo detail summarizes sync failure without raw details', (
@@ -602,7 +686,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('동기화 실패'), findsOneWidget);
+      expect(find.text('NAS 동기화 실패'), findsOneWidget);
+      expect(find.byKey(const Key('nas-sync-failed-icon')), findsOneWidget);
       expect(find.text('업로드 처리 실패'), findsOneWidget);
       expect(find.textContaining('secret'), findsNothing);
     });
@@ -700,6 +785,17 @@ void main() {
       expect(find.byKey(const Key('plate-solve-retrying')), findsOneWidget);
       expect(find.byKey(const Key('plate-solve-retry-button')), findsNothing);
 
+      final transitionedToWaiting = Completer<void>();
+      void observeWaitingState() {
+        if (galleryViewModel.recordForId(record.id)?.plateSolveQueueStatus ==
+            PlateSolveQueueStatus.waiting) {
+          if (!transitionedToWaiting.isCompleted) {
+            transitionedToWaiting.complete();
+          }
+        }
+      }
+
+      galleryViewModel.addListener(observeWaitingState);
       response.complete(
         http.Response(
           '{"job_id":"opaque-job/token=","status":"WAITING",'
@@ -707,7 +803,11 @@ void main() {
           202,
         ),
       );
-      await tester.pumpAndSettle();
+      await transitionedToWaiting.future;
+      galleryViewModel.removeListener(observeWaitingState);
+      // Render the completed FAILED -> WAITING transition without waiting for
+      // the new indeterminate WAITING spinner to settle.
+      await tester.pump();
 
       expect(retryCalls, 1);
       expect(
@@ -753,6 +853,9 @@ void main() {
         ),
       );
 
+      expect(find.byKey(const Key('plate-solve-failed')), findsOneWidget);
+      expect(find.byKey(const Key('plate-solve-failed-icon')), findsOneWidget);
+      expect(find.text('Plate Solve 실패'), findsOneWidget);
       expect(find.byKey(const Key('plate-solve-retry-button')), findsNothing);
       expect(find.text('재시도 정보는 서버 동기화 후 제공됩니다.'), findsOneWidget);
     });

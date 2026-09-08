@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
@@ -405,7 +406,7 @@ class PhotoOverlayService {
       'IMAGEW=${wcs?.imageW ?? 'null'} IMAGEH=${wcs?.imageH ?? 'null'} '
       'branch=$branch full_wcs_used=$fullWcs '
       'scalar_fallback_used=${!fullWcs} '
-      'fits_to_flutter=${fullWcs ? 'x_identity_y_flip' : 'not_applicable'} '
+      'fits_to_flutter=${fullWcs ? 'x_identity_y_identity_pixel_center' : 'not_applicable'} '
       'sip_inverse=${wcs?.sipInverseMode ?? 'none'} '
       'wcs_raster=${rasterMapping == null ? "none" : "${rasterMapping.wcsWidth}x${rasterMapping.wcsHeight}"} '
       'gallery_raster=${imageWidth}x$imageHeight '
@@ -608,8 +609,8 @@ class _ExifOrientationProbe {
 }
 
 /// Maps the top-left-origin WCS raster into the EXIF-normalized Gallery
-/// raster. Coordinates use continuous image edges, matching the existing
-/// FITS-to-Flutter convention (`height - y`) rather than integer indices.
+/// raster. Coordinates use continuous image edges after the WCS 1-based
+/// pixel-center conversion, rather than integer indices.
 class _GalleryRasterMapping {
   const _GalleryRasterMapping({
     required this.wcsWidth,

@@ -182,10 +182,10 @@ void main() {
       expect(byId['CENTER']?.pixelY, closeTo(250, 1e-6));
       expect(
         byId['CENTER']?.ellipseRotationRadians,
-        closeTo(math.pi / 2, 1e-6),
+        closeTo(-math.pi / 2, 1e-6),
       );
       expect(byId['NORTH']!.pixelX, closeTo(500, 0.01));
-      expect(byId['NORTH']!.pixelY, greaterThan(byId['CENTER']!.pixelY));
+      expect(byId['NORTH']!.pixelY, lessThan(byId['CENTER']!.pixelY));
     },
   );
 
@@ -231,7 +231,7 @@ void main() {
     final byId = {for (final object in result.objects) object.id: object};
 
     expect(orientationReads, 0);
-    expect(byId['NORTH']!.pixelY, lessThan(byId['CENTER']!.pixelY));
+    expect(byId['NORTH']!.pixelY, greaterThan(byId['CENTER']!.pixelY));
   });
 
   test(
@@ -285,7 +285,10 @@ void main() {
       expect(logs.single, contains('record_id=wcs-debug-record'));
       expect(logs.single, contains('IMAGEW=null IMAGEH=null'));
       expect(logs.single, contains('branch=full_wcs/worldToPixelFromWcs'));
-      expect(logs.single, contains('fits_to_flutter=x_identity_y_flip'));
+      expect(
+        logs.single,
+        contains('fits_to_flutter=x_identity_y_identity_pixel_center'),
+      );
       expect(logs.single, contains('sip_inverse=none'));
       expect(logs.single, contains('orientation_source=unavailable'));
       expect(logs.single, contains('gallery_transform=identity_scale'));

@@ -154,22 +154,31 @@ class GalleryShootingRecordRepositoryAdapter
     bool forceRefresh = false,
   }) async {
     final current = _lastRemoteRecords[id];
-    final backendRecordId = current?.backendRecordId;
-    if (current != null && backendRecordId != null) {
+    final localRecord = await _localRepository.getById(id);
+    final backendRecordId =
+        current?.backendRecordId ?? await _linkedBackendRecordId(id);
+    if (backendRecordId != null) {
       final item = await _galleryRepository.getById(
         backendRecordId,
         forceRefresh: forceRefresh,
       );
-      if (item == null) return current;
+      if (item == null) return current ?? localRecord;
       final catalog = await _catalogRepository.getAll(listOnly: true);
-      final localRecord = await _localRepository.getById(id);
       final detailed = _projectionMapper
           .toProjection(item, catalog: catalog)
           .toShootingRecord(localRecord: localRecord);
       _lastRemoteRecords = {..._lastRemoteRecords, detailed.id: detailed};
       return detailed;
     }
-    return _localRepository.getById(id);
+    return localRecord;
+  }
+
+  Future<String?> _linkedBackendRecordId(String localRecordId) async {
+    final links = await _linkDataSource.localIdsByBackendRecordId();
+    for (final entry in links.entries) {
+      if (entry.value == localRecordId) return entry.key;
+    }
+    return null;
   }
 
   @override

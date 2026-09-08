@@ -57,17 +57,18 @@ class PlateSolveProjection {
     return TangentPlaneOffset(_toDeg(xRad), _toDeg(yRad));
   }
 
-  /// FITS WCS → Flutter 표시 픽셀 (0-based, 좌상단 원점).
+  /// Astrometry WCS → 입력 이미지 표시 픽셀 (0-based).
   ///
-  /// FITS의 1-based pixel center에서 0.5를 빼고, Y축만 한 번
-  /// 뒤집는다. CD 행렬에 포함된 회전/parity는 다시 적용하지 않는다.
+  /// WCS의 1-based pixel center에서 0.5만 뺀다. Astrometry가 푼
+  /// JPEG/PNG의 X/Y pixel axis는 그대로 유지하며, CD 행렬에 포함된
+  /// 회전/parity도 다시 적용하지 않는다.
   static PixelOffset worldToPixelFromWcs({
     required FitsWcsHeader wcs,
     required double targetRaDeg,
     required double targetDecDeg,
     double? rasterWidth,
     double? rasterHeight,
-    bool rasterizeFitsAxes = true,
+    bool rasterizeFitsAxes = false,
   }) {
     return _tryWorldToPixelFromWcs(
           wcs: wcs,
@@ -245,7 +246,7 @@ class PlateSolveProjection {
         targetRaDeg: targetRaDeg,
         targetDecDeg: targetDecDeg,
         rasterHeight: imageHeight.toDouble(),
-        rasterizeFitsAxes: true,
+        rasterizeFitsAxes: false,
       );
       if (fullWcsPixel != null) return fullWcsPixel;
     }

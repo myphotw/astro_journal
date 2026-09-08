@@ -5,6 +5,7 @@ import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/exif_info.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
 import 'package:astro_journal/data/models/plate_solve_queue.dart';
+import 'package:astro_journal/data/models/plate_solve_result.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_shooting_record_repository_adapter.dart';
@@ -15,6 +16,7 @@ import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart
 import 'package:astro_journal/features/stats/viewmodel/stats_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
 import 'package:astro_journal/services/catalog_capture_projection_service.dart';
+import 'package:astro_journal/services/plate_solve/fits_wcs_parser.dart';
 import 'package:astro_journal/services/stats_analytics_service.dart';
 import 'package:astro_journal/services/tc_backend_sync_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -260,6 +262,88 @@ void main() {
     expect(record.capturedAt, remote.capturedAt);
     expect(record.location, 'Jeju');
     expect(record.exif?.locationName, 'Jeju');
+  });
+
+  test(
+    'new local WAITING merges remote COMPLETED with full WCS once',
+    () async {
+      final solve = _fullWcsSolve();
+      final local = _local(
+        'local-1',
+        'M42',
+        capturedAt,
+      ).copyWith(plateSolveQueueStatus: PlateSolveQueueStatus.waiting);
+      final remote = _item(
+        'record-remote-1',
+        'sha-1',
+        'M42',
+        capturedAt,
+        plateSolveStatus: PlateSolveQueueStatus.completed,
+        plateSolveJobId: 'job-1',
+        plateSolve: solve,
+      );
+      final result = harness(
+        snapshot: _remoteSnapshot([remote]),
+        local: [local],
+        links: const {'record-remote-1': 'local-1'},
+        detail: remote,
+      );
+
+      final records = await result.adapter.getAll();
+
+      expect(records, hasLength(1));
+      expect(records.single.id, 'local-1');
+      expect(records.single.backendRecordId, 'record-remote-1');
+      expect(
+        records.single.plateSolveQueueStatus,
+        PlateSolveQueueStatus.completed,
+      );
+      expect(records.single.plateSolve, same(solve));
+      expect(records.single.plateSolve?.wcs, isNotNull);
+
+      final detailed = await result.adapter.refreshById('local-1');
+      expect(result.gallery.detailIds, ['record-remote-1']);
+      expect(detailed?.id, 'local-1');
+      expect(detailed?.plateSolveQueueStatus, PlateSolveQueueStatus.completed);
+      expect(detailed?.plateSolve?.wcs, isNotNull);
+    },
+  );
+
+  test('refreshById recovers durable link before snapshot merge', () async {
+    final solve = _fullWcsSolve();
+    final local = _local(
+      'local-1',
+      'M42',
+      capturedAt,
+    ).copyWith(plateSolveQueueStatus: PlateSolveQueueStatus.waiting);
+    final detail = _item(
+      'record-remote-1',
+      'sha-1',
+      'M42',
+      capturedAt,
+      plateSolveStatus: PlateSolveQueueStatus.completed,
+      plateSolveJobId: 'job-1',
+      plateSolve: solve,
+    );
+    final result = harness(
+      snapshot: const GallerySnapshot(
+        items: [],
+        source: GallerySnapshotSource.cache,
+        backendEnabled: true,
+      ),
+      local: [local],
+      links: const {'record-remote-1': 'local-1'},
+      detail: detail,
+    );
+
+    final refreshed = await result.adapter.refreshById('local-1');
+
+    expect(result.gallery.detailIds, ['record-remote-1']);
+    expect(refreshed?.id, 'local-1');
+    expect(refreshed?.backendRecordId, 'record-remote-1');
+    expect(refreshed?.plateSolveQueueStatus, PlateSolveQueueStatus.completed);
+    expect(refreshed?.plateSolve, same(solve));
+    expect(refreshed?.plateSolve?.wcs, isNotNull);
   });
 
   test(
@@ -651,6 +735,9 @@ GalleryItem _item(
   bool representative = false,
   String memo = '',
   int? commonFileId,
+  PlateSolveQueueStatus? plateSolveStatus,
+  String? plateSolveJobId,
+  PlateSolveResult? plateSolve,
 }) => GalleryItem(
   backendRecordId: recordId,
   revision: 7,
@@ -660,12 +747,34 @@ GalleryItem _item(
   representative: representative,
   backendFileId: fileId,
   commonFileId: commonFileId,
+  plateSolveStatus: plateSolveStatus,
+  plateSolveJobId: plateSolveJobId,
+  plateSolve: plateSolve,
   thumbnailUrl: '/thumbnail/$fileId',
   previewUrl: '/preview/$fileId',
   originalUrl: '/original/$fileId',
   originalFilename: filename,
   location: 'Jeju',
   memo: memo,
+);
+
+PlateSolveResult _fullWcsSolve() => PlateSolveResult.success(
+  centerRa: 180,
+  centerDec: 0,
+  imageWidth: 1000,
+  imageHeight: 500,
+  wcs: const FitsWcsHeader(
+    crval1: 180,
+    crval2: 0,
+    crpix1: 500.5,
+    crpix2: 250.5,
+    cd11: -0.001,
+    cd12: 0,
+    cd21: 0,
+    cd22: 0.001,
+    imageW: 1000,
+    imageH: 500,
+  ),
 );
 
 ShootingRecord _local(

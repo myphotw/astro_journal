@@ -425,7 +425,7 @@ void main() {
       expect(east.abs(), closeTo(math.pi, 1e-6));
     });
 
-    test('simple full WCS follows FITS-to-Flutter axis contract', () {
+    test('simple full WCS keeps the solved image pixel axes', () {
       const scaleDeg = 10 / 3600;
       const wcs = FitsWcsHeader(
         crval1: 10.6847083,
@@ -453,14 +453,14 @@ void main() {
       expect(m31.x, closeTo(500, 1e-6));
       expect(m31.y, closeTo(500, 1e-6));
       expect(m32.x, greaterThan(m31.x));
-      expect(m32.y, greaterThan(m31.y));
+      expect(m32.y, lessThan(m31.y));
       expect(m110.x, greaterThan(m31.x));
-      expect(m110.y, lessThan(m31.y));
+      expect(m110.y, greaterThan(m31.y));
       expect((m110.x - m31.x).abs(), greaterThan((m32.x - m31.x).abs()));
       expect(m32.x - m31.x, closeTo(2.84, 0.02));
-      expect(m32.y - m31.y, closeTo(145.29, 0.02));
+      expect(m32.y - m31.y, closeTo(-145.29, 0.02));
       expect(m110.x - m31.x, closeTo(159.38, 0.02));
-      expect(m110.y - m31.y, closeTo(-150.55, 0.02));
+      expect(m110.y - m31.y, closeTo(150.55, 0.02));
     });
 
     test('scalar fallback follows orientation 75 raster basis', () {
@@ -490,7 +490,7 @@ void main() {
       expect(m32.y, lessThan(m31.y));
     });
 
-    test('full WCS keeps FITS X and flips FITS Y exactly once', () {
+    test('full WCS keeps solved image X and Y axes', () {
       const wcs = FitsWcsHeader(
         crval1: 180,
         crval2: 0,
@@ -514,7 +514,7 @@ void main() {
       );
 
       expect(westNorth.x, greaterThan(500));
-      expect(westNorth.y, lessThan(500));
+      expect(westNorth.y, greaterThan(500));
     });
 
     test('equivalent scalar and full WCS raster bases have one orientation', () {
@@ -531,10 +531,11 @@ void main() {
         crpix1: 500.5,
         crpix2: 500.5,
         cd11: rasterCd.cd11,
+        // Astrometry WCS retains the solved image's pixel axes, so an
+        // equivalent scalar raster geometry uses the same CD matrix.
         cd12: rasterCd.cd12,
-        // FITS Y increases upward; the raster basis increases downward.
-        cd21: -rasterCd.cd21,
-        cd22: -rasterCd.cd22,
+        cd21: rasterCd.cd21,
+        cd22: rasterCd.cd22,
         imageW: 1000,
         imageH: 1000,
       );
@@ -586,22 +587,19 @@ void main() {
       );
 
       expect(reference.x, closeTo(wcs.crpix1 - 0.5, 0.001));
-      expect(
-        reference.y,
-        closeTo(1920 - (wcs.crpix2 - 0.5), 0.001),
-      );
+      expect(reference.y, closeTo(wcs.crpix2 - 0.5, 0.001));
       expect(m31.x, closeTo(534.417035, 0.001));
-      expect(m31.y, closeTo(942.722675, 0.001));
+      expect(m31.y, closeTo(977.277325, 0.001));
       expect(m31ThroughPriorityPath.x, closeTo(m31.x, 1e-9));
       expect(m31ThroughPriorityPath.y, closeTo(m31.y, 1e-9));
       expect(m32.x, closeTo(721.670827, 0.001));
-      expect(m32.y, closeTo(883.617345, 0.001));
+      expect(m32.y, closeTo(1036.382655, 0.001));
       expect(m110.x, closeTo(421.008174, 0.001));
-      expect(m110.y, closeTo(1266.864234, 0.001));
-      expect(m32.y, lessThan(m31.y));
-      expect(m110.y, greaterThan(m31.y));
-      expect(m32.y, lessThan(1920 / 2));
-      expect(m110.y, greaterThan(1920 / 2));
+      expect(m110.y, closeTo(653.135766, 0.001));
+      expect(m110.y, lessThan(m31.y));
+      expect(m31.y, lessThan(m32.y));
+      expect(m110.y, lessThan(1920 / 2));
+      expect(m32.y, greaterThan(1920 / 2));
     });
 
     test('A/B iterative SIP agrees with AP/BP inverse SIP', () {

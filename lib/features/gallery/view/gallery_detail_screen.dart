@@ -45,6 +45,21 @@ bool galleryDetailHasPendingNasSync(SyncOutboxItem? item) => switch (item?.state
   _ => false,
 };
 
+@visibleForTesting
+String? galleryOverlayStatusMessage({
+  required PhotoOverlayResult? overlay,
+  required bool isLoading,
+}) {
+  if (isLoading) return 'Overlay 계산 중...';
+  if (overlay == null) return 'Overlay 계산 대기 중';
+  if (overlay.isAvailable) return null;
+  return switch (overlay.unavailableReason) {
+    PhotoOverlayUnavailableReason.noPlateSolve => 'Plate Solve 결과를 사용할 수 없습니다.',
+    PhotoOverlayUnavailableReason.noImageSize => '이미지 크기 정보를 확인할 수 없습니다.',
+    PhotoOverlayUnavailableReason.error || null => 'Overlay 계산 중 오류가 발생했습니다.',
+  };
+}
+
 // ── GalleryDetailScreen ──────────────────────────────────────────────────────
 
 class GalleryDetailScreen extends StatefulWidget {
@@ -912,6 +927,8 @@ class _ViewBody extends StatelessWidget {
             photoUri: record.galleryPreviewUri,
             overlay: detailVm.overlayFor(record.id),
             isOverlayLoading: detailVm.isOverlayLoadingFor(record.id),
+            overlayState: detailVm,
+            overlayRecordId: record.id,
             overlayEnabled: detailVm.overlayEnabled,
             showTarget: detailVm.showTarget,
             showNearby: detailVm.showNearby,
@@ -960,8 +977,8 @@ GalleryNasSyncStatus galleryNasSyncStatus(
   return switch (item.state) {
     SyncOutboxState.queued => GalleryNasSyncStatus.waiting,
     SyncOutboxState.uploading ||
-    SyncOutboxState.processing => GalleryNasSyncStatus.processing,
-    SyncOutboxState.recordCreating ||
+    SyncOutboxState.processing ||
+    SyncOutboxState.recordCreating => GalleryNasSyncStatus.processing,
     SyncOutboxState.synced => GalleryNasSyncStatus.completed,
     SyncOutboxState.failed => GalleryNasSyncStatus.failed,
     SyncOutboxState.cancelled => GalleryNasSyncStatus.local,
@@ -1114,15 +1131,14 @@ class _GalleryPlateSolveSectionState extends State<GalleryPlateSolveSection> {
           ),
           const Divider(height: 20),
           if (queueStatus == PlateSolveQueueStatus.waiting)
-            const _PlateSolveQueueMessage(
+            const _PlateSolveProgressRow(
               key: Key('plate-solve-waiting'),
-              icon: Icons.schedule,
               message: 'Plate Solve 대기',
             )
           else if (queueStatus == PlateSolveQueueStatus.processing)
             const _PlateSolveProgressRow(
               key: Key('plate-solve-processing'),
-              message: 'Plate Solve 처리 중…',
+              message: 'Plate Solve 처리 중',
             )
           else if (queueStatus == PlateSolveQueueStatus.completed)
             const _PlateSolveQueueMessage(
@@ -1132,6 +1148,7 @@ class _GalleryPlateSolveSectionState extends State<GalleryPlateSolveSection> {
             )
           else if (queueStatus == PlateSolveQueueStatus.failed)
             _PlateSolveFailureBody(
+              key: const Key('plate-solve-failed'),
               canRetry:
                   plateSolveViewModel?.canRetryFailedJob(currentRecord) ??
                   false,
@@ -1186,7 +1203,7 @@ class _NasSyncStatusBody extends StatelessWidget {
       GalleryNasSyncStatus.waiting => 'NAS 동기화 대기',
       GalleryNasSyncStatus.processing => 'NAS 동기화 중',
       GalleryNasSyncStatus.completed => 'NAS 동기화 완료',
-      GalleryNasSyncStatus.failed => '동기화 실패',
+      GalleryNasSyncStatus.failed => 'NAS 동기화 실패',
     };
     final color = status == GalleryNasSyncStatus.failed
         ? Colors.redAccent
@@ -1204,11 +1221,31 @@ class _NasSyncStatusBody extends StatelessWidget {
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
             ),
-            if (loading || retrying) ...[
+            if (loading ||
+                retrying ||
+                status == GalleryNasSyncStatus.waiting ||
+                status == GalleryNasSyncStatus.processing) ...[
               const SizedBox(
+                key: Key('nas-sync-progress'),
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 8),
+            ] else if (status == GalleryNasSyncStatus.completed) ...[
+              const Icon(
+                Icons.check_circle_outline,
+                key: Key('nas-sync-completed-icon'),
+                size: 14,
+                color: AppColors.messier,
+              ),
+              const SizedBox(width: 8),
+            ] else if (status == GalleryNasSyncStatus.failed) ...[
+              const Icon(
+                Icons.error_outline,
+                key: Key('nas-sync-failed-icon'),
+                size: 14,
+                color: Colors.redAccent,
               ),
               const SizedBox(width: 8),
             ],
@@ -1293,8 +1330,9 @@ class _PlateSolveProgressRow extends StatelessWidget {
     return Row(
       children: [
         const SizedBox(
-          width: 16,
-          height: 16,
+          key: Key('plate-solve-progress'),
+          width: 14,
+          height: 14,
           child: CircularProgressIndicator(
             strokeWidth: 2,
             color: AppColors.messier,
@@ -1384,6 +1422,7 @@ class _PlateSolveSuccessBody extends StatelessWidget {
 
 class _PlateSolveFailureBody extends StatelessWidget {
   const _PlateSolveFailureBody({
+    super.key,
     this.canRetry = false,
     this.isRetrying = false,
     this.retryError,
@@ -1402,7 +1441,12 @@ class _PlateSolveFailureBody extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.error_outline, size: 14, color: Colors.redAccent),
+            const Icon(
+              Icons.error_outline,
+              key: Key('plate-solve-failed-icon'),
+              size: 14,
+              color: Colors.redAccent,
+            ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -2392,6 +2436,8 @@ class _PhotoSection extends StatelessWidget {
     required this.photoUri,
     this.overlay,
     this.isOverlayLoading = false,
+    this.overlayState,
+    this.overlayRecordId,
     this.overlayEnabled = true,
     this.showTarget = true,
     this.showNearby = true,
@@ -2405,6 +2451,8 @@ class _PhotoSection extends StatelessWidget {
   final String? photoUri;
   final PhotoOverlayResult? overlay;
   final bool isOverlayLoading;
+  final GalleryDetailViewModel? overlayState;
+  final String? overlayRecordId;
   final bool overlayEnabled;
   final bool showTarget;
   final bool showNearby;
@@ -2481,6 +2529,8 @@ class _PhotoSection extends StatelessWidget {
               child: _OverlayControlButton(
                 isLoading: isOverlayLoading,
                 hasData: _hasOverlayData,
+                overlayState: overlayState!,
+                overlayRecordId: overlayRecordId!,
                 overlayEnabled: overlayEnabled,
                 showTarget: showTarget,
                 showNearby: showNearby,
@@ -2502,6 +2552,8 @@ class _OverlayControlButton extends StatelessWidget {
   const _OverlayControlButton({
     required this.isLoading,
     required this.hasData,
+    required this.overlayState,
+    required this.overlayRecordId,
     required this.overlayEnabled,
     required this.showTarget,
     required this.showNearby,
@@ -2513,6 +2565,8 @@ class _OverlayControlButton extends StatelessWidget {
 
   final bool isLoading;
   final bool hasData;
+  final GalleryDetailViewModel overlayState;
+  final String overlayRecordId;
   final bool overlayEnabled;
   final bool showTarget;
   final bool showNearby;
@@ -2618,32 +2672,66 @@ class _OverlayControlButton extends StatelessWidget {
                               ),
                             ),
                           ),
-                          SwitchListTile(
-                            dense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                            ),
-                            title: const Text(
-                              'Overlay 표시',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 14,
-                              ),
-                            ),
-                            subtitle: !hasData
-                                ? const Text(
-                                    'Plate Solve 결과가 없어 표시할 수 없습니다.',
-                                    style: TextStyle(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 11,
-                                    ),
-                                  )
-                                : null,
-                            value: enabled,
-                            activeThumbColor: AppColors.solar,
-                            onChanged: (_) {
-                              onToggleOverlayEnabled();
-                              setPopupState(() => enabled = !enabled);
+                          ListenableBuilder(
+                            listenable: overlayState,
+                            builder: (_, _) {
+                              final latestOverlay = overlayState.overlayFor(
+                                overlayRecordId,
+                              );
+                              final latestLoading = overlayState
+                                  .isOverlayLoadingFor(overlayRecordId);
+                              final statusMessage = galleryOverlayStatusMessage(
+                                overlay: latestOverlay,
+                                isLoading: latestLoading,
+                              );
+                              return SwitchListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                title: const Text(
+                                  'Overlay 표시',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                subtitle: statusMessage == null
+                                    ? null
+                                    : Row(
+                                        children: [
+                                          if (latestLoading) ...[
+                                            const SizedBox(
+                                              key: Key('overlay-popup-loading'),
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                          ],
+                                          Expanded(
+                                            child: Text(
+                                              statusMessage,
+                                              key: const Key(
+                                                'overlay-popup-status-message',
+                                              ),
+                                              style: const TextStyle(
+                                                color: AppColors.textSecondary,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                value: enabled,
+                                activeThumbColor: AppColors.solar,
+                                onChanged: (_) {
+                                  onToggleOverlayEnabled();
+                                  setPopupState(() => enabled = !enabled);
+                                },
+                              );
                             },
                           ),
                           CheckboxListTile(

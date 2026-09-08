@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:astro_journal/data/datasources/gallery_record_link_datasource.dart';
 import 'package:astro_journal/data/models/sync_outbox_item.dart';
 import 'package:astro_journal/data/repositories/sync_outbox_repository_impl.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   late Database database;
   late SyncOutboxRepositoryImpl repository;
+  late SyncOutboxGalleryRecordLinkDataSource recordLinks;
 
   setUp(() async {
     sqfliteFfiInit();
@@ -36,6 +38,7 @@ void main() {
       )
     ''');
     repository = SyncOutboxRepositoryImpl(database: database);
+    recordLinks = SyncOutboxGalleryRecordLinkDataSource(database: database);
   });
 
   tearDown(() => database.close());
@@ -176,5 +179,111 @@ void main() {
       'revision': 4,
       'memo': 'later',
     });
+  });
+
+  test('gallery link prefers the canonical synced upload row', () async {
+    await _insertOutboxRow(
+      database,
+      operationId: 'upload-synced',
+      operationType: 'PHOTO_UPLOAD_AND_RECORD',
+      localRecordId: 'local-1',
+      backendRecordId: 'record-1',
+      state: 'SYNCED',
+      updatedAt: DateTime.utc(2026, 1, 1),
+    );
+    await _insertOutboxRow(
+      database,
+      operationId: 'upload-incomplete-duplicate',
+      operationType: 'PHOTO_UPLOAD_AND_RECORD',
+      localRecordId: 'wrong-local',
+      backendRecordId: 'record-1',
+      state: 'RECORD_CREATING',
+      updatedAt: DateTime.utc(2026, 1, 4),
+    );
+    await _insertOutboxRow(
+      database,
+      operationId: 'patch-1',
+      operationType: 'RECORD_PATCH',
+      localRecordId: 'wrong-patch-local',
+      backendRecordId: 'record-1',
+      state: 'SYNCED',
+      updatedAt: DateTime.utc(2026, 1, 2),
+    );
+    await _insertOutboxRow(
+      database,
+      operationId: 'delete-1',
+      operationType: 'RECORD_DELETE',
+      localRecordId: 'wrong-delete-local',
+      backendRecordId: 'record-1',
+      state: 'QUEUED',
+      updatedAt: DateTime.utc(2026, 1, 3),
+    );
+
+    expect(await recordLinks.localIdsByBackendRecordId(), {
+      'record-1': 'local-1',
+    });
+  });
+
+  test('same file hash re-registration keeps distinct record links', () async {
+    await _insertOutboxRow(
+      database,
+      operationId: 'old-upload',
+      operationType: 'PHOTO_UPLOAD_AND_RECORD',
+      localRecordId: 'old-local',
+      backendRecordId: 'old-record',
+      backendFileId: 'same-sha',
+      state: 'SYNCED',
+      updatedAt: DateTime.utc(2026, 1, 1),
+    );
+    await _insertOutboxRow(
+      database,
+      operationId: 'old-delete',
+      operationType: 'RECORD_DELETE',
+      localRecordId: 'old-local',
+      backendRecordId: 'old-record',
+      backendFileId: 'same-sha',
+      state: 'SYNCED',
+      updatedAt: DateTime.utc(2026, 1, 2),
+    );
+    await _insertOutboxRow(
+      database,
+      operationId: 'new-upload',
+      operationType: 'PHOTO_UPLOAD_AND_RECORD',
+      localRecordId: 'new-local',
+      backendRecordId: 'new-record',
+      backendFileId: 'same-sha',
+      state: 'SYNCED',
+      updatedAt: DateTime.utc(2026, 1, 3),
+    );
+
+    expect(await recordLinks.localIdsByBackendRecordId(), {
+      'new-record': 'new-local',
+      'old-record': 'old-local',
+    });
+  });
+}
+
+Future<void> _insertOutboxRow(
+  Database database, {
+  required String operationId,
+  required String operationType,
+  required String localRecordId,
+  required String backendRecordId,
+  String? backendFileId,
+  required String state,
+  required DateTime updatedAt,
+}) async {
+  final timestamp = updatedAt.toUtc().toIso8601String();
+  await database.insert('sync_outbox', {
+    'operation_id': operationId,
+    'operation_type': operationType,
+    'local_record_id': localRecordId,
+    'backend_file_id': backendFileId,
+    'backend_record_id': backendRecordId,
+    'state': state,
+    'retry_count': 0,
+    'created_at': timestamp,
+    'updated_at': timestamp,
+    'payload_json': '{}',
   });
 }

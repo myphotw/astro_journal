@@ -26,12 +26,23 @@ class SyncOutboxGalleryRecordLinkDataSource
     final rows = await (await _db).query(
       DatabaseConstants.tableSyncOutbox,
       columns: const ['backend_record_id', 'local_record_id'],
-      where: 'backend_record_id IS NOT NULL AND local_record_id IS NOT NULL',
+      where:
+          "operation_type='PHOTO_UPLOAD_AND_RECORD' "
+          'AND backend_record_id IS NOT NULL '
+          'AND local_record_id IS NOT NULL '
+          "AND state!='CANCELLED'",
+      orderBy:
+          "CASE WHEN state='SYNCED' THEN 0 ELSE 1 END, "
+          'updated_at DESC, id DESC',
     );
-    return {
-      for (final row in rows)
-        row['backend_record_id'] as String: row['local_record_id'] as String,
-    };
+    final links = <String, String>{};
+    for (final row in rows) {
+      links.putIfAbsent(
+        row['backend_record_id'] as String,
+        () => row['local_record_id'] as String,
+      );
+    }
+    return links;
   }
 }
 
