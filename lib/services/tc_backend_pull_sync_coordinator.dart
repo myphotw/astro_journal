@@ -22,6 +22,8 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     CatalogCaptureProjectionService? catalogCaptureProjection,
     AstroJournalLocalCaptureReset? localCaptureReset,
     Future<void> Function()? onObservationRecordsChanged,
+    Future<bool> Function(TcBackendChange change)? observationSiteChangeApplier,
+    Future<bool> Function(TcBackendChange change)? equipmentChangeApplier,
     int maxPagesPerDrain = 100,
   }) => TcBackendPullSyncCoordinator._(
     changesApi,
@@ -34,6 +36,8 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     catalogCaptureProjection,
     localCaptureReset,
     onObservationRecordsChanged,
+    observationSiteChangeApplier,
+    equipmentChangeApplier,
     maxPagesPerDrain,
   );
 
@@ -48,6 +52,8 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     this._catalogCaptureProjection,
     this._localCaptureReset,
     this._onObservationRecordsChanged,
+    this._observationSiteChangeApplier,
+    this._equipmentChangeApplier,
     this.maxPagesPerDrain,
   );
 
@@ -63,6 +69,9 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
   final CatalogCaptureProjectionService? _catalogCaptureProjection;
   final AstroJournalLocalCaptureReset? _localCaptureReset;
   final Future<void> Function()? _onObservationRecordsChanged;
+  final Future<bool> Function(TcBackendChange change)?
+  _observationSiteChangeApplier;
+  final Future<bool> Function(TcBackendChange change)? _equipmentChangeApplier;
   final int maxPagesPerDrain;
   bool _draining = false;
 
@@ -87,6 +96,14 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
       for (final change in page.changes) {
         if (change.isAstroJournalReset) {
           await _localCaptureReset?.clearCaptureData();
+          continue;
+        }
+        if (change.isObservationSite) {
+          await _observationSiteChangeApplier?.call(change);
+          continue;
+        }
+        if (change.isEquipment) {
+          await _equipmentChangeApplier?.call(change);
           continue;
         }
         if (!change.isObservationRecord) continue;

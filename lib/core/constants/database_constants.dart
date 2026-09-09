@@ -2,7 +2,7 @@ class DatabaseConstants {
   DatabaseConstants._();
 
   static const String databaseName = 'astro_journal.db';
-  static const int databaseVersion = 32;
+  static const int databaseVersion = 34;
 
   /// 대표 천체 표시 우선순위 기본값 (미분류).
   static const int defaultDisplayPriority = 9999;
@@ -13,6 +13,8 @@ class DatabaseConstants {
   static const String tablePhotos = 'photos';
   static const String tableEquipment = 'equipment';
   static const String tableEyepieces = 'eyepieces';
+  static const String tableEquipmentSyncState = 'equipment_sync_state';
+  static const String tableEquipmentSyncOutbox = 'equipment_sync_outbox';
   static const String tableObservationSiteFavorites =
       'observation_site_favorites';
   static const String tableObservationSites = 'observation_sites';
@@ -20,6 +22,10 @@ class DatabaseConstants {
       'observation_site_horizon_points';
   static const String tableObservationSiteBlockedAzimuthRanges =
       'observation_site_blocked_azimuth_ranges';
+  static const String tableObservationSiteSyncState =
+      'observation_site_sync_state';
+  static const String tableObservationSiteSyncOutbox =
+      'observation_site_sync_outbox';
   static const String tablePhotoObjects = 'photo_objects';
   static const String tableSyncOutbox = 'sync_outbox';
   static const String tableGalleryCache = 'gallery_cache';
@@ -88,6 +94,10 @@ class DatabaseConstants {
   static const String colSortOrder = 'sort_order';
   static const String colEquipmentId = 'equipment_id';
   static const String colAfovDegrees = 'afov_degrees';
+  static const String colAzExposureCapabilityJson =
+      'az_exposure_capability_json';
+  static const String colEqExposureCapabilityJson =
+      'eq_exposure_capability_json';
   static const String colLatitude = 'latitude';
   static const String colLongitude = 'longitude';
   static const String colBortle = 'bortle';

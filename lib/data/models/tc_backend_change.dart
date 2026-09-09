@@ -28,6 +28,20 @@ class TcBackendChange {
         .toLowerCase();
     return normalized == 'astrojournalreset';
   }
+
+  bool get isObservationSite {
+    final normalized = resourceType
+        .replaceAll(RegExp('[^a-zA-Z]'), '')
+        .toLowerCase();
+    return normalized == 'observationsite';
+  }
+
+  bool get isEquipment {
+    final normalized = resourceType
+        .replaceAll(RegExp('[^a-zA-Z]'), '')
+        .toLowerCase();
+    return normalized == 'equipment';
+  }
 }
 
 class TcBackendChangesPage {

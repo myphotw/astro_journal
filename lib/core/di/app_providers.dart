@@ -12,6 +12,8 @@ import '../../data/datasources/gallery_cache_local_datasource.dart';
 import '../../data/datasources/common_file_link_datasource.dart';
 import '../../data/datasources/gallery_record_link_datasource.dart';
 import '../../data/datasources/sync_checkpoint_datasource.dart';
+import '../../data/datasources/observation_site_local_datasource.dart';
+import '../../data/datasources/equipment_local_datasource.dart';
 import '../../data/repositories/gallery_repository.dart';
 import '../../data/repositories/gallery_shooting_record_repository_adapter.dart';
 import '../../data/repositories/hybrid_gallery_repository.dart';
@@ -87,6 +89,10 @@ import '../../services/tc_backend_external_api_client.dart';
 import '../../services/tc_backend_plate_solve_service.dart';
 import '../../services/tc_backend_pull_sync_coordinator.dart';
 import '../../services/tc_backend_sync_gate.dart';
+import '../../services/tc_backend_observation_site_service.dart';
+import '../../services/observation_site_sync_coordinator.dart';
+import '../../services/tc_backend_equipment_service.dart';
+import '../../services/equipment_sync_coordinator.dart';
 import '../../services/tc_backend_auth_service.dart';
 import '../../services/tc_backend_astrojournal_reset_service.dart';
 import '../../services/astrojournal_capture_reset_coordinator.dart';
@@ -101,15 +107,30 @@ class AppProviders {
     final observationContextInvalidator = ObservationContextInvalidator();
     final bortleRepository = BortleRepositoryImpl();
     final catalogRepository = CatalogRepositoryImpl();
+    late EquipmentViewModel equipmentViewModel;
+    late Future<void> Function() refreshEquipmentCollection;
+    late Future<void> Function() scheduleEquipmentSync;
+    final equipmentLocalDataSource = EquipmentLocalDataSource(
+      syncMutationsEnabled: true,
+    );
     final equipmentRepository = EquipmentRepositoryImpl(
+      dataSource: equipmentLocalDataSource,
       contextInvalidator: observationContextInvalidator,
+      onCollectionChanged: () => refreshEquipmentCollection(),
+      scheduleSync: () => scheduleEquipmentSync(),
     );
     final shootingRecordRepository = ShootingRecordRepositoryImpl();
     final photoRepository = PhotoRepositoryImpl();
     late Future<void> Function() refreshObservationSiteCollection;
+    late Future<void> Function() scheduleObservationSiteSync;
+    final observationSiteLocalDataSource = ObservationSiteLocalDataSource(
+      syncMutationsEnabled: true,
+    );
     final observationSiteRepository = ObservationSiteRepositoryImpl(
+      dataSource: observationSiteLocalDataSource,
       contextInvalidator: observationContextInvalidator,
       onCollectionChanged: () => refreshObservationSiteCollection(),
+      scheduleSync: () => scheduleObservationSiteSync(),
     );
     final photoObjectRepository = PhotoObjectRepositoryImpl();
     final exifService = ExifService();
@@ -157,6 +178,49 @@ class AppProviders {
     );
     final syncOutboxRepository = SyncOutboxRepositoryImpl();
     final syncGate = TcBackendSyncGate();
+    final activeObservationSiteViewModel = ActiveObservationSiteViewModel(
+      observationSiteRepository,
+      contextInvalidator: observationContextInvalidator,
+    );
+    refreshObservationSiteCollection = () =>
+        activeObservationSiteViewModel.load(force: true);
+    final observationSiteRemoteApi = TcBackendObservationSiteService(
+      settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
+      canReferenceDefaultEquipment: equipmentLocalDataSource.isServerBacked,
+    );
+    final observationSiteSyncCoordinator = ObservationSiteSyncCoordinator(
+      remoteApi: observationSiteRemoteApi,
+      localDataSource: observationSiteLocalDataSource,
+      settingsService: tcBackendSettingsService,
+      syncGate: syncGate,
+      scheduleDrain: scheduleTcBackendDrainWithTimer,
+      onCollectionChanged: () => refreshObservationSiteCollection(),
+      onObservingConditionsChanged: () => observationContextInvalidator
+          .invalidate(ObservationContextChange.observationSite),
+      canReferenceDefaultEquipment: equipmentLocalDataSource.isServerBacked,
+      hasLocalDefaultEquipment: (equipmentId) async =>
+          await equipmentLocalDataSource.getById(equipmentId) != null,
+    );
+    scheduleObservationSiteSync = observationSiteSyncCoordinator.drain;
+    final equipmentRemoteApi = TcBackendEquipmentService(
+      settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
+    );
+    final equipmentSyncCoordinator = EquipmentSyncCoordinator(
+      remoteApi: equipmentRemoteApi,
+      localDataSource: equipmentLocalDataSource,
+      settingsService: tcBackendSettingsService,
+      syncGate: syncGate,
+      scheduleDrain: scheduleTcBackendDrainWithTimer,
+      onCollectionChanged: () => refreshEquipmentCollection(),
+      onEquipmentConditionsChanged: () => observationContextInvalidator
+          .invalidate(ObservationContextChange.equipment),
+    );
+    scheduleEquipmentSync = () async {
+      await equipmentSyncCoordinator.drain();
+      await observationSiteSyncCoordinator.drain();
+    };
     late Future<void> Function() refreshAfterCaptureReset;
     late PhotoFirstRegistrationViewModel photoFirstViewModel;
     final localCaptureReset = AstroJournalLocalCaptureResetService(
@@ -200,10 +264,17 @@ class AppProviders {
       catalogCaptureProjection: catalogCaptureProjection,
       localCaptureReset: localCaptureReset,
       onObservationRecordsChanged: () => refreshAfterPull(),
+      observationSiteChangeApplier: observationSiteSyncCoordinator.applyChange,
+      equipmentChangeApplier: equipmentSyncCoordinator.applyChange,
     );
     final startupResumeService = TcBackendStartupResumeService(
       tcBackendSettingsService,
-      TcBackendCompositeSyncRunner([syncCoordinator, pullSyncCoordinator]),
+      TcBackendCompositeSyncRunner([
+        equipmentSyncCoordinator,
+        observationSiteSyncCoordinator,
+        syncCoordinator,
+        pullSyncCoordinator,
+      ]),
       reconcileCatalog: () async {
         await catalogCaptureProjection.reconcileAll();
       },
@@ -264,12 +335,6 @@ class AppProviders {
     final photoOverlayService = PhotoOverlayService(catalogRepository);
     final weatherCacheService = WeatherCacheService();
     final locationService = LocationService();
-    final activeObservationSiteViewModel = ActiveObservationSiteViewModel(
-      observationSiteRepository,
-      contextInvalidator: observationContextInvalidator,
-    );
-    refreshObservationSiteCollection = () =>
-        activeObservationSiteViewModel.load(force: true);
     final deviceOrientationService = NativeDeviceOrientationService();
     final recommendationSettingsService = RecommendationSettingsService();
     final baseExposureSettingsService = BaseExposureSettingsService();
@@ -406,7 +471,8 @@ class AppProviders {
       await tcBackendViewModel.refreshPlateSolveSummary();
     };
 
-    final equipmentViewModel = EquipmentViewModel(equipmentRepository);
+    equipmentViewModel = EquipmentViewModel(equipmentRepository);
+    refreshEquipmentCollection = equipmentViewModel.load;
 
     final skyMapViewModel = SkyMapViewModel(
       catalogRepository,
@@ -451,6 +517,12 @@ class AppProviders {
       Provider<TcBackendUploadService>.value(value: tcBackendUploadService),
       Provider<TcBackendRecordService>.value(value: tcBackendRecordService),
       Provider<TcBackendChangesService>.value(value: changesService),
+      Provider<ObservationSiteRemoteApi>.value(value: observationSiteRemoteApi),
+      Provider<EquipmentRemoteApi>.value(value: equipmentRemoteApi),
+      Provider<ObservationSiteSyncCoordinator>.value(
+        value: observationSiteSyncCoordinator,
+      ),
+      Provider<EquipmentSyncCoordinator>.value(value: equipmentSyncCoordinator),
       Provider<SyncOutboxRepository>.value(value: syncOutboxRepository),
       Provider<SyncCheckpointDataSource>.value(value: syncCheckpoints),
       Provider<TcBackendSyncGate>.value(value: syncGate),

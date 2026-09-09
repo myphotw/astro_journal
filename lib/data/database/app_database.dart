@@ -119,8 +119,10 @@ class AppDatabase {
 
     await _createPhotoObjectsTable(db);
     await _createEquipmentTables(db);
+    await _createEquipmentSyncTables(db);
     await _createObservationSiteFavoritesTable(db);
     await _createObservationSiteTables(db);
+    await _createObservationSiteSyncTables(db);
     await _createSyncOutboxTable(db);
     await _createGalleryCacheTable(db);
     await _createIndexes(db);
@@ -189,7 +191,9 @@ class AppDatabase {
         ${DatabaseConstants.colFovWidthDegrees} REAL,
         ${DatabaseConstants.colFovHeightDegrees} REAL,
         ${DatabaseConstants.colApertureMm} REAL,
-        ${DatabaseConstants.colSortOrder} INTEGER NOT NULL DEFAULT 0
+        ${DatabaseConstants.colSortOrder} INTEGER NOT NULL DEFAULT 0,
+        ${DatabaseConstants.colAzExposureCapabilityJson} TEXT,
+        ${DatabaseConstants.colEqExposureCapabilityJson} TEXT
       )
     ''');
 
@@ -426,6 +430,20 @@ class AppDatabase {
     if (oldVersion < 32) {
       await _migrateToV32ObservationSites(db);
     }
+    if (oldVersion < 33) {
+      await _createObservationSiteSyncTables(db);
+    }
+    if (oldVersion < 34) {
+      await db.execute('''
+        ALTER TABLE ${DatabaseConstants.tableEquipment}
+        ADD COLUMN ${DatabaseConstants.colAzExposureCapabilityJson} TEXT
+      ''');
+      await db.execute('''
+        ALTER TABLE ${DatabaseConstants.tableEquipment}
+        ADD COLUMN ${DatabaseConstants.colEqExposureCapabilityJson} TEXT
+      ''');
+      await _createEquipmentSyncTables(db);
+    }
   }
 
   static Future<void> _createObservationSiteTables(Database db) async {
@@ -527,6 +545,88 @@ class AppDatabase {
         id, name, latitude, longitude, bortle, sqm, brightness_grade,
         1, 'altAz', 20, created_at, created_at, ''
       FROM ${DatabaseConstants.tableObservationSiteFavorites}
+    ''');
+  }
+
+  static Future<void> _createObservationSiteSyncTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableObservationSiteSyncState} (
+        site_id TEXT PRIMARY KEY,
+        server_revision INTEGER,
+        server_updated_at TEXT,
+        server_deleted_at TEXT,
+        last_synced_at TEXT,
+        server_payload_json TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableObservationSiteSyncOutbox} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_id TEXT NOT NULL UNIQUE,
+        site_id TEXT NOT NULL,
+        operation_type TEXT NOT NULL,
+        base_revision INTEGER,
+        state TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at TEXT,
+        last_error TEXT,
+        payload_json TEXT NOT NULL,
+        server_payload_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_observation_site_sync_outbox_pending
+      ON ${DatabaseConstants.tableObservationSiteSyncOutbox}
+        (state, next_retry_at, created_at)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_observation_site_sync_outbox_site
+      ON ${DatabaseConstants.tableObservationSiteSyncOutbox}
+        (site_id, state, created_at)
+    ''');
+  }
+
+  static Future<void> _createEquipmentSyncTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableEquipmentSyncState} (
+        equipment_id TEXT PRIMARY KEY,
+        server_revision INTEGER,
+        server_updated_at TEXT,
+        server_deleted_at TEXT,
+        last_synced_at TEXT,
+        canonical_snapshot_json TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableEquipmentSyncOutbox} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_id TEXT NOT NULL UNIQUE,
+        equipment_id TEXT NOT NULL,
+        operation_type TEXT NOT NULL,
+        base_revision INTEGER,
+        payload_json TEXT NOT NULL,
+        state TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at TEXT,
+        last_error TEXT,
+        conflict_snapshot_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_equipment_sync_outbox_pending
+      ON ${DatabaseConstants.tableEquipmentSyncOutbox}
+        (state, next_retry_at, created_at)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_equipment_sync_outbox_equipment
+      ON ${DatabaseConstants.tableEquipmentSyncOutbox}
+        (equipment_id, state, created_at)
     ''');
   }
 

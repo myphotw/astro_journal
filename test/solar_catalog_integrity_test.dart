@@ -193,8 +193,8 @@ void main() {
     }
   });
 
-  test('catalog refresh version advances without a schema migration', () {
-    expect(DatabaseConstants.databaseVersion, 32);
+  test('catalog data version remains independent from schema migration', () {
+    expect(DatabaseConstants.databaseVersion, 34);
     expect(DatabaseConstants.catalogDataVersion, 30);
   });
 }

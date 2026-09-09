@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../core/services/observation_context_invalidator.dart';
 import '../../core/services/performance_probe.dart';
 import '../datasources/observation_site_local_datasource.dart';
@@ -11,52 +13,61 @@ class ObservationSiteRepositoryImpl implements ObservationSiteRepository {
     ObservationSiteLocalDataSource? dataSource,
     this.contextInvalidator,
     this.onCollectionChanged,
+    this.scheduleSync,
   }) : _dataSource = dataSource ?? ObservationSiteLocalDataSource();
 
   final ObservationSiteLocalDataSource _dataSource;
   final ObservationContextInvalidator? contextInvalidator;
   final Future<void> Function()? onCollectionChanged;
+  final Future<void> Function()? scheduleSync;
 
   @override
   Future<void> addBlockedRange(BlockedAzimuthRange range) async {
     await _dataSource.addBlockedRange(range);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   @override
   Future<void> addHorizonPoint(HorizonPoint point) async {
     await _dataSource.addHorizonPoint(point);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   @override
   Future<void> create(ObservationSite site) async {
     await _dataSource.create(site);
     await _invalidateSite();
+    _scheduleBackgroundSync();
   }
 
   @override
   Future<void> createFavorite(ObservationSite site) async {
     await _dataSource.create(site);
     await onCollectionChanged?.call();
+    _scheduleBackgroundSync();
   }
 
   @override
   Future<void> delete(String id, {bool hard = false}) async {
     await _dataSource.delete(id, hard: hard);
     await _invalidateSite();
+    if (!hard) _scheduleBackgroundSync();
   }
 
   @override
   Future<void> deleteBlockedRange(String id) async {
     await _dataSource.deleteBlockedRange(id);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   @override
   Future<void> deleteHorizonPoint(String id) async {
     await _dataSource.deleteHorizonPoint(id);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   @override
@@ -94,6 +105,7 @@ class ObservationSiteRepositoryImpl implements ObservationSiteRepository {
   ) async {
     await _dataSource.replaceBlockedRanges(siteId, ranges);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   @override
@@ -103,28 +115,34 @@ class ObservationSiteRepositoryImpl implements ObservationSiteRepository {
   ) async {
     await _dataSource.replaceHorizonPoints(siteId, points);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   @override
-  Future<void> setFavorite(String id, bool favorite) =>
-      _dataSource.setFavorite(id, favorite);
+  Future<void> setFavorite(String id, bool favorite) async {
+    await _dataSource.setFavorite(id, favorite);
+    _scheduleBackgroundSync();
+  }
 
   @override
   Future<void> update(ObservationSite site) async {
     await _dataSource.update(site);
     await _invalidateSite();
+    _scheduleBackgroundSync();
   }
 
   @override
   Future<void> updateBlockedRange(BlockedAzimuthRange range) async {
     await _dataSource.updateBlockedRange(range);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   @override
   Future<void> updateHorizonPoint(HorizonPoint point) async {
     await _dataSource.updateHorizonPoint(point);
     await _invalidateHorizon();
+    _scheduleBackgroundSync();
   }
 
   Future<void> _invalidateSite() =>
@@ -136,4 +154,12 @@ class ObservationSiteRepositoryImpl implements ObservationSiteRepository {
   Future<void> _invalidateHorizon() =>
       contextInvalidator?.invalidate(ObservationContextChange.horizon) ??
       Future.value();
+
+  void _scheduleBackgroundSync() {
+    final callback = scheduleSync;
+    if (callback == null) return;
+    unawaited(
+      Future<void>.sync(callback).catchError((Object _, StackTrace __) {}),
+    );
+  }
 }

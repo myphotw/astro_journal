@@ -1,3 +1,4 @@
+import 'package:astro_journal/core/constants/database_constants.dart';
 import 'package:astro_journal/data/database/app_database.dart';
 import 'package:astro_journal/data/datasources/observation_site_local_datasource.dart';
 import 'package:astro_journal/data/models/blocked_azimuth_range.dart';
@@ -8,6 +9,8 @@ import 'package:astro_journal/data/repositories/observation_site_repository.dart
 import 'package:astro_journal/data/repositories/observation_site_repository_impl.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'helpers/legacy_equipment_schema.dart';
 
 void main() {
   late Database db;
@@ -20,7 +23,8 @@ void main() {
 
   setUp(() async {
     db = await databaseFactory.openDatabase(inMemoryDatabasePath);
-    await AppDatabase.migrateForTest(db, 31, 32);
+    await createLegacyEquipmentTables(db);
+    await AppDatabase.migrateForTest(db, 31, DatabaseConstants.databaseVersion);
     repository = ObservationSiteRepositoryImpl(
       dataSource: ObservationSiteLocalDataSource(database: db),
     );

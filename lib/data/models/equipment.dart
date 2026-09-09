@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import '../../core/constants/database_constants.dart';
 import '../../core/constants/equipment_kind.dart';
 import '../../core/constants/equipment_purpose.dart';
 import '../../core/utils/fov_input_parser.dart';
 import 'eyepiece.dart';
+import 'equipment_exposure_capability.dart';
 
 class Equipment {
   const Equipment({
@@ -17,6 +20,8 @@ class Equipment {
     this.apertureMm,
     this.sortOrder = 0,
     this.eyepieces = const [],
+    this.azExposureCapability,
+    this.eqExposureCapability,
   });
 
   final String id;
@@ -37,6 +42,8 @@ class Equipment {
 
   final int sortOrder;
   final List<Eyepiece> eyepieces;
+  final EquipmentExposureCapability? azExposureCapability;
+  final EquipmentExposureCapability? eqExposureCapability;
 
   bool get isImaging => purpose == EquipmentPurpose.imaging;
   bool get isVisual => purpose == EquipmentPurpose.visual;
@@ -82,6 +89,14 @@ class Equipment {
           : null,
       DatabaseConstants.colApertureMm: apertureMm,
       DatabaseConstants.colSortOrder: sortOrder,
+      DatabaseConstants.colAzExposureCapabilityJson:
+          azExposureCapability == null
+          ? null
+          : jsonEncode(azExposureCapability!.toJson()),
+      DatabaseConstants.colEqExposureCapabilityJson:
+          eqExposureCapability == null
+          ? null
+          : jsonEncode(eqExposureCapability!.toJson()),
     };
   }
 
@@ -115,6 +130,12 @@ class Equipment {
       apertureMm: (map[DatabaseConstants.colApertureMm] as num?)?.toDouble(),
       sortOrder: map[DatabaseConstants.colSortOrder] as int? ?? 0,
       eyepieces: eyepieces,
+      azExposureCapability: _capability(
+        map[DatabaseConstants.colAzExposureCapabilityJson],
+      ),
+      eqExposureCapability: _capability(
+        map[DatabaseConstants.colEqExposureCapabilityJson],
+      ),
     );
   }
 
@@ -130,6 +151,10 @@ class Equipment {
     double? apertureMm,
     int? sortOrder,
     List<Eyepiece>? eyepieces,
+    EquipmentExposureCapability? azExposureCapability,
+    bool clearAzExposureCapability = false,
+    EquipmentExposureCapability? eqExposureCapability,
+    bool clearEqExposureCapability = false,
   }) {
     return Equipment(
       id: id ?? this.id,
@@ -143,6 +168,23 @@ class Equipment {
       apertureMm: apertureMm ?? this.apertureMm,
       sortOrder: sortOrder ?? this.sortOrder,
       eyepieces: eyepieces ?? this.eyepieces,
+      azExposureCapability: clearAzExposureCapability
+          ? null
+          : (azExposureCapability ?? this.azExposureCapability),
+      eqExposureCapability: clearEqExposureCapability
+          ? null
+          : (eqExposureCapability ?? this.eqExposureCapability),
+    );
+  }
+
+  static EquipmentExposureCapability? _capability(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) {
+      throw const FormatException('Equipment exposure capability is invalid.');
+    }
+    return EquipmentExposureCapability.fromJson(
+      Map<String, dynamic>.from(decoded),
     );
   }
 }

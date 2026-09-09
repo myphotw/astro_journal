@@ -88,7 +88,7 @@ void main() {
     expect(runner.calls, 1);
   });
 
-  test('startup composite runs push before incremental pull', () async {
+  test('startup orders Equipment, ObservationSite, push, then pull', () async {
     await settings.save(
       const TcBackendSettings(
         baseUrl: 'https://backend.example',
@@ -97,13 +97,15 @@ void main() {
     );
     final order = <String>[];
     final runner = TcBackendCompositeSyncRunner([
+      _OrderRunner('equipment', order),
+      _OrderRunner('site', order),
       _OrderRunner('push', order),
       _OrderRunner('pull', order),
     ]);
 
     await TcBackendStartupResumeService(settings, runner).resume();
 
-    expect(order, ['push', 'pull']);
+    expect(order, ['equipment', 'site', 'push', 'pull']);
   });
 }
 

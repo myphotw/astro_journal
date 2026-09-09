@@ -43,6 +43,8 @@ void main() {
     CatalogCaptureProjectionService? captureProjection,
     AstroJournalLocalCaptureReset? localCaptureReset,
     Future<void> Function()? onObservationRecordsChanged,
+    Future<bool> Function(TcBackendChange)? observationSiteChangeApplier,
+    Future<bool> Function(TcBackendChange)? equipmentChangeApplier,
   }) => TcBackendPullSyncCoordinator(
     changesApi: api,
     checkpoints: checkpoints,
@@ -54,7 +56,63 @@ void main() {
     catalogCaptureProjection: captureProjection,
     localCaptureReset: localCaptureReset,
     onObservationRecordsChanged: onObservationRecordsChanged,
+    observationSiteChangeApplier: observationSiteChangeApplier,
+    equipmentChangeApplier: equipmentChangeApplier,
   );
+
+  test('ObservationSite changes use the shared cursor consumer', () async {
+    final change = TcBackendChange(
+      resourceType: 'ObservationSite',
+      resourceId: 'site-1',
+      operation: TcBackendChangeOperation.update,
+      revision: 7,
+    );
+    final api = _FakeChangesApi({
+      null: _page([change], 'cursor-1'),
+    });
+    final checkpoints = _FakeCheckpoints();
+    final applied = <TcBackendChange>[];
+
+    await subject(
+      api: api,
+      checkpoints: checkpoints,
+      gallery: _FakeGallery(),
+      observationSiteChangeApplier: (event) async {
+        applied.add(event);
+        return true;
+      },
+    ).drain();
+
+    expect(applied, [change]);
+    expect(checkpoints.cursor, 'cursor-1');
+  });
+
+  test('Equipment changes use the shared cursor consumer', () async {
+    final change = TcBackendChange(
+      resourceType: 'Equipment',
+      resourceId: 'equipment-1',
+      operation: TcBackendChangeOperation.update,
+      revision: 7,
+    );
+    final api = _FakeChangesApi({
+      null: _page([change], 'cursor-1'),
+    });
+    final checkpoints = _FakeCheckpoints();
+    final applied = <TcBackendChange>[];
+
+    await subject(
+      api: api,
+      checkpoints: checkpoints,
+      gallery: _FakeGallery(),
+      equipmentChangeApplier: (event) async {
+        applied.add(event);
+        return true;
+      },
+    ).drain();
+
+    expect(applied, [change]);
+    expect(checkpoints.cursor, 'cursor-1');
+  });
 
   test('CREATE pulls canonical record into local projection', () async {
     final api = _FakeChangesApi(
