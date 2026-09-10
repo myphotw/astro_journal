@@ -24,6 +24,8 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     Future<void> Function()? onObservationRecordsChanged,
     Future<bool> Function(TcBackendChange change)? observationSiteChangeApplier,
     Future<bool> Function(TcBackendChange change)? equipmentChangeApplier,
+    Future<bool> Function(TcBackendChange change)?
+    multiNightFramingChangeApplier,
     int maxPagesPerDrain = 100,
   }) => TcBackendPullSyncCoordinator._(
     changesApi,
@@ -38,6 +40,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     onObservationRecordsChanged,
     observationSiteChangeApplier,
     equipmentChangeApplier,
+    multiNightFramingChangeApplier,
     maxPagesPerDrain,
   );
 
@@ -54,6 +57,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     this._onObservationRecordsChanged,
     this._observationSiteChangeApplier,
     this._equipmentChangeApplier,
+    this._multiNightFramingChangeApplier,
     this.maxPagesPerDrain,
   );
 
@@ -72,6 +76,8 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
   final Future<bool> Function(TcBackendChange change)?
   _observationSiteChangeApplier;
   final Future<bool> Function(TcBackendChange change)? _equipmentChangeApplier;
+  final Future<bool> Function(TcBackendChange change)?
+  _multiNightFramingChangeApplier;
   final int maxPagesPerDrain;
   bool _draining = false;
 
@@ -104,6 +110,10 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
         }
         if (change.isEquipment) {
           await _equipmentChangeApplier?.call(change);
+          continue;
+        }
+        if (change.isMultiNightFramingReference) {
+          await _multiNightFramingChangeApplier?.call(change);
           continue;
         }
         if (!change.isObservationRecord) continue;

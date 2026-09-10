@@ -42,6 +42,13 @@ class TcBackendChange {
         .toLowerCase();
     return normalized == 'equipment';
   }
+
+  bool get isMultiNightFramingReference {
+    final normalized = resourceType
+        .replaceAll(RegExp('[^a-zA-Z]'), '')
+        .toLowerCase();
+    return normalized == 'multinightframingreference';
+  }
 }
 
 class TcBackendChangesPage {

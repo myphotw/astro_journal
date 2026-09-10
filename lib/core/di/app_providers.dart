@@ -14,6 +14,7 @@ import '../../data/datasources/gallery_record_link_datasource.dart';
 import '../../data/datasources/sync_checkpoint_datasource.dart';
 import '../../data/datasources/observation_site_local_datasource.dart';
 import '../../data/datasources/equipment_local_datasource.dart';
+import '../../data/datasources/multi_night_framing_local_datasource.dart';
 import '../../data/repositories/gallery_repository.dart';
 import '../../data/repositories/gallery_shooting_record_repository_adapter.dart';
 import '../../data/repositories/hybrid_gallery_repository.dart';
@@ -21,6 +22,7 @@ import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/catalog_repository_impl.dart';
 import '../../data/repositories/observation_site_repository.dart';
 import '../../data/repositories/observation_site_repository_impl.dart';
+import '../../data/repositories/multi_night_framing_reference_repository_impl.dart';
 import '../../data/repositories/photo_object_repository.dart';
 import '../../data/repositories/photo_object_repository_impl.dart';
 import '../../data/repositories/photo_repository.dart';
@@ -93,6 +95,9 @@ import '../../services/tc_backend_observation_site_service.dart';
 import '../../services/observation_site_sync_coordinator.dart';
 import '../../services/tc_backend_equipment_service.dart';
 import '../../services/equipment_sync_coordinator.dart';
+import '../../services/tc_backend_multi_night_framing_service.dart';
+import '../../services/multi_night_framing_sync_coordinator.dart';
+import '../../services/multi_night_framing_match_service.dart';
 import '../../services/tc_backend_auth_service.dart';
 import '../../services/tc_backend_astrojournal_reset_service.dart';
 import '../../services/astrojournal_capture_reset_coordinator.dart';
@@ -221,6 +226,33 @@ class AppProviders {
       await equipmentSyncCoordinator.drain();
       await observationSiteSyncCoordinator.drain();
     };
+    late Future<void> Function() scheduleMultiNightFramingSync;
+    final multiNightFramingLocalDataSource = MultiNightFramingLocalDataSource(
+      syncMutationsEnabled: true,
+    );
+    final multiNightFramingRepository =
+        MultiNightFramingReferenceRepositoryImpl(
+          multiNightFramingLocalDataSource,
+          scheduleSync: () => scheduleMultiNightFramingSync(),
+        );
+    final multiNightFramingRemoteApi = TcBackendMultiNightFramingService(
+      settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
+    );
+    final multiNightFramingSyncCoordinator = MultiNightFramingSyncCoordinator(
+      remoteApi: multiNightFramingRemoteApi,
+      localDataSource: multiNightFramingLocalDataSource,
+      settingsService: tcBackendSettingsService,
+      syncGate: syncGate,
+      scheduleDrain: scheduleTcBackendDrainWithTimer,
+      onCollectionChanged: multiNightFramingRepository.notifyCanonicalChanged,
+    );
+    scheduleMultiNightFramingSync = () async {
+      await equipmentSyncCoordinator.drain();
+      await observationSiteSyncCoordinator.drain();
+      await multiNightFramingSyncCoordinator.drain();
+    };
+    const multiNightFramingMatchService = MultiNightFramingMatchService();
     late Future<void> Function() refreshAfterCaptureReset;
     late PhotoFirstRegistrationViewModel photoFirstViewModel;
     final localCaptureReset = AstroJournalLocalCaptureResetService(
@@ -266,12 +298,15 @@ class AppProviders {
       onObservationRecordsChanged: () => refreshAfterPull(),
       observationSiteChangeApplier: observationSiteSyncCoordinator.applyChange,
       equipmentChangeApplier: equipmentSyncCoordinator.applyChange,
+      multiNightFramingChangeApplier:
+          multiNightFramingSyncCoordinator.applyChange,
     );
     final startupResumeService = TcBackendStartupResumeService(
       tcBackendSettingsService,
       TcBackendCompositeSyncRunner([
         equipmentSyncCoordinator,
         observationSiteSyncCoordinator,
+        multiNightFramingSyncCoordinator,
         syncCoordinator,
         pullSyncCoordinator,
       ]),
@@ -519,10 +554,22 @@ class AppProviders {
       Provider<TcBackendChangesService>.value(value: changesService),
       Provider<ObservationSiteRemoteApi>.value(value: observationSiteRemoteApi),
       Provider<EquipmentRemoteApi>.value(value: equipmentRemoteApi),
+      Provider<MultiNightFramingRemoteApi>.value(
+        value: multiNightFramingRemoteApi,
+      ),
       Provider<ObservationSiteSyncCoordinator>.value(
         value: observationSiteSyncCoordinator,
       ),
       Provider<EquipmentSyncCoordinator>.value(value: equipmentSyncCoordinator),
+      ChangeNotifierProvider<MultiNightFramingReferenceRepositoryImpl>.value(
+        value: multiNightFramingRepository,
+      ),
+      Provider<MultiNightFramingSyncCoordinator>.value(
+        value: multiNightFramingSyncCoordinator,
+      ),
+      Provider<MultiNightFramingMatchService>.value(
+        value: multiNightFramingMatchService,
+      ),
       Provider<SyncOutboxRepository>.value(value: syncOutboxRepository),
       Provider<SyncCheckpointDataSource>.value(value: syncCheckpoints),
       Provider<TcBackendSyncGate>.value(value: syncGate),

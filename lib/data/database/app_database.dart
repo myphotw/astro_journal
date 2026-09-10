@@ -123,6 +123,7 @@ class AppDatabase {
     await _createObservationSiteFavoritesTable(db);
     await _createObservationSiteTables(db);
     await _createObservationSiteSyncTables(db);
+    await _createMultiNightFramingTables(db);
     await _createSyncOutboxTable(db);
     await _createGalleryCacheTable(db);
     await _createIndexes(db);
@@ -444,6 +445,72 @@ class AppDatabase {
       ''');
       await _createEquipmentSyncTables(db);
     }
+    if (oldVersion < 35) {
+      await _createMultiNightFramingTables(db);
+    }
+  }
+
+  static Future<void> _createMultiNightFramingTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableMultiNightFramingReferences} (
+        id TEXT PRIMARY KEY,
+        catalog_object_id TEXT NOT NULL,
+        reference_captured_at TEXT NOT NULL,
+        site_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        reference_hour_angle_deg REAL NOT NULL,
+        reference_parallactic_angle_deg REAL NOT NULL,
+        reference_branch TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_multi_night_framing_identity
+      ON ${DatabaseConstants.tableMultiNightFramingReferences}
+        (catalog_object_id, equipment_id)
+      WHERE deleted_at IS NULL
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableMultiNightFramingSyncState} (
+        reference_id TEXT PRIMARY KEY,
+        server_revision INTEGER,
+        server_updated_at TEXT,
+        server_deleted_at TEXT,
+        last_synced_at TEXT,
+        canonical_snapshot_json TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DatabaseConstants.tableMultiNightFramingSyncOutbox} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_id TEXT NOT NULL UNIQUE,
+        reference_id TEXT NOT NULL,
+        operation_type TEXT NOT NULL,
+        base_revision INTEGER,
+        payload_json TEXT NOT NULL,
+        state TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at TEXT,
+        last_error TEXT,
+        conflict_snapshot_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_multi_night_framing_outbox_pending
+      ON ${DatabaseConstants.tableMultiNightFramingSyncOutbox}
+        (state, next_retry_at, created_at)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_multi_night_framing_outbox_reference
+      ON ${DatabaseConstants.tableMultiNightFramingSyncOutbox}
+        (reference_id, state, created_at)
+    ''');
   }
 
   static Future<void> _createObservationSiteTables(Database db) async {

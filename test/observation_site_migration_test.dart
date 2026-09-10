@@ -11,7 +11,7 @@ void main() {
     databaseFactory = databaseFactoryFfi;
   });
 
-  test('v31 favorites migrate through v34 without data loss', () async {
+  test('v31 favorites migrate through v35 without data loss', () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
     addTearDown(db.close);
     await createLegacyEquipmentTables(db, seedRows: true);
@@ -61,10 +61,10 @@ void main() {
     );
     expect(await db.query(DatabaseConstants.tableEquipment), hasLength(1));
     expect(await db.query(DatabaseConstants.tableEyepieces), hasLength(1));
-    expect(DatabaseConstants.databaseVersion, 34);
+    expect(DatabaseConstants.databaseVersion, 35);
   });
 
-  test('fresh v34 schema contains site and equipment sync tables', () async {
+  test('fresh v35 schema contains site and equipment sync tables', () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
     addTearDown(db.close);
     await AppDatabase.createForTest(db, 34);
@@ -98,7 +98,7 @@ void main() {
     );
   });
 
-  test('v32 to v34 adds sync tables without replacing site rows', () async {
+  test('v32 to v35 adds sync tables without replacing site rows', () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
     addTearDown(db.close);
     await createLegacyEquipmentTables(db, seedRows: true);
@@ -141,7 +141,7 @@ void main() {
   });
 
   test(
-    'v33 to v34 preserves equipment and adds capability sync schema',
+    'v33 to v35 preserves equipment and adds capability sync schema',
     () async {
       final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
       addTearDown(db.close);

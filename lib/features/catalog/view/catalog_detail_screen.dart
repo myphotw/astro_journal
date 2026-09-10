@@ -18,6 +18,7 @@ import '../../photo_first/models/registration_session.dart';
 import '../../photo_first/services/registration_image_cache.dart';
 import '../../photo_first/view/registration_screen.dart';
 import '../viewmodel/catalog_detail_view_model.dart';
+import '../widgets/multi_night_framing_section.dart';
 
 class CatalogDetailScreen extends StatefulWidget {
   const CatalogDetailScreen({super.key});
@@ -254,6 +255,8 @@ class _CatalogDetailPage extends StatelessWidget {
         EquipmentRecommendationSection(
           recommendation: viewModel.equipmentRecommendation,
         ),
+        const SizedBox(height: 12),
+        MultiNightFramingSection(object: object),
         const SizedBox(height: 12),
         _InfoSection(
           title: '촬영 정보',
