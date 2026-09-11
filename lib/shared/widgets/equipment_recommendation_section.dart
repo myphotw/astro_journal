@@ -76,19 +76,23 @@ class EquipmentRecommendationSection extends StatelessWidget {
     final stars = '${'★' * item.starCount}${'☆' * (5 - item.starCount)}';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 5,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(
-            '$medal${item.equipment.name}',
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 110),
+            child: Text(
+              '$medal${item.equipment.name}',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
             ),
           ),
-          const SizedBox(height: 2),
           Text(
             stars,
             style: const TextStyle(
@@ -97,7 +101,6 @@ class EquipmentRecommendationSection extends StatelessWidget {
               height: 1.3,
             ),
           ),
-          const SizedBox(height: 2),
           Text(
             '화면의 ${item.screenFillPercent}%',
             style: const TextStyle(
@@ -106,18 +109,24 @@ class EquipmentRecommendationSection extends StatelessWidget {
               height: 1.3,
             ),
           ),
-          if (item.screenFillNote != null) ...[
-            const SizedBox(height: 2),
+          Text(
+            item.framingRecommendation.labelKo,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (item.screenFillNote != null)
             Text(
-              '(${item.screenFillNote})',
+              item.screenFillNote!,
               style: const TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
                 height: 1.3,
               ),
-            ),
-          ] else if (item.reason.isNotEmpty) ...[
-            const SizedBox(height: 2),
+            )
+          else if (item.reason.isNotEmpty)
             Text(
               item.reason,
               style: const TextStyle(
@@ -126,7 +135,6 @@ class EquipmentRecommendationSection extends StatelessWidget {
                 height: 1.3,
               ),
             ),
-          ],
         ],
       ),
     );
@@ -135,8 +143,8 @@ class EquipmentRecommendationSection extends StatelessWidget {
   Widget _buildVisualSection(List<VisualEquipmentRecommendation> items) {
     final displayItems = isToday
         ? items
-            .where((item) => item.isFeasibleToday && item.eyepiece != null)
-            .toList()
+              .where((item) => item.isFeasibleToday && item.eyepiece != null)
+              .toList()
         : items;
 
     if (isToday && displayItems.isEmpty) {
@@ -173,13 +181,10 @@ class EquipmentRecommendationSection extends StatelessWidget {
 
     final blocks = <Widget>[];
     for (final entry in byEquipment.entries) {
-      final combos = entry.value
-          .where((item) => item.eyepiece != null)
-          .toList()
+      final combos = entry.value.where((item) => item.eyepiece != null).toList()
         ..sort(
-          (a, b) => b.eyepiece!.focalLengthMm.compareTo(
-            a.eyepiece!.focalLengthMm,
-          ),
+          (a, b) =>
+              b.eyepiece!.focalLengthMm.compareTo(a.eyepiece!.focalLengthMm),
         );
 
       if (combos.isEmpty) {
@@ -408,8 +413,8 @@ class _TableValueCell extends StatelessWidget {
     final color = !feasibleToday
         ? AppColors.textSecondary.withValues(alpha: 0.55)
         : muted
-            ? AppColors.textSecondary
-            : AppColors.textPrimary;
+        ? AppColors.textSecondary
+        : AppColors.textPrimary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -418,11 +423,7 @@ class _TableValueCell extends StatelessWidget {
         textAlign: TextAlign.center,
         maxLines: small ? 3 : 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: color,
-          fontSize: small ? 10 : 12,
-          height: 1.25,
-        ),
+        style: TextStyle(color: color, fontSize: small ? 10 : 12, height: 1.25),
       ),
     );
   }
@@ -512,10 +513,7 @@ class _EmptyCard extends StatelessWidget {
             ),
             if (onManageTap != null) ...[
               const SizedBox(height: 8),
-              TextButton(
-                onPressed: onManageTap,
-                child: const Text('장비 등록하기'),
-              ),
+              TextButton(onPressed: onManageTap, child: const Text('장비 등록하기')),
             ],
           ],
         ),

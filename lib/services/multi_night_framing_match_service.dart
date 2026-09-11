@@ -10,6 +10,20 @@ import '../data/models/site_horizon_profile.dart';
 import 'celestial_position_service.dart';
 import 'equipment/field_orientation_calculator.dart';
 import 'horizon_visibility_service.dart';
+import 'observation_score_service.dart';
+
+typedef MultiNightDarkWindow = ({DateTime nightStart, DateTime nightEnd});
+typedef MultiNightDarkWindowResolver =
+    MultiNightDarkWindow Function(DateTime date);
+
+enum MultiNightFramingUnavailableCause {
+  noMatch,
+  skyTooBright,
+  dawn,
+  altitude,
+  obstructed,
+  elapsed,
+}
 
 class MultiNightFramingMatchResult {
   const MultiNightFramingMatchResult({
@@ -23,8 +37,12 @@ class MultiNightFramingMatchResult {
     required this.altitudeDeg,
     required this.azimuthDeg,
     this.recommendedAt,
+    this.framingMatchAt,
     this.rangeStart,
     this.rangeEnd,
+    this.darkStart,
+    this.darkEnd,
+    this.unavailableCause,
     this.unavailableReason,
   });
 
@@ -33,13 +51,17 @@ class MultiNightFramingMatchResult {
   final Equipment equipment;
   final bool isAvailable;
   final DateTime? recommendedAt;
+  final DateTime? framingMatchAt;
   final DateTime? rangeStart;
   final DateTime? rangeEnd;
+  final DateTime? darkStart;
+  final DateTime? darkEnd;
   final double hourAngleDeg;
   final double parallacticAngleDeg;
   final double parallacticAngleDifferenceDeg;
   final double altitudeDeg;
   final double azimuthDeg;
+  final MultiNightFramingUnavailableCause? unavailableCause;
   final String? unavailableReason;
 
   String get framingDifferenceLabel {
@@ -55,9 +77,12 @@ class MultiNightFramingMatchService {
     HorizonVisibilityService horizonVisibility =
         const HorizonVisibilityService(),
     this.allowedParallacticAngleDifferenceDeg = 2.5,
-  }) : _horizonVisibility = horizonVisibility;
+    MultiNightDarkWindowResolver? darkWindowResolver,
+  }) : _horizonVisibility = horizonVisibility,
+       _darkWindowResolver = darkWindowResolver;
 
   final HorizonVisibilityService _horizonVisibility;
+  final MultiNightDarkWindowResolver? _darkWindowResolver;
 
   /// Single source of truth for the first release's acceptable PA mismatch.
   final double allowedParallacticAngleDifferenceDeg;
@@ -108,8 +133,11 @@ class MultiNightFramingMatchService {
     required ObservationSite site,
     required Equipment equipment,
     DateTime? today,
+    DateTime? now,
+    List<MultiNightDarkWindow>? darkWindows,
   }) {
-    final date = today ?? DateTime.now();
+    final currentTime = now ?? DateTime.now();
+    final date = today ?? currentTime;
     final start = DateTime(date.year, date.month, date.day);
     final end = start.add(const Duration(days: 1));
     final raHours = CelestialPositionService.parseRaHours(object.ra);
@@ -171,32 +199,32 @@ class MultiNightFramingMatchService {
       }
     }
 
-    final sample = _sample(
+    final exactSample = _sample(
       time: bestTime,
       raHours: raHours,
       decDeg: decDeg,
       site: site,
       reference: reference,
     );
-    if (!sample.visible ||
-        sample.branch != reference.referenceBranch ||
+    if (exactSample.branch != reference.referenceBranch ||
         bestDistance > maximumHourAngleMissDeg) {
       return MultiNightFramingMatchResult(
         reference: reference,
         site: site,
         equipment: equipment,
         isAvailable: false,
-        recommendedAt: bestTime,
-        hourAngleDeg: sample.hourAngleDeg,
-        parallacticAngleDeg: sample.parallacticAngleDeg,
-        parallacticAngleDifferenceDeg: sample.paDifferenceDeg,
-        altitudeDeg: sample.altitudeDeg,
-        azimuthDeg: sample.azimuthDeg,
+        framingMatchAt: bestTime,
+        hourAngleDeg: exactSample.hourAngleDeg,
+        parallacticAngleDeg: exactSample.parallacticAngleDeg,
+        parallacticAngleDifferenceDeg: exactSample.paDifferenceDeg,
+        altitudeDeg: exactSample.altitudeDeg,
+        azimuthDeg: exactSample.azimuthDeg,
+        unavailableCause: MultiNightFramingUnavailableCause.noMatch,
         unavailableReason: '오늘은 이전 촬영과 같은 구도를 재현하기 어렵습니다.',
       );
     }
 
-    final range = _allowedRange(
+    final framingRange = _allowedFramingRange(
       center: bestTime,
       dayStart: start,
       dayEnd: end,
@@ -205,23 +233,156 @@ class MultiNightFramingMatchService {
       site: site,
       reference: reference,
     );
+    if (framingRange == null) {
+      return _unavailableFromSample(
+        reference: reference,
+        site: site,
+        equipment: equipment,
+        sample: exactSample,
+        framingMatchAt: bestTime,
+        cause: MultiNightFramingUnavailableCause.noMatch,
+        reason: '오늘은 이전 촬영과 같은 구도를 재현하기 어렵습니다.',
+      );
+    }
+
+    final effectiveDarkWindows = darkWindows ?? _darkWindowsForDay(start);
+    final candidates = <({DateTime time, _FramingSample sample})>[];
+    for (
+      var cursor = framingRange.$1;
+      !cursor.isAfter(framingRange.$2);
+      cursor = cursor.add(const Duration(minutes: 1))
+    ) {
+      candidates.add((
+        time: cursor,
+        sample: _sample(
+          time: cursor,
+          raHours: raHours,
+          decDeg: decDeg,
+          site: site,
+          reference: reference,
+        ),
+      ));
+    }
+
+    final darkCandidates = candidates
+        .where((candidate) => _isDark(candidate.time, effectiveDarkWindows))
+        .toList();
+    var availableCandidates = darkCandidates
+        .where((candidate) => candidate.sample.visible)
+        .toList();
+    final shouldExcludePast = today == null || now != null;
+    if (shouldExcludePast) {
+      availableCandidates = availableCandidates
+          .where((candidate) => !candidate.time.isBefore(currentTime))
+          .toList();
+    }
+
+    if (availableCandidates.isEmpty) {
+      if (darkCandidates.isEmpty) {
+        final nextDarkStart = _nextDarkStart(bestTime, effectiveDarkWindows);
+        final previousDarkEnd = _previousDarkEnd(
+          bestTime,
+          effectiveDarkWindows,
+        );
+        final isAfterDawn =
+            previousDarkEnd != null &&
+            bestTime.isAfter(previousDarkEnd) &&
+            bestTime.hour < 12;
+        return _unavailableFromSample(
+          reference: reference,
+          site: site,
+          equipment: equipment,
+          sample: exactSample,
+          framingMatchAt: bestTime,
+          darkStart: nextDarkStart,
+          cause: isAfterDawn
+              ? MultiNightFramingUnavailableCause.dawn
+              : MultiNightFramingUnavailableCause.skyTooBright,
+          reason: isAfterDawn
+              ? '같은 구도가 되는 시간에는 하늘이 밝아지기 시작합니다.'
+              : '같은 구도가 되는 시간에는 아직 하늘이 밝습니다.',
+        );
+      }
+
+      final visibleBeforeNow = darkCandidates.any(
+        (candidate) => candidate.sample.visible,
+      );
+      if (shouldExcludePast && visibleBeforeNow) {
+        return _unavailableFromSample(
+          reference: reference,
+          site: site,
+          equipment: equipment,
+          sample: exactSample,
+          framingMatchAt: bestTime,
+          cause: MultiNightFramingUnavailableCause.elapsed,
+          reason: '오늘은 촬영 가능한 시간이 지났습니다.',
+        );
+      }
+
+      final diagnostic = _nearestCandidate(darkCandidates, bestTime).sample;
+      final altitudeUnavailable = !diagnostic.altitudeVisible;
+      return _unavailableFromSample(
+        reference: reference,
+        site: site,
+        equipment: equipment,
+        sample: diagnostic,
+        framingMatchAt: bestTime,
+        cause: altitudeUnavailable
+            ? MultiNightFramingUnavailableCause.altitude
+            : MultiNightFramingUnavailableCause.obstructed,
+        reason: altitudeUnavailable
+            ? '대상이 아직 너무 낮거나 관측 고도 범위를 벗어납니다.'
+            : '현재 관측지에서 가려지는 방향입니다.',
+      );
+    }
+
+    final selected = _nearestCandidate(availableCandidates, bestTime);
+    final selectedIndex = availableCandidates.indexOf(selected);
+    var rangeStart = selected.time;
+    var rangeEnd = selected.time;
+    for (var index = selectedIndex - 1; index >= 0; index--) {
+      final candidate = availableCandidates[index];
+      if (rangeStart.difference(candidate.time) >
+          const Duration(minutes: 1, seconds: 1)) {
+        break;
+      }
+      rangeStart = candidate.time;
+    }
+    for (
+      var index = selectedIndex + 1;
+      index < availableCandidates.length;
+      index++
+    ) {
+      final candidate = availableCandidates[index];
+      if (candidate.time.difference(rangeEnd) >
+          const Duration(minutes: 1, seconds: 1)) {
+        break;
+      }
+      rangeEnd = candidate.time;
+    }
+    final selectedDarkWindow = effectiveDarkWindows.firstWhere(
+      (window) => _isDark(selected.time, [window]),
+    );
     return MultiNightFramingMatchResult(
       reference: reference,
       site: site,
       equipment: equipment,
       isAvailable: true,
-      recommendedAt: bestTime,
-      rangeStart: range?.$1,
-      rangeEnd: range?.$2,
-      hourAngleDeg: sample.hourAngleDeg,
-      parallacticAngleDeg: sample.parallacticAngleDeg,
-      parallacticAngleDifferenceDeg: sample.paDifferenceDeg,
-      altitudeDeg: sample.altitudeDeg,
-      azimuthDeg: sample.azimuthDeg,
+      recommendedAt: selected.time,
+      framingMatchAt: bestTime,
+      rangeStart: rangeStart,
+      rangeEnd: rangeEnd,
+      darkStart: selectedDarkWindow.nightStart,
+      darkEnd: selectedDarkWindow.nightEnd,
+      hourAngleDeg: selected.sample.hourAngleDeg,
+      parallacticAngleDeg: selected.sample.parallacticAngleDeg,
+      parallacticAngleDifferenceDeg: selected.sample.paDifferenceDeg,
+      altitudeDeg: selected.sample.altitudeDeg,
+      azimuthDeg: selected.sample.azimuthDeg,
     );
   }
 
-  (DateTime, DateTime)? _allowedRange({
+  (DateTime, DateTime)? _allowedFramingRange({
     required DateTime center,
     required DateTime dayStart,
     required DateTime dayEnd,
@@ -239,8 +400,7 @@ class MultiNightFramingMatchService {
         site: site,
         reference: reference,
       );
-      return sample.visible &&
-          sample.branch == reference.referenceBranch &&
+      return sample.branch == reference.referenceBranch &&
           sample.paDifferenceDeg <= allowedParallacticAngleDifferenceDeg;
     }
 
@@ -258,6 +418,59 @@ class MultiNightFramingMatchService {
       rangeEnd = candidate;
     }
     return (rangeStart, rangeEnd);
+  }
+
+  List<MultiNightDarkWindow> _darkWindowsForDay(DateTime dayStart) {
+    final resolver =
+        _darkWindowResolver ?? ObservationScoreService.estimatedNightWindow;
+    final previous = resolver(dayStart.subtract(const Duration(days: 1)));
+    final current = resolver(dayStart);
+    return [previous, current];
+  }
+
+  bool _isDark(DateTime time, List<MultiNightDarkWindow> windows) =>
+      windows.any(
+        (window) =>
+            !time.isBefore(window.nightStart) && !time.isAfter(window.nightEnd),
+      );
+
+  DateTime? _nextDarkStart(DateTime time, List<MultiNightDarkWindow> windows) {
+    final starts =
+        windows
+            .map((window) => window.nightStart)
+            .where((start) => start.isAfter(time))
+            .toList()
+          ..sort();
+    return starts.isEmpty ? null : starts.first;
+  }
+
+  DateTime? _previousDarkEnd(
+    DateTime time,
+    List<MultiNightDarkWindow> windows,
+  ) {
+    final ends =
+        windows
+            .map((window) => window.nightEnd)
+            .where((end) => end.isBefore(time))
+            .toList()
+          ..sort();
+    return ends.isEmpty ? null : ends.last;
+  }
+
+  ({DateTime time, _FramingSample sample}) _nearestCandidate(
+    List<({DateTime time, _FramingSample sample})> candidates,
+    DateTime target,
+  ) {
+    var nearest = candidates.first;
+    var nearestDistance = nearest.time.difference(target).abs();
+    for (final candidate in candidates.skip(1)) {
+      final distance = candidate.time.difference(target).abs();
+      if (distance < nearestDistance) {
+        nearest = candidate;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
   }
 
   _FramingSample _sample({
@@ -308,9 +521,35 @@ class MultiNightFramingMatchService {
       altitudeDeg: altAz.altitude,
       azimuthDeg: altAz.azimuth,
       branch: branchForHourAngle(ha),
+      altitudeVisible: altitudeVisible,
       visible: profileVisible && altitudeVisible,
     );
   }
+
+  MultiNightFramingMatchResult _unavailableFromSample({
+    required MultiNightFramingReference reference,
+    required ObservationSite site,
+    required Equipment equipment,
+    required _FramingSample sample,
+    required DateTime framingMatchAt,
+    required MultiNightFramingUnavailableCause cause,
+    required String reason,
+    DateTime? darkStart,
+  }) => MultiNightFramingMatchResult(
+    reference: reference,
+    site: site,
+    equipment: equipment,
+    isAvailable: false,
+    framingMatchAt: framingMatchAt,
+    darkStart: darkStart,
+    hourAngleDeg: sample.hourAngleDeg,
+    parallacticAngleDeg: sample.parallacticAngleDeg,
+    parallacticAngleDifferenceDeg: sample.paDifferenceDeg,
+    altitudeDeg: sample.altitudeDeg,
+    azimuthDeg: sample.azimuthDeg,
+    unavailableCause: cause,
+    unavailableReason: reason,
+  );
 
   MultiNightFramingMatchResult _unavailable({
     required MultiNightFramingReference reference,
@@ -368,6 +607,7 @@ class _FramingSample {
     required this.altitudeDeg,
     required this.azimuthDeg,
     required this.branch,
+    required this.altitudeVisible,
     required this.visible,
   });
 
@@ -377,5 +617,6 @@ class _FramingSample {
   final double altitudeDeg;
   final double azimuthDeg;
   final MultiNightFramingBranch branch;
+  final bool altitudeVisible;
   final bool visible;
 }

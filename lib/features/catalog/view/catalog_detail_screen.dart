@@ -241,22 +241,37 @@ class _CatalogDetailPage extends StatelessWidget {
         ],
         if (viewModel.exposureGuidance != null) ...[
           const SizedBox(height: 12),
-          CatalogImagingAvailabilitySection(
-            sites: viewModel.observationSites,
-            selectedSite: viewModel.selectedObservationSite,
+          CatalogExposureGuidanceSection(
+            guidance: viewModel.exposureGuidance!,
+            site: viewModel.selectedObservationSite,
             availability: viewModel.imagingAvailability,
-            isLoading: viewModel.isAvailabilityLoading,
-            onSelectSite: viewModel.selectObservationSite,
+            isAvailabilityLoading: viewModel.isAvailabilityLoading,
           ),
-          const SizedBox(height: 12),
-          CatalogExposureGuidanceSection(guidance: viewModel.exposureGuidance!),
         ],
+        const SizedBox(height: 12),
+        MultiNightFramingSection(
+          object: object,
+          optimalWindowStart:
+              viewModel.imagingAvailability?.window?.optimalStartTime,
+          optimalWindowEnd:
+              viewModel.imagingAvailability?.window?.optimalEndTime,
+          optimalWindowSiteId: viewModel.selectedObservationSite?.id,
+          darkWindowStart: viewModel.imagingAvailability?.nightStart,
+          darkWindowEnd: viewModel.imagingAvailability?.nightEnd,
+          darkWindowSiteId: viewModel.selectedObservationSite?.id,
+        ),
         const SizedBox(height: 12),
         EquipmentRecommendationSection(
           recommendation: viewModel.equipmentRecommendation,
         ),
         const SizedBox(height: 12),
-        MultiNightFramingSection(object: object),
+        CatalogImagingAvailabilitySection(
+          sites: viewModel.observationSites,
+          selectedSite: viewModel.selectedObservationSite,
+          availability: viewModel.imagingAvailability,
+          isLoading: viewModel.isAvailabilityLoading,
+          onSelectSite: viewModel.selectObservationSite,
+        ),
         const SizedBox(height: 12),
         _InfoSection(
           title: '촬영 정보',

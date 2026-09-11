@@ -26,7 +26,20 @@ class TargetImagingAvailabilityService {
   final WeatherService? _weatherService;
   final Map<String, TargetImagingAvailability> _dayCache = {};
 
-  static const List<int> _seasonProbeMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  static const List<int> _seasonProbeMonths = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+  ];
 
   Future<TargetImagingAvailability> evaluate({
     required CatalogObject object,
@@ -50,11 +63,17 @@ class TargetImagingAvailabilityService {
       // Forecast data is intentionally not supplied. Tomorrow is presented as
       // a geometry/Moon/light-pollution estimate, not a weather forecast.
     );
-    final season = await _summarizeSeason(object: object, site: site, year: today.year);
+    final season = await _summarizeSeason(
+      object: object,
+      site: site,
+      year: today.year,
+    );
     return TargetImagingAvailability(
       object: object,
       referenceDate: today,
       isAvailableTonight: current.isAvailableTonight,
+      nightStart: current.nightStart,
+      nightEnd: current.nightEnd,
       recommendation: current.recommendation,
       primaryReason: current.primaryReason,
       tomorrow: tomorrow,
@@ -70,7 +89,8 @@ class TargetImagingAvailabilityService {
     WeatherData? weather,
     List<WeatherForecastSlot> forecasts = const [],
   }) async {
-    final cacheKey = '${object.id}:${site.id}:${site.updatedAt.toIso8601String()}:'
+    final cacheKey =
+        '${object.id}:${site.id}:${site.updatedAt.toIso8601String()}:'
         '${date.year}-${date.month}-${date.day}:'
         '${weather == null ? 'weather-excluded' : 'weather-included'}';
     final cached = _dayCache[cacheKey];
@@ -121,6 +141,8 @@ class TargetImagingAvailabilityService {
       object: object,
       referenceDate: date,
       isAvailableTonight: result != null,
+      nightStart: night.nightStart,
+      nightEnd: night.nightEnd,
       recommendation: result,
       primaryReason: result == null && build.exclusionReasons.isNotEmpty
           ? build.exclusionReasons.first
@@ -155,10 +177,7 @@ class TargetImagingAvailabilityService {
         service.getCurrentWeather(site.latitude, site.longitude),
         service.getForecast(site.latitude, site.longitude),
       ]);
-      return (
-        values[0] as WeatherData,
-        values[1] as List<WeatherForecastSlot>,
-      );
+      return (values[0] as WeatherData, values[1] as List<WeatherForecastSlot>);
     } catch (_) {
       // Geometry, Horizon, Moon, and light-pollution checks still work when
       // the optional weather adapter is temporarily unavailable.

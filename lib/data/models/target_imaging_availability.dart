@@ -12,6 +12,8 @@ class TargetImagingAvailability {
     required this.object,
     required this.referenceDate,
     required this.isAvailableTonight,
+    this.nightStart,
+    this.nightEnd,
     this.recommendation,
     this.primaryReason,
     this.tomorrow,
@@ -22,8 +24,11 @@ class TargetImagingAvailability {
   final CatalogObject object;
   final DateTime referenceDate;
   final bool isAvailableTonight;
+  final DateTime? nightStart;
+  final DateTime? nightEnd;
   final RecommendationResult? recommendation;
   final String? primaryReason;
+
   /// Tomorrow uses the same astronomical pipeline without weather inputs.
   final TargetImagingAvailability? tomorrow;
   final String? observableSeasonLabel;

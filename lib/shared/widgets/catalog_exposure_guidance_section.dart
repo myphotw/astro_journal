@@ -3,11 +3,22 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/catalog_exposure_guidance.dart';
 import '../../data/models/imaging_suitability_assessment.dart';
+import '../../data/models/observation_site.dart';
+import '../../data/models/target_imaging_availability.dart';
 
 class CatalogExposureGuidanceSection extends StatelessWidget {
-  const CatalogExposureGuidanceSection({super.key, required this.guidance});
+  const CatalogExposureGuidanceSection({
+    super.key,
+    required this.guidance,
+    this.site,
+    this.availability,
+    this.isAvailabilityLoading = false,
+  });
 
   final CatalogExposureGuidance guidance;
+  final ObservationSite? site;
+  final TargetImagingAvailability? availability;
+  final bool isAvailabilityLoading;
 
   Color _statusColor(CatalogExposureFeasibility feasibility) {
     return switch (feasibility) {
@@ -32,13 +43,65 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            guidance.currentEnvironmentLabel,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 13,
+          const Text(
+            '현재 관측지',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            _siteLabel,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          if (isAvailabilityLoading) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(),
+          ] else if (availability != null) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 20,
+              runSpacing: 10,
+              children: [
+                _SummaryValue(
+                  key: const Key('catalog-today-status'),
+                  label: '오늘',
+                  value: availability!.tonightStatusLabel,
+                ),
+                if (availability!.window != null) ...[
+                  _SummaryValue(
+                    key: const Key('catalog-available-window'),
+                    label: '촬영 가능',
+                    value: _timeRange(
+                      availability!.window!.recommendStartTime,
+                      availability!.window!.observationEndTime,
+                    ),
+                  ),
+                  _SummaryValue(
+                    label: '최적 촬영구간',
+                    value: _timeRange(
+                      availability!.window!.optimalStartTime,
+                      availability!.window!.optimalEndTime,
+                    ),
+                  ),
+                ],
+                if (!availability!.isAvailableTonight &&
+                    availability!.primaryReason != null)
+                  _SummaryValue(
+                    label: '사유',
+                    value: availability!.primaryReason!,
+                  ),
+                if (guidance.currentRecommendedMinutes != null)
+                  _SummaryValue(
+                    label: '권장 촬영시간',
+                    value: '${guidance.currentRecommendedMinutes}분',
+                  ),
+              ],
+            ),
+          ],
+          const Divider(height: 24, color: AppColors.textSecondary),
           const SizedBox(height: 8),
           Text(
             guidance.feasibility.statusLabel,
@@ -115,6 +178,52 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
       ),
     );
   }
+
+  String get _siteLabel {
+    final value = site;
+    if (value == null) return '관측지 정보 없음 · Bortle ${guidance.referenceBortle}';
+    return value.bortle == null
+        ? value.name
+        : '${value.name} · Bortle ${value.bortle}';
+  }
+
+  String _timeRange(DateTime? start, DateTime? end) {
+    if (start == null || end == null) return '-';
+    return '${_time(start)} ~ ${_time(end)}';
+  }
+
+  String _time(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:'
+      '${value.minute.toString().padLeft(2, '0')}';
+}
+
+class _SummaryValue extends StatelessWidget {
+  const _SummaryValue({super.key, required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minWidth: 125),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _GuidanceValueRow extends StatelessWidget {

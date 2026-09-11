@@ -26,9 +26,23 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
   Widget build(BuildContext context) {
     if (sites.isEmpty) {
       return _Card(
-        child: const Text(
-          '촬영 가능성을 확인하려면 관측지를 먼저 등록해주세요.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '관측지별 촬영 가능성',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '촬영 가능성을 확인하려면 관측지를 먼저 등록해주세요.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+          ],
         ),
       );
     }
@@ -38,7 +52,7 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '촬영 가능성',
+            '관측지별 촬영 가능성',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 16,
@@ -76,10 +90,7 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
             const LinearProgressIndicator(),
           ] else if (value != null) ...[
             const SizedBox(height: 12),
-            _DayAvailabilitySection(
-              dayLabel: '오늘',
-              availability: value,
-            ),
+            _DayAvailabilitySection(dayLabel: '오늘', availability: value),
             if (value.tomorrow != null) ...[
               const Divider(height: 24, color: AppColors.textSecondary),
               _DayAvailabilitySection(
@@ -97,7 +108,6 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _DayAvailabilitySection extends StatelessWidget {

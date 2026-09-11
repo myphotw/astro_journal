@@ -11,7 +11,9 @@ import 'package:astro_journal/services/equipment/field_orientation_calculator.da
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const service = MultiNightFramingMatchService();
+  final service = MultiNightFramingMatchService(
+    darkWindowResolver: _wholeDayDarkWindow,
+  );
 
   test('reference derives signed HA, PA, and branch without user input', () {
     final reference = service.buildReference(
@@ -160,7 +162,136 @@ void main() {
     expect(result.rangeEnd, isNotNull);
     expect(result.rangeStart!.isAfter(result.rangeEnd!), isFalse);
   });
+
+  test('exact HA before dark time is not returned as a recommendation', () {
+    final baseline = service.findToday(
+      object: _m16,
+      reference: _reference(),
+      site: _site.copyWith(defaultMinAltitude: -90),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+    final framingTime = baseline.framingMatchAt!;
+    final darkStart = baseline.rangeEnd!.add(const Duration(hours: 1));
+    final subject = MultiNightFramingMatchService(
+      darkWindowResolver: _fixedDarkWindow(
+        date: DateTime(2026, 7, 16),
+        start: darkStart,
+        end: darkStart.add(const Duration(hours: 1)),
+      ),
+    );
+
+    final result = subject.findToday(
+      object: _m16,
+      reference: _reference(),
+      site: _site.copyWith(defaultMinAltitude: -90),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+
+    expect(result.isAvailable, isFalse);
+    expect(result.recommendedAt, isNull);
+    expect(result.framingMatchAt, framingTime);
+    expect(
+      result.unavailableCause,
+      MultiNightFramingUnavailableCause.skyTooBright,
+    );
+    expect(result.darkStart, darkStart);
+  });
+
+  test('only the dark intersection of the PA range is recommended', () {
+    final baseline = service.findToday(
+      object: _m16,
+      reference: _reference(),
+      site: _site.copyWith(defaultMinAltitude: -90),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+    final darkStart = baseline.framingMatchAt!.add(const Duration(minutes: 1));
+    final darkEnd = baseline.rangeEnd!;
+    final subject = MultiNightFramingMatchService(
+      darkWindowResolver: _fixedDarkWindow(
+        date: DateTime(2026, 7, 16),
+        start: darkStart,
+        end: darkEnd,
+      ),
+    );
+
+    final result = subject.findToday(
+      object: _m16,
+      reference: _reference(),
+      site: _site.copyWith(defaultMinAltitude: -90),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+
+    expect(result.isAvailable, isTrue);
+    expect(result.rangeStart, darkStart);
+    expect(result.rangeEnd, darkEnd);
+    expect(result.recommendedAt, darkStart);
+    expect(result.framingMatchAt!.isBefore(result.recommendedAt!), isTrue);
+  });
+
+  test('times after the morning dark window are excluded', () {
+    final morningReference = service.buildReference(
+      object: _m16,
+      capturedAt: DateTime(2026, 7, 15, 4),
+      site: _site.copyWith(defaultMinAltitude: -90),
+      equipment: _equipment,
+      id: 'morning-reference',
+    );
+    final baseline = service.findToday(
+      object: _m16,
+      reference: morningReference,
+      site: _site.copyWith(defaultMinAltitude: -90),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+    final darkEnd = baseline.rangeStart!.subtract(const Duration(minutes: 1));
+    final subject = MultiNightFramingMatchService(
+      darkWindowResolver: _fixedDarkWindow(
+        date: DateTime(2026, 7, 16),
+        start: darkEnd.subtract(const Duration(hours: 2)),
+        end: darkEnd,
+      ),
+    );
+
+    final result = subject.findToday(
+      object: _m16,
+      reference: morningReference,
+      site: _site.copyWith(defaultMinAltitude: -90),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+
+    expect(result.isAvailable, isFalse);
+    expect(result.recommendedAt, isNull);
+    expect(result.unavailableCause, MultiNightFramingUnavailableCause.dawn);
+  });
 }
+
+MultiNightDarkWindow _wholeDayDarkWindow(DateTime date) {
+  final start = DateTime(date.year, date.month, date.day);
+  return (nightStart: start, nightEnd: start.add(const Duration(days: 1)));
+}
+
+MultiNightDarkWindowResolver _fixedDarkWindow({
+  required DateTime date,
+  required DateTime start,
+  required DateTime end,
+}) => (requestedDate) {
+  if (requestedDate.year == date.year &&
+      requestedDate.month == date.month &&
+      requestedDate.day == date.day) {
+    return (nightStart: start, nightEnd: end);
+  }
+  final previous = DateTime(
+    requestedDate.year,
+    requestedDate.month,
+    requestedDate.day,
+  );
+  return (nightStart: previous, nightEnd: previous);
+};
 
 const _referenceId = '11111111-1111-4111-8111-111111111111';
 const _siteId = '22222222-2222-4222-8222-222222222222';

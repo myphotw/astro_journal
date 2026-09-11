@@ -32,15 +32,23 @@ void main() {
     expect(find.text('M16'), findsOneWidget);
   });
 
-  testWidgets('existing reference shows find and edit actions', (tester) async {
-    await tester.pumpWidget(_app(_FakeReferenceRepository([_reference])));
+  testWidgets('existing reference shows selectors and inline result', (
+    tester,
+  ) async {
+    final matchService = _StubMatchService();
+    await tester.pumpWidget(
+      _app(_FakeReferenceRepository([_reference]), matchService: matchService),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('기준 구도'), findsOneWidget);
-    expect(find.text('같은 구도 촬영시간 찾기'), findsOneWidget);
+    expect(find.text('기준'), findsOneWidget);
     expect(find.text('기준 변경'), findsOneWidget);
-    expect(find.textContaining('Draco'), findsOneWidget);
-    expect(find.textContaining('집'), findsOneWidget);
+    expect(find.textContaining('Draco'), findsWidgets);
+    expect(find.textContaining('집'), findsWidgets);
+    expect(find.byKey(const Key('multi-night-inline-result')), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.textContaining('천문박명'), findsNothing);
+    expect(matchService.calls, 1);
   });
 
   testWidgets('registration stores a target-fixed calculated reference', (
@@ -58,7 +66,7 @@ void main() {
     expect(repository.values.single.catalogObjectId, 'M16');
     expect(repository.values.single.equipmentId, 'draco');
     expect(repository.values.single.siteId, 'home');
-    expect(find.text('같은 구도 촬영시간 찾기'), findsOneWidget);
+    expect(find.byKey(const Key('multi-night-inline-result')), findsOneWidget);
   });
 
   testWidgets('different equipment without reference shows required message', (
@@ -67,33 +75,193 @@ void main() {
     final repository = _FakeReferenceRepository([_reference]);
     await tester.pumpWidget(_app(repository, equipment: [_draco, _seestar]));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('multi-night-find-button')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('multi-night-find-equipment')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Seestar').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('찾기'));
-    await tester.pumpAndSettle();
 
     expect(find.text('선택한 장비에는 등록된 기준 구도가 없습니다.'), findsOneWidget);
+  });
+
+  testWidgets(
+    'available result stays inline and is not recalculated by rebuilds',
+    (tester) async {
+      final service = _StubMatchService();
+      await tester.pumpWidget(
+        _app(
+          _FakeReferenceRepository([_reference]),
+          matchService: service,
+          optimalWindowStart: DateTime(2026, 8, 4, 20),
+          optimalWindowEnd: DateTime(2026, 8, 4, 21),
+          optimalWindowSiteId: 'home',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('오늘 같은 구도로 촬영할 수 있습니다.'), findsOneWidget);
+      expect(
+        find.byKey(const Key('multi-night-inline-result')),
+        findsOneWidget,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('추천 촬영시간과도 잘 맞습니다.'), findsOneWidget);
+      expect(service.calls, 1);
+
+      await tester.pump();
+      expect(service.calls, 1);
+    },
+  );
+
+  testWidgets('bright-time result uses natural inline guidance', (
+    tester,
+  ) async {
+    final service = _StubMatchService(
+      cause: MultiNightFramingUnavailableCause.skyTooBright,
+    );
+    await tester.pumpWidget(
+      _app(_FakeReferenceRepository([_reference]), matchService: service),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('오늘은 같은 구도로 촬영하기 어렵습니다.'), findsOneWidget);
+    expect(find.text('같은 구도가 되는 시간에는 아직 하늘이 밝습니다.'), findsOneWidget);
+    expect(find.text('20:00 이후 촬영을 권장합니다.'), findsOneWidget);
+    expect(find.textContaining('천문박명'), findsNothing);
+  });
+
+  testWidgets('site obstruction is explained in the inline result', (
+    tester,
+  ) async {
+    final service = _StubMatchService(
+      cause: MultiNightFramingUnavailableCause.obstructed,
+    );
+    await tester.pumpWidget(
+      _app(_FakeReferenceRepository([_reference]), matchService: service),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('현재 관측지에서 가려지는 방향입니다.'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('changing the site recalculates once inside the card', (
+    tester,
+  ) async {
+    final service = _StubMatchService();
+    await tester.pumpWidget(
+      _app(
+        _FakeReferenceRepository([_reference]),
+        matchService: service,
+        sites: [_site, _site2],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(service.calls, 1);
+
+    await tester.tap(find.byKey(const Key('multi-night-find-site')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('외곽').last);
+    await tester.pumpAndSettle();
+
+    expect(service.calls, 2);
+    expect(find.byKey(const Key('multi-night-inline-result')), findsOneWidget);
   });
 }
 
 Widget _app(
   _FakeReferenceRepository repository, {
   List<Equipment> equipment = const [_draco],
+  MultiNightFramingMatchService? matchService,
+  DateTime? optimalWindowStart,
+  DateTime? optimalWindowEnd,
+  String? optimalWindowSiteId,
+  List<ObservationSite> sites = const [],
 }) => MaterialApp(
   home: Scaffold(
     body: MultiNightFramingSection(
       object: _m16,
       repository: repository,
       equipmentRepository: _FakeEquipmentRepository(equipment),
-      observationSiteRepository: _FakeSiteRepository([_site]),
-      matchService: const MultiNightFramingMatchService(),
+      observationSiteRepository: _FakeSiteRepository(
+        sites.isEmpty ? [_site] : sites,
+      ),
+      matchService:
+          matchService ??
+          MultiNightFramingMatchService(
+            darkWindowResolver: _wholeDayDarkWindow,
+          ),
+      optimalWindowStart: optimalWindowStart,
+      optimalWindowEnd: optimalWindowEnd,
+      optimalWindowSiteId: optimalWindowSiteId,
     ),
   ),
 );
+
+MultiNightDarkWindow _wholeDayDarkWindow(DateTime date) {
+  final start = DateTime(date.year, date.month, date.day);
+  return (nightStart: start, nightEnd: start.add(const Duration(days: 1)));
+}
+
+class _StubMatchService extends MultiNightFramingMatchService {
+  _StubMatchService({this.cause});
+
+  final MultiNightFramingUnavailableCause? cause;
+  int calls = 0;
+
+  @override
+  MultiNightFramingMatchResult findToday({
+    required CatalogObject object,
+    required MultiNightFramingReference reference,
+    required ObservationSite site,
+    required Equipment equipment,
+    DateTime? today,
+    DateTime? now,
+    List<MultiNightDarkWindow>? darkWindows,
+  }) {
+    calls++;
+    final unavailableCause = cause;
+    if (unavailableCause != null) {
+      return MultiNightFramingMatchResult(
+        reference: reference,
+        site: site,
+        equipment: equipment,
+        isAvailable: false,
+        framingMatchAt: DateTime(2026, 8, 4, 17, 36),
+        darkStart:
+            unavailableCause == MultiNightFramingUnavailableCause.skyTooBright
+            ? DateTime(2026, 8, 4, 20)
+            : null,
+        hourAngleDeg: -20,
+        parallacticAngleDeg: 15,
+        parallacticAngleDifferenceDeg: 0,
+        altitudeDeg: 30,
+        azimuthDeg: 180,
+        unavailableCause: unavailableCause,
+        unavailableReason:
+            unavailableCause == MultiNightFramingUnavailableCause.skyTooBright
+            ? '같은 구도가 되는 시간에는 아직 하늘이 밝습니다.'
+            : '현재 관측지에서 가려지는 방향입니다.',
+      );
+    }
+    return MultiNightFramingMatchResult(
+      reference: reference,
+      site: site,
+      equipment: equipment,
+      isAvailable: true,
+      recommendedAt: DateTime(2026, 8, 4, 20, 14),
+      framingMatchAt: DateTime(2026, 8, 4, 20, 14),
+      rangeStart: DateTime(2026, 8, 4, 20, 9),
+      rangeEnd: DateTime(2026, 8, 4, 20, 19),
+      darkStart: DateTime(2026, 8, 4, 20),
+      darkEnd: DateTime(2026, 8, 5, 4),
+      hourAngleDeg: -20,
+      parallacticAngleDeg: 15,
+      parallacticAngleDifferenceDeg: 0,
+      altitudeDeg: 30,
+      azimuthDeg: 180,
+    );
+  }
+}
 
 const _m16 = CatalogObject(
   id: 'M16',
@@ -126,6 +294,15 @@ final _site = ObservationSite(
   name: '집',
   latitude: 37.5,
   longitude: 127,
+  createdAt: DateTime.utc(2026),
+  updatedAt: DateTime.utc(2026),
+);
+
+final _site2 = ObservationSite(
+  id: 'outskirts',
+  name: '외곽',
+  latitude: 36.5,
+  longitude: 127.5,
   createdAt: DateTime.utc(2026),
   updatedAt: DateTime.utc(2026),
 );

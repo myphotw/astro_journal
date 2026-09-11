@@ -20,6 +20,12 @@ class MultiNightFramingSection extends StatefulWidget {
     this.equipmentRepository,
     this.observationSiteRepository,
     this.matchService,
+    this.optimalWindowStart,
+    this.optimalWindowEnd,
+    this.optimalWindowSiteId,
+    this.darkWindowStart,
+    this.darkWindowEnd,
+    this.darkWindowSiteId,
   });
 
   final CatalogObject object;
@@ -27,6 +33,12 @@ class MultiNightFramingSection extends StatefulWidget {
   final EquipmentRepository? equipmentRepository;
   final ObservationSiteRepository? observationSiteRepository;
   final MultiNightFramingMatchService? matchService;
+  final DateTime? optimalWindowStart;
+  final DateTime? optimalWindowEnd;
+  final String? optimalWindowSiteId;
+  final DateTime? darkWindowStart;
+  final DateTime? darkWindowEnd;
+  final String? darkWindowSiteId;
 
   @override
   State<MultiNightFramingSection> createState() =>
@@ -47,7 +59,12 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
   String? _message;
   String? _defaultSiteId;
   String? _defaultEquipmentId;
+  String? _selectedSiteId;
+  String? _selectedEquipmentId;
+  MultiNightFramingMatchResult? _result;
+  bool _calculating = false;
   int _loadRevision = 0;
+  int _calculationRevision = 0;
 
   @override
   void didChangeDependencies() {
@@ -86,6 +103,12 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
     if (oldWidget.object.effectivePrimaryId !=
         widget.object.effectivePrimaryId) {
       _load();
+      return;
+    }
+    if (oldWidget.darkWindowStart != widget.darkWindowStart ||
+        oldWidget.darkWindowEnd != widget.darkWindowEnd ||
+        oldWidget.darkWindowSiteId != widget.darkWindowSiteId) {
+      _recalculate();
     }
   }
 
@@ -116,7 +139,10 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
         _references = values[0] as List<MultiNightFramingReference>;
         _equipment = values[1] as List<Equipment>;
         _sites = values[2] as List<ObservationSite>;
+        _selectedEquipmentId = _resolveEquipmentId(_selectedEquipmentId);
+        _selectedSiteId = _resolveSiteId(_selectedSiteId);
         final conflict = values[3] as String?;
+        _message = null;
         if (conflict == 'REFERENCE_ALREADY_EXISTS') {
           _message = '이 대상과 장비에는 이미 기준 구도가 등록되어 있습니다.';
         } else if (conflict?.startsWith('REVISION_CONFLICT') ?? false) {
@@ -124,6 +150,7 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
         }
         _loading = false;
       });
+      await _recalculate();
     } catch (error) {
       if (!mounted || revision != _loadRevision) return;
       setState(() {
@@ -135,15 +162,7 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
 
   @override
   Widget build(BuildContext context) {
-    MultiNightFramingReference? reference;
-    for (final value in _references) {
-      if (value.equipmentId == _defaultEquipmentId) {
-        reference = value;
-        break;
-      }
-    }
-    reference ??= _references.isEmpty ? null : _references.first;
-    final currentReference = reference;
+    final currentReference = _referenceForEquipment(_selectedEquipmentId);
     final equipment = currentReference == null
         ? null
         : _byId(_equipment, currentReference.equipmentId, (value) => value.id);
@@ -173,28 +192,34 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
             else if (_repository == null || _matchService == null)
               const Text('같은 구도 기능을 사용할 수 없습니다.')
             else if (currentReference == null)
-              FilledButton.tonal(
-                key: const Key('multi-night-register-button'),
-                onPressed: _canRegister ? () => _showEditor() : null,
-                child: const Text('기준 구도 등록'),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_equipment.isNotEmpty) _buildSelectors(),
+                  const SizedBox(height: 10),
+                  FilledButton.tonal(
+                    key: const Key('multi-night-register-button'),
+                    onPressed: _canRegister
+                        ? () => _showEditor(
+                            preferredEquipmentId: _selectedEquipmentId,
+                            preferredSiteId: _selectedSiteId,
+                          )
+                        : null,
+                    child: const Text('기준 구도 등록'),
+                  ),
+                ],
               )
             else ...[
-              Text('기준 구도', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 4),
-              Text(
-                '${_formatDateTime(currentReference.referenceCapturedAt)} · '
-                '${equipment?.name ?? '장비 정보 없음'} · '
-                '${site?.name ?? '관측지 정보 없음'}',
-              ),
-              const SizedBox(height: 12),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  FilledButton(
-                    key: const Key('multi-night-find-button'),
-                    onPressed: () => _showFinder(currentReference),
-                    child: const Text('같은 구도 촬영시간 찾기'),
+                  Text('기준', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    '${_formatDateTime(currentReference.referenceCapturedAt)} · '
+                    '${equipment?.name ?? '장비 정보 없음'} · '
+                    '${site?.name ?? '관측지 정보 없음'}',
                   ),
                   OutlinedButton(
                     key: const Key('multi-night-edit-button'),
@@ -203,6 +228,18 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              _buildSelectors(),
+              const SizedBox(height: 12),
+              if (_calculating) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                const Text('오늘 촬영 가능 시간을 확인하고 있습니다.'),
+              ] else if (_result != null)
+                _InlineMatchResult(
+                  result: _result!,
+                  matchesOptimalWindow: _matchesOptimalWindow(_result!),
+                ),
             ],
             if (_message != null) ...[
               const SizedBox(height: 10),
@@ -215,6 +252,157 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
   }
 
   bool get _canRegister => _equipment.isNotEmpty && _sites.isNotEmpty;
+
+  String? _resolveEquipmentId(String? current) {
+    if (_equipment.any((value) => value.id == current)) return current;
+    if (_equipment.any((value) => value.id == _defaultEquipmentId)) {
+      return _defaultEquipmentId;
+    }
+    if (_references.isNotEmpty &&
+        _equipment.any((value) => value.id == _references.first.equipmentId)) {
+      return _references.first.equipmentId;
+    }
+    return _equipment.isEmpty ? null : _equipment.first.id;
+  }
+
+  String? _resolveSiteId(String? current) {
+    if (_sites.any((value) => value.id == current)) return current;
+    if (_sites.any((value) => value.id == _defaultSiteId)) {
+      return _defaultSiteId;
+    }
+    return _sites.isEmpty ? null : _sites.first.id;
+  }
+
+  MultiNightFramingReference? _referenceForEquipment(String? equipmentId) {
+    if (equipmentId == null) return null;
+    return _byId(_references, equipmentId, (value) => value.equipmentId);
+  }
+
+  Widget _buildSelectors() => LayoutBuilder(
+    builder: (context, constraints) {
+      final equipmentSelector = DropdownButtonFormField<String>(
+        key: const Key('multi-night-find-equipment'),
+        initialValue: _selectedEquipmentId,
+        decoration: const InputDecoration(labelText: '장비', isDense: true),
+        items: _equipment
+            .map(
+              (value) =>
+                  DropdownMenuItem(value: value.id, child: Text(value.name)),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value == null || value == _selectedEquipmentId) return;
+          setState(() {
+            _selectedEquipmentId = value;
+            _result = null;
+            _message = null;
+          });
+          _recalculate();
+        },
+      );
+      final siteSelector = DropdownButtonFormField<String>(
+        key: const Key('multi-night-find-site'),
+        initialValue: _selectedSiteId,
+        decoration: const InputDecoration(labelText: '오늘 관측지', isDense: true),
+        items: _sites
+            .map(
+              (value) =>
+                  DropdownMenuItem(value: value.id, child: Text(value.name)),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value == null || value == _selectedSiteId) return;
+          setState(() {
+            _selectedSiteId = value;
+            _result = null;
+            _message = null;
+          });
+          _recalculate();
+        },
+      );
+      if (constraints.maxWidth < 480) {
+        return Column(
+          children: [
+            equipmentSelector,
+            const SizedBox(height: 8),
+            siteSelector,
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: equipmentSelector),
+          const SizedBox(width: 12),
+          Expanded(child: siteSelector),
+        ],
+      );
+    },
+  );
+
+  Future<void> _recalculate() async {
+    final revision = ++_calculationRevision;
+    final service = _matchService;
+    final reference = _referenceForEquipment(_selectedEquipmentId);
+    final equipment = _selectedEquipmentId == null
+        ? null
+        : _byId(_equipment, _selectedEquipmentId!, (value) => value.id);
+    final site = _selectedSiteId == null
+        ? null
+        : _byId(_sites, _selectedSiteId!, (value) => value.id);
+    if (service == null ||
+        reference == null ||
+        equipment == null ||
+        site == null) {
+      if (mounted) {
+        setState(() {
+          _calculating = false;
+          _result = null;
+          if (reference == null && _selectedEquipmentId != null) {
+            _message = '선택한 장비에는 등록된 기준 구도가 없습니다.';
+          }
+        });
+      }
+      return;
+    }
+    if (mounted) setState(() => _calculating = true);
+    await Future<void>.delayed(Duration.zero);
+    final result = service.findToday(
+      object: widget.object,
+      reference: reference,
+      site: site,
+      equipment: equipment,
+      darkWindows:
+          widget.darkWindowSiteId == site.id &&
+              widget.darkWindowStart != null &&
+              widget.darkWindowEnd != null
+          ? [
+              (
+                nightStart: widget.darkWindowStart!,
+                nightEnd: widget.darkWindowEnd!,
+              ),
+            ]
+          : null,
+    );
+    if (!mounted || revision != _calculationRevision) return;
+    setState(() {
+      _result = result;
+      _calculating = false;
+    });
+  }
+
+  bool _matchesOptimalWindow(MultiNightFramingMatchResult result) {
+    final optimalStart = widget.optimalWindowStart;
+    final optimalEnd = widget.optimalWindowEnd;
+    if (optimalStart == null ||
+        optimalEnd == null ||
+        widget.optimalWindowSiteId != result.site.id) {
+      return false;
+    }
+    final start = result.rangeStart ?? result.recommendedAt;
+    final end = result.rangeEnd ?? result.recommendedAt;
+    if (start == null || end == null) return false;
+    return !end.isBefore(optimalStart) && !start.isAfter(optimalEnd);
+  }
 
   Future<void> _showEditor({
     MultiNightFramingReference? existing,
@@ -272,174 +460,6 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
     }
   }
 
-  Future<void> _showFinder(MultiNightFramingReference initial) async {
-    var equipmentId = initial.equipmentId;
-    var siteId =
-        _sites.any((site) => site.id == (_defaultSiteId ?? initial.siteId))
-        ? (_defaultSiteId ?? initial.siteId)
-        : _sites.first.id;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('같은 구도 촬영시간 찾기'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                key: const Key('multi-night-find-equipment'),
-                initialValue: equipmentId,
-                decoration: const InputDecoration(labelText: '장비'),
-                items: _equipment
-                    .map(
-                      (value) => DropdownMenuItem(
-                        value: value.id,
-                        child: Text(value.name),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setDialogState(() => equipmentId = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                key: const Key('multi-night-find-site'),
-                initialValue: siteId,
-                decoration: const InputDecoration(labelText: '오늘 관측지'),
-                items: _sites
-                    .map(
-                      (value) => DropdownMenuItem(
-                        value: value.id,
-                        child: Text(value.name),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) setDialogState(() => siteId = value);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('취소'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final reference = await _repository!.find(
-                  catalogObjectId: widget.object.effectivePrimaryId,
-                  equipmentId: equipmentId,
-                );
-                if (!dialogContext.mounted) return;
-                if (reference == null) {
-                  Navigator.pop(dialogContext);
-                  if (!mounted) return;
-                  final register = await showDialog<bool>(
-                    context: this.context,
-                    builder: (context) => AlertDialog(
-                      content: const Text('선택한 장비에는 등록된 기준 구도가 없습니다.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('닫기'),
-                        ),
-                        FilledButton.tonal(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('기준 구도 등록'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (register == true && mounted) {
-                    await _showEditor(
-                      preferredEquipmentId: equipmentId,
-                      preferredSiteId: siteId,
-                    );
-                  }
-                  return;
-                }
-                final equipment = _equipment.firstWhere(
-                  (value) => value.id == equipmentId,
-                );
-                final site = _sites.firstWhere((value) => value.id == siteId);
-                final result = _matchService!.findToday(
-                  object: widget.object,
-                  reference: reference,
-                  site: site,
-                  equipment: equipment,
-                );
-                Navigator.pop(dialogContext);
-                if (!mounted) return;
-                await _showResult(result);
-              },
-              child: const Text('찾기'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showResult(
-    MultiNightFramingMatchResult result,
-  ) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(widget.object.displayName),
-      content: result.isAvailable
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('같은 구도 추천시간'),
-                Text(
-                  '오늘 ${_formatTime(result.recommendedAt!)}',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 12),
-                Text('관측지  ${result.site.name}'),
-                Text('장비  ${result.equipment.name}'),
-                Text('예상 구도 차이  ${result.framingDifferenceLabel}'),
-                if (result.rangeStart != null && result.rangeEnd != null)
-                  Text(
-                    '권장 시작 범위  ${_formatTime(result.rangeStart!)} ~ '
-                    '${_formatTime(result.rangeEnd!)}',
-                  ),
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: const Text('상세 정보'),
-                  children: [
-                    Text(
-                      '기준 HA ${result.reference.referenceHourAngleDeg.toStringAsFixed(2)}°',
-                    ),
-                    Text('오늘 예상 HA ${result.hourAngleDeg.toStringAsFixed(2)}°'),
-                    Text(
-                      '기준 PA ${result.reference.referenceParallacticAngleDeg.toStringAsFixed(2)}°',
-                    ),
-                    Text(
-                      '오늘 예상 PA ${result.parallacticAngleDeg.toStringAsFixed(2)}°',
-                    ),
-                    Text(
-                      'PA 차이 ${result.parallacticAngleDifferenceDeg.toStringAsFixed(2)}°',
-                    ),
-                  ],
-                ),
-              ],
-            )
-          : Text(result.unavailableReason ?? '오늘은 이전 촬영과 같은 구도를 재현하기 어렵습니다.'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('닫기'),
-        ),
-      ],
-    ),
-  );
-
   static T? _byId<T>(
     List<T> values,
     String id,
@@ -461,6 +481,161 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
   static String _formatTime(DateTime value) =>
       '${value.hour.toString().padLeft(2, '0')}:'
       '${value.minute.toString().padLeft(2, '0')}';
+}
+
+class _InlineMatchResult extends StatelessWidget {
+  const _InlineMatchResult({
+    required this.result,
+    required this.matchesOptimalWindow,
+  });
+
+  final MultiNightFramingMatchResult result;
+  final bool matchesOptimalWindow;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        key: const Key('multi-night-inline-result'),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (result.isAvailable) ...[
+                const Text(
+                  '오늘 같은 구도로 촬영할 수 있습니다.',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 18,
+                  runSpacing: 6,
+                  children: [
+                    _InlineValue(
+                      label: '오늘',
+                      value: _formatTime(result.recommendedAt!),
+                    ),
+                    if (result.rangeStart != null && result.rangeEnd != null)
+                      _InlineValue(
+                        label: '권장',
+                        value:
+                            '${_formatTime(result.rangeStart!)}~${_formatTime(result.rangeEnd!)}',
+                      ),
+                    _InlineValue(
+                      label: '구도 차이',
+                      value: result.framingDifferenceLabel,
+                    ),
+                  ],
+                ),
+                if (matchesOptimalWindow) ...[
+                  const SizedBox(height: 8),
+                  const Text('추천 촬영시간과도 잘 맞습니다.'),
+                ],
+              ] else ...[
+                const Text(
+                  '오늘은 같은 구도로 촬영하기 어렵습니다.',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  result.unavailableReason ?? '오늘은 이전 촬영과 같은 구도를 재현하기 어렵습니다.',
+                ),
+                if (result.darkStart != null) ...[
+                  const SizedBox(height: 4),
+                  Text('${_formatTime(result.darkStart!)} 이후 촬영을 권장합니다.'),
+                ],
+              ],
+              ExpansionTile(
+                key: const Key('multi-night-details'),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: const Text('상세'),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: 18,
+                      runSpacing: 6,
+                      children: [
+                        if (result.framingMatchAt != null)
+                          _InlineValue(
+                            label: '구도 일치 예상시간',
+                            value: _formatTime(result.framingMatchAt!),
+                          ),
+                        if (result.darkStart != null)
+                          _InlineValue(
+                            label: '하늘이 충분히 어두워지는 시간',
+                            value: _formatTime(result.darkStart!),
+                          ),
+                        _InlineValue(
+                          label: '기준 HA',
+                          value:
+                              '${result.reference.referenceHourAngleDeg.toStringAsFixed(2)}°',
+                        ),
+                        _InlineValue(
+                          label: '오늘 HA',
+                          value: '${result.hourAngleDeg.toStringAsFixed(2)}°',
+                        ),
+                        _InlineValue(
+                          label: '기준 PA',
+                          value:
+                              '${result.reference.referenceParallacticAngleDeg.toStringAsFixed(2)}°',
+                        ),
+                        _InlineValue(
+                          label: '오늘 PA',
+                          value:
+                              '${result.parallacticAngleDeg.toStringAsFixed(2)}°',
+                        ),
+                        _InlineValue(
+                          label: 'PA 차이',
+                          value:
+                              '${result.parallacticAngleDifferenceDeg.toStringAsFixed(2)}°',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _InlineValue extends StatelessWidget {
+  const _InlineValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Text.rich(
+    TextSpan(
+      children: [
+        TextSpan(
+          text: '$label  ',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        TextSpan(
+          text: value,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ReferenceEditorDialog extends StatefulWidget {
