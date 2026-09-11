@@ -35,7 +35,7 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
@@ -60,49 +60,11 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
             const SizedBox(height: 10),
             const LinearProgressIndicator(),
           ] else if (availability != null) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 20,
-              runSpacing: 10,
-              children: [
-                _SummaryValue(
-                  key: const Key('catalog-today-status'),
-                  label: '오늘',
-                  value: availability!.tonightStatusLabel,
-                ),
-                if (availability!.window != null) ...[
-                  _SummaryValue(
-                    key: const Key('catalog-available-window'),
-                    label: '촬영 가능',
-                    value: _timeRange(
-                      availability!.window!.recommendStartTime,
-                      availability!.window!.observationEndTime,
-                    ),
-                  ),
-                  _SummaryValue(
-                    label: '최적 촬영구간',
-                    value: _timeRange(
-                      availability!.window!.optimalStartTime,
-                      availability!.window!.optimalEndTime,
-                    ),
-                  ),
-                ],
-                if (!availability!.isAvailableTonight &&
-                    availability!.primaryReason != null)
-                  _SummaryValue(
-                    label: '사유',
-                    value: availability!.primaryReason!,
-                  ),
-                if (guidance.currentRecommendedMinutes != null)
-                  _SummaryValue(
-                    label: '권장 촬영시간',
-                    value: '${guidance.currentRecommendedMinutes}분',
-                  ),
-              ],
-            ),
+            const SizedBox(height: 10),
+            _buildSummaryGrid(availability!),
           ],
-          const Divider(height: 24, color: AppColors.textSecondary),
-          const SizedBox(height: 8),
+          const Divider(height: 20, color: AppColors.textSecondary),
+          const SizedBox(height: 4),
           Text(
             guidance.feasibility.statusLabel,
             style: TextStyle(
@@ -122,11 +84,11 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
             ),
           ],
           if (guidance.currentExposureLine != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             _ExposureTimeRow(value: guidance.currentExposureLine!),
           ],
           if (guidance.imagingAssessment != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             _GuidanceValueRow(
               label: '필터',
               value: guidance.imagingAssessment!.filterMode.label,
@@ -154,7 +116,7 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
           ],
           if (guidance.feasibility.showsIdealEnvironment &&
               guidance.idealEnvironmentLabel != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             const Divider(height: 1, color: AppColors.textSecondary),
             const SizedBox(height: 12),
             const Text(
@@ -179,6 +141,71 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
     );
   }
 
+  Widget _buildSummaryGrid(TargetImagingAvailability value) {
+    final statusColor = value.isAvailableTonight
+        ? (value.isDifficultTonight
+              ? Colors.orangeAccent
+              : Colors.lightGreenAccent)
+        : Colors.orangeAccent;
+    final items = <Widget>[
+      _SummaryValue(
+        key: const Key('catalog-today-status'),
+        label: '오늘',
+        value: value.tonightStatusLabel,
+        valueColor: statusColor,
+      ),
+      if (value.window != null) ...[
+        _SummaryValue(
+          key: const Key('catalog-available-window'),
+          label: '촬영 가능',
+          value: _timeRange(
+            value.window!.recommendStartTime,
+            value.window!.observationEndTime,
+          ),
+          valueColor: AppColors.messier,
+        ),
+        _SummaryValue(
+          key: const Key('catalog-optimal-window'),
+          label: '최적 촬영구간',
+          value: _timeRange(
+            value.window!.optimalStartTime,
+            value.window!.optimalEndTime,
+          ),
+          valueColor: AppColors.messier,
+        ),
+      ],
+      if (!value.isAvailableTonight && value.primaryReason != null)
+        _SummaryValue(label: '사유', value: value.primaryReason!),
+      if (guidance.currentRecommendedMinutes != null)
+        _SummaryValue(
+          key: const Key('catalog-recommended-duration'),
+          label: '권장 촬영시간',
+          value: '${guidance.currentRecommendedMinutes}분',
+          valueColor: AppColors.messier,
+        ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        final columns = constraints.maxWidth >= 720
+            ? 4
+            : constraints.maxWidth >= 420
+            ? 2
+            : 1;
+        final itemWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Wrap(
+          key: const Key('catalog-current-site-summary-grid'),
+          spacing: spacing,
+          runSpacing: 8,
+          children: [
+            for (final item in items) SizedBox(width: itemWidth, child: item),
+          ],
+        );
+      },
+    );
+  }
+
   String get _siteLabel {
     final value = site;
     if (value == null) return '관측지 정보 없음 · Bortle ${guidance.referenceBortle}';
@@ -198,14 +225,20 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
 }
 
 class _SummaryValue extends StatelessWidget {
-  const _SummaryValue({super.key, required this.label, required this.value});
+  const _SummaryValue({
+    super.key,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
 
   final String label;
   final String value;
+  final Color? valueColor;
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(minWidth: 125),
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -216,8 +249,9 @@ class _SummaryValue extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: valueColor ?? AppColors.textPrimary,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
         ),

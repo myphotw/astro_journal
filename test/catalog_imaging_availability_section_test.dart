@@ -76,12 +76,85 @@ void main() {
       expect(find.text('오늘 9/3'), findsOneWidget);
       expect(find.text('내일 9/4'), findsOneWidget);
       expect(find.text('· 기상정보 미반영'), findsOneWidget);
+      expect(
+        find.byKey(const Key('catalog-availability-days-row')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('availability-today-card')), findsOneWidget);
+      expect(
+        find.byKey(const Key('availability-tomorrow-card')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('availability-today-season')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('availability-tomorrow-season')),
+        findsOneWidget,
+      );
       final tomorrowTop = tester.getTopLeft(find.text('내일 9/4')).dy;
       final weatherTop = tester.getTopLeft(find.text('· 기상정보 미반영')).dy;
       expect((tomorrowTop - weatherTop).abs(), lessThanOrEqualTo(2));
-      expect(find.text('9월 ~ 2월'), findsOneWidget);
+      expect(find.text('9월 ~ 2월'), findsNWidgets(2));
+      for (final row in const [
+        'status',
+        'shooting-window',
+        'optimal-window',
+        'season',
+      ]) {
+        final todayTop = tester
+            .getTopLeft(find.byKey(Key('availability-today-$row')))
+            .dy;
+        final tomorrowRowTop = tester
+            .getTopLeft(find.byKey(Key('availability-tomorrow-$row')))
+            .dy;
+        expect((todayTop - tomorrowRowTop).abs(), lessThanOrEqualTo(1));
+      }
     },
   );
+
+  testWidgets('uses a vertical day layout on a narrow screen', (tester) async {
+    final value = TargetImagingAvailability(
+      object: object,
+      referenceDate: DateTime(2026, 9, 3),
+      isAvailableTonight: true,
+      tomorrow: TargetImagingAvailability(
+        object: object,
+        referenceDate: DateTime(2026, 9, 4),
+        isAvailableTonight: true,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              child: CatalogImagingAvailabilitySection(
+                sites: sites,
+                selectedSite: sites.first,
+                availability: value,
+                isLoading: false,
+                onSelectSite: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('catalog-availability-days-column')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('catalog-availability-days-row')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   for (final scenario in <({bool today, bool tomorrow, String name})>[
     (today: true, tomorrow: true, name: 'today and tomorrow available'),
@@ -129,8 +202,8 @@ void main() {
       expect(find.text('오늘 9/3'), findsOneWidget);
       expect(find.text('내일 9/4'), findsOneWidget);
       expect(find.text('· 기상정보 미반영'), findsOneWidget);
-      expect(find.text('8월 ~ 2월'), findsOneWidget);
-      expect(find.text('10월 ~ 12월'), findsOneWidget);
+      expect(find.text('8월 ~ 2월'), findsNWidgets(2));
+      expect(find.text('10월 ~ 12월'), findsNWidgets(2));
       if (!scenario.tomorrow) {
         expect(find.text('고도 부족'), findsOneWidget);
       }

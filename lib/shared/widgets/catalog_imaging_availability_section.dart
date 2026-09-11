@@ -59,7 +59,7 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           const Text(
             '관측지',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
@@ -89,20 +89,8 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
             const SizedBox(height: 10),
             const LinearProgressIndicator(),
           ] else if (value != null) ...[
-            const SizedBox(height: 12),
-            _DayAvailabilitySection(dayLabel: '오늘', availability: value),
-            if (value.tomorrow != null) ...[
-              const Divider(height: 24, color: AppColors.textSecondary),
-              _DayAvailabilitySection(
-                dayLabel: '내일',
-                availability: value.tomorrow!,
-                weatherExcluded: true,
-              ),
-            ],
-            if (value.observableSeasonLabel != null)
-              _ValueRow(label: '촬영 가능 시즌', value: value.observableSeasonLabel!),
-            if (value.optimalSeasonLabel != null)
-              _ValueRow(label: '최적 촬영 시즌', value: value.optimalSeasonLabel!),
+            const SizedBox(height: 10),
+            _AvailabilityDetails(availability: value),
           ],
         ],
       ),
@@ -110,49 +98,121 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
   }
 }
 
+class _AvailabilityDetails extends StatelessWidget {
+  const _AvailabilityDetails({required this.availability});
+
+  final TargetImagingAvailability availability;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = _DayAvailabilitySection(
+      key: const Key('availability-today-card'),
+      dayLabel: '오늘',
+      availability: availability,
+      observableSeasonLabel: availability.observableSeasonLabel,
+      optimalSeasonLabel: availability.optimalSeasonLabel,
+    );
+    final tomorrow = availability.tomorrow == null
+        ? null
+        : _DayAvailabilitySection(
+            key: const Key('availability-tomorrow-card'),
+            dayLabel: '내일',
+            availability: availability.tomorrow!,
+            weatherExcluded: true,
+            observableSeasonLabel: availability.observableSeasonLabel,
+            optimalSeasonLabel: availability.optimalSeasonLabel,
+          );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 600 && tomorrow != null;
+        final dayContent = wide
+            ? Row(
+                key: const Key('catalog-availability-days-row'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: today),
+                  const SizedBox(width: 24),
+                  Expanded(child: tomorrow!),
+                ],
+              )
+            : Column(
+                key: const Key('catalog-availability-days-column'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  today,
+                  if (tomorrow != null) ...[
+                    const Divider(height: 20, color: AppColors.textSecondary),
+                    tomorrow,
+                  ],
+                ],
+              );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [dayContent],
+        );
+      },
+    );
+  }
+}
+
 class _DayAvailabilitySection extends StatelessWidget {
   const _DayAvailabilitySection({
+    super.key,
     required this.dayLabel,
     required this.availability,
     this.weatherExcluded = false,
+    this.observableSeasonLabel,
+    this.optimalSeasonLabel,
   });
 
   final String dayLabel;
   final TargetImagingAvailability availability;
   final bool weatherExcluded;
+  final String? observableSeasonLabel;
+  final String? optimalSeasonLabel;
 
   @override
   Widget build(BuildContext context) {
     final date = availability.referenceDate;
+    final window = availability.window;
+    final hasReason =
+        !availability.isAvailableTonight && availability.primaryReason != null;
+    final keyPrefix = dayLabel == '오늘'
+        ? 'availability-today'
+        : 'availability-tomorrow';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              '$dayLabel ${date.month}/${date.day}',
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (weatherExcluded) ...[
-              const SizedBox(width: 5),
-              const Flexible(
-                child: Text(
-                  '· 기상정보 미반영',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
+        SizedBox(
+          height: 24,
+          child: Row(
+            children: [
+              Text(
+                '$dayLabel ${date.month}/${date.day}',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
+              if (weatherExcluded) ...[
+                const SizedBox(width: 5),
+                const Flexible(
+                  child: Text(
+                    '· 기상정보 미반영',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
         _ValueRow(
+          key: ValueKey('$keyPrefix-status'),
           label: '상태',
           value: availability.tonightStatusLabel,
           color: availability.isAvailableTonight
@@ -161,23 +221,53 @@ class _DayAvailabilitySection extends StatelessWidget {
                     : Colors.lightGreenAccent)
               : Colors.orangeAccent,
         ),
-        if (availability.isAvailableTonight && availability.window != null) ...[
-          _ValueRow(
-            label: '촬영 가능 시간',
-            value: _timeRange(
-              availability.window!.recommendStartTime,
-              availability.window!.observationEndTime,
-            ),
+        _ValueRow(
+          key: ValueKey('$keyPrefix-shooting-window'),
+          label: '촬영 가능 시간',
+          value: window == null
+              ? '-'
+              : _timeRange(
+                  window.recommendStartTime,
+                  window.observationEndTime,
+                ),
+          color: window == null ? AppColors.textSecondary : AppColors.messier,
+        ),
+        _ValueRow(
+          key: ValueKey('$keyPrefix-optimal-window'),
+          label: '최적 촬영 구간',
+          value: window == null
+              ? '-'
+              : _timeRange(window.optimalStartTime, window.optimalEndTime),
+          color: window == null ? AppColors.textSecondary : AppColors.messier,
+        ),
+        Visibility(
+          visible: hasReason,
+          maintainState: true,
+          maintainAnimation: true,
+          maintainSize: true,
+          child: _ValueRow(
+            label: '사유',
+            value: availability.primaryReason ?? '',
+            maxLines: 1,
           ),
+        ),
+        if (observableSeasonLabel != null)
           _ValueRow(
-            label: '최적 촬영 구간',
-            value: _timeRange(
-              availability.window!.optimalStartTime,
-              availability.window!.optimalEndTime,
+            key: ValueKey(
+              dayLabel == '오늘'
+                  ? 'availability-today-season'
+                  : 'availability-tomorrow-season',
             ),
+            label: '촬영 가능 시즌',
+            value: observableSeasonLabel!,
+            valueWeight: FontWeight.w500,
           ),
-        ] else if (availability.primaryReason != null)
-          _ValueRow(label: '사유', value: availability.primaryReason!),
+        if (optimalSeasonLabel != null)
+          _ValueRow(
+            label: '최적 촬영 시즌',
+            value: optimalSeasonLabel!,
+            valueWeight: FontWeight.w500,
+          ),
       ],
     );
   }
@@ -197,7 +287,7 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(12),
@@ -207,19 +297,28 @@ class _Card extends StatelessWidget {
 }
 
 class _ValueRow extends StatelessWidget {
-  const _ValueRow({required this.label, required this.value, this.color});
+  const _ValueRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.color,
+    this.valueWeight = FontWeight.w600,
+    this.maxLines,
+  });
   final String label;
   final String value;
   final Color? color;
+  final FontWeight valueWeight;
+  final int? maxLines;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.only(top: 6),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 116,
+          width: 110,
           child: Text(
             label,
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
@@ -228,10 +327,12 @@ class _ValueRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
+            maxLines: maxLines,
+            overflow: maxLines == null ? null : TextOverflow.ellipsis,
             style: TextStyle(
               color: color ?? AppColors.textPrimary,
               fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontWeight: valueWeight,
             ),
           ),
         ),

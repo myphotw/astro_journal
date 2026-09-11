@@ -240,7 +240,7 @@ class _CatalogDetailPage extends StatelessWidget {
           _DescriptionCard(description: object.detailDescription!),
         ],
         if (viewModel.exposureGuidance != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           CatalogExposureGuidanceSection(
             guidance: viewModel.exposureGuidance!,
             site: viewModel.selectedObservationSite,
@@ -248,7 +248,7 @@ class _CatalogDetailPage extends StatelessWidget {
             isAvailabilityLoading: viewModel.isAvailabilityLoading,
           ),
         ],
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         MultiNightFramingSection(
           object: object,
           optimalWindowStart:
@@ -260,11 +260,11 @@ class _CatalogDetailPage extends StatelessWidget {
           darkWindowEnd: viewModel.imagingAvailability?.nightEnd,
           darkWindowSiteId: viewModel.selectedObservationSite?.id,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         EquipmentRecommendationSection(
           recommendation: viewModel.equipmentRecommendation,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         CatalogImagingAvailabilitySection(
           sites: viewModel.observationSites,
           selectedSite: viewModel.selectedObservationSite,
@@ -272,7 +272,7 @@ class _CatalogDetailPage extends StatelessWidget {
           isLoading: viewModel.isAvailabilityLoading,
           onSelectSite: viewModel.selectObservationSite,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _InfoSection(
           title: '촬영 정보',
           items: [
@@ -291,7 +291,7 @@ class _CatalogDetailPage extends StatelessWidget {
           ],
         ),
         if (viewModel.records.isNotEmpty) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _PhotoListSection(
             records: viewModel.records,
             representative: viewModel.representativeRecord,
@@ -299,7 +299,7 @@ class _CatalogDetailPage extends StatelessWidget {
             onSetRepresentative: viewModel.setRepresentativePhoto,
           ),
         ] else if (viewModel.isCaptured && viewModel.captureCount > 0) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _PhotoPendingCard(onRefresh: viewModel.load),
         ],
       ],

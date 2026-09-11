@@ -46,6 +46,8 @@ void main() {
     expect(find.textContaining('Draco'), findsWidgets);
     expect(find.textContaining('집'), findsWidgets);
     expect(find.byKey(const Key('multi-night-inline-result')), findsOneWidget);
+    expect(find.byKey(const Key('multi-night-reference-row')), findsOneWidget);
+    expect(find.byKey(const Key('multi-night-selectors-row')), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.textContaining('천문박명'), findsNothing);
     expect(matchService.calls, 1);
@@ -105,6 +107,10 @@ void main() {
       );
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('추천 촬영시간과도 잘 맞습니다.'), findsOneWidget);
+      final recommendedTime = tester.widget<Text>(
+        find.byKey(const Key('multi-night-recommended-time-value')),
+      );
+      expect(recommendedTime.style?.fontWeight, FontWeight.w700);
       expect(service.calls, 1);
 
       await tester.pump();
@@ -126,7 +132,29 @@ void main() {
     expect(find.text('오늘은 같은 구도로 촬영하기 어렵습니다.'), findsOneWidget);
     expect(find.text('같은 구도가 되는 시간에는 아직 하늘이 밝습니다.'), findsOneWidget);
     expect(find.text('20:00 이후 촬영을 권장합니다.'), findsOneWidget);
+    final action = tester.widget<Text>(
+      find.byKey(const Key('multi-night-action-guidance')),
+    );
+    expect(action.style?.fontWeight, FontWeight.w700);
     expect(find.textContaining('천문박명'), findsNothing);
+  });
+
+  testWidgets('selectors wrap vertically on a narrow screen', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        _FakeReferenceRepository([_reference]),
+        matchService: _StubMatchService(),
+        contentWidth: 360,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('multi-night-selectors-column')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('multi-night-selectors-row')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('site obstruction is explained in the inline result', (
@@ -176,26 +204,33 @@ Widget _app(
   DateTime? optimalWindowEnd,
   String? optimalWindowSiteId,
   List<ObservationSite> sites = const [],
-}) => MaterialApp(
-  home: Scaffold(
-    body: MultiNightFramingSection(
-      object: _m16,
-      repository: repository,
-      equipmentRepository: _FakeEquipmentRepository(equipment),
-      observationSiteRepository: _FakeSiteRepository(
-        sites.isEmpty ? [_site] : sites,
-      ),
-      matchService:
-          matchService ??
-          MultiNightFramingMatchService(
-            darkWindowResolver: _wholeDayDarkWindow,
-          ),
-      optimalWindowStart: optimalWindowStart,
-      optimalWindowEnd: optimalWindowEnd,
-      optimalWindowSiteId: optimalWindowSiteId,
+  double? contentWidth,
+}) {
+  final section = MultiNightFramingSection(
+    object: _m16,
+    repository: repository,
+    equipmentRepository: _FakeEquipmentRepository(equipment),
+    observationSiteRepository: _FakeSiteRepository(
+      sites.isEmpty ? [_site] : sites,
     ),
-  ),
-);
+    matchService:
+        matchService ??
+        MultiNightFramingMatchService(darkWindowResolver: _wholeDayDarkWindow),
+    optimalWindowStart: optimalWindowStart,
+    optimalWindowEnd: optimalWindowEnd,
+    optimalWindowSiteId: optimalWindowSiteId,
+  );
+  return MaterialApp(
+    home: Scaffold(
+      body: contentWidth == null
+          ? section
+          : Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: contentWidth, child: section),
+            ),
+    ),
+  );
+}
 
 MultiNightDarkWindow _wholeDayDarkWindow(DateTime date) {
   final start = DateTime(date.year, date.month, date.day);

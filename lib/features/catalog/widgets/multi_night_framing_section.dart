@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/multi_night_framing_reference.dart';
@@ -171,7 +172,7 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
         : _byId(_sites, currentReference.siteId, (value) => value.id);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -183,10 +184,10 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
             ),
             const SizedBox(height: 6),
             const Text(
-              '여러 날에 걸쳐 같은 구도로 촬영할 때 사용할 기준을 등록하고,\n'
+              '여러 날에 걸쳐 같은 구도로 촬영할 때 사용할 기준을 등록하고, '
               '오늘 같은 구도로 촬영하기 좋은 시간을 확인할 수 있습니다.',
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             if (_loading)
               const Center(child: CircularProgressIndicator())
             else if (_repository == null || _matchService == null)
@@ -210,27 +211,15 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
                 ],
               )
             else ...[
-              Wrap(
-                spacing: 10,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text('기준', style: Theme.of(context).textTheme.labelLarge),
-                  Text(
-                    '${_formatDateTime(currentReference.referenceCapturedAt)} · '
-                    '${equipment?.name ?? '장비 정보 없음'} · '
-                    '${site?.name ?? '관측지 정보 없음'}',
-                  ),
-                  OutlinedButton(
-                    key: const Key('multi-night-edit-button'),
-                    onPressed: () => _showEditor(existing: currentReference),
-                    child: const Text('기준 변경'),
-                  ),
-                ],
+              _buildReferenceSummary(
+                context,
+                currentReference,
+                equipment,
+                site,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _buildSelectors(),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               if (_calculating) ...[
                 const LinearProgressIndicator(),
                 const SizedBox(height: 8),
@@ -252,6 +241,59 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
   }
 
   bool get _canRegister => _equipment.isNotEmpty && _sites.isNotEmpty;
+
+  Widget _buildReferenceSummary(
+    BuildContext context,
+    MultiNightFramingReference reference,
+    Equipment? equipment,
+    ObservationSite? site,
+  ) {
+    final summary = Wrap(
+      spacing: 10,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          '기준',
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(color: AppColors.textSecondary),
+        ),
+        Text(
+          '${_formatDateTime(reference.referenceCapturedAt)} · '
+          '${equipment?.name ?? '장비 정보 없음'} · '
+          '${site?.name ?? '관측지 정보 없음'}',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+    final editButton = OutlinedButton(
+      key: const Key('multi-night-edit-button'),
+      onPressed: () => _showEditor(existing: reference),
+      child: const Text('기준 변경'),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 560) {
+          return Row(
+            key: const Key('multi-night-reference-row'),
+            children: [
+              Expanded(child: summary),
+              const SizedBox(width: 12),
+              editButton,
+            ],
+          );
+        }
+        return Wrap(
+          key: const Key('multi-night-reference-wrap'),
+          spacing: 10,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [summary, editButton],
+        );
+      },
+    );
+  }
 
   String? _resolveEquipmentId(String? current) {
     if (_equipment.any((value) => value.id == current)) return current;
@@ -322,6 +364,7 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
       );
       if (constraints.maxWidth < 480) {
         return Column(
+          key: const Key('multi-night-selectors-column'),
           children: [
             equipmentSelector,
             const SizedBox(height: 8),
@@ -330,6 +373,7 @@ class _MultiNightFramingSectionState extends State<MultiNightFramingSection> {
         );
       }
       return Row(
+        key: const Key('multi-night-selectors-row'),
         children: [
           Expanded(child: equipmentSelector),
           const SizedBox(width: 12),
@@ -502,52 +546,76 @@ class _InlineMatchResult extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (result.isAvailable) ...[
                 const Text(
                   '오늘 같은 구도로 촬영할 수 있습니다.',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  key: Key('multi-night-availability-status'),
+                  style: TextStyle(
+                    color: Colors.lightGreenAccent,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Wrap(
-                  spacing: 18,
-                  runSpacing: 6,
+                  key: const Key('multi-night-result-summary'),
+                  spacing: 24,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.end,
                   children: [
-                    _InlineValue(
-                      label: '오늘',
+                    _PrimaryResultValue(
+                      label: '오늘 같은 구도 촬영',
                       value: _formatTime(result.recommendedAt!),
                     ),
                     if (result.rangeStart != null && result.rangeEnd != null)
-                      _InlineValue(
-                        label: '권장',
+                      _ResultValue(
+                        label: '권장 시작',
                         value:
                             '${_formatTime(result.rangeStart!)}~${_formatTime(result.rangeEnd!)}',
                       ),
-                    _InlineValue(
+                    _ResultValue(
                       label: '구도 차이',
                       value: result.framingDifferenceLabel,
                     ),
                   ],
                 ),
                 if (matchesOptimalWindow) ...[
-                  const SizedBox(height: 8),
-                  const Text('추천 촬영시간과도 잘 맞습니다.'),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '추천 촬영시간과도 잘 맞습니다.',
+                    style: TextStyle(
+                      color: AppColors.messier,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ] else ...[
                 const Text(
                   '오늘은 같은 구도로 촬영하기 어렵습니다.',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  key: Key('multi-night-availability-status'),
+                  style: TextStyle(
+                    color: Colors.orangeAccent,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   result.unavailableReason ?? '오늘은 이전 촬영과 같은 구도를 재현하기 어렵습니다.',
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
                 if (result.darkStart != null) ...[
                   const SizedBox(height: 4),
-                  Text('${_formatTime(result.darkStart!)} 이후 촬영을 권장합니다.'),
+                  Text(
+                    '${_formatTime(result.darkStart!)} 이후 촬영을 권장합니다.',
+                    key: const Key('multi-night-action-guidance'),
+                    style: const TextStyle(
+                      color: AppColors.messier,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ],
               ExpansionTile(
@@ -613,6 +681,60 @@ class _InlineMatchResult extends StatelessWidget {
     return '${local.hour.toString().padLeft(2, '0')}:'
         '${local.minute.toString().padLeft(2, '0')}';
   }
+}
+
+class _PrimaryResultValue extends StatelessWidget {
+  const _PrimaryResultValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    key: const Key('multi-night-recommended-time'),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+      ),
+      const SizedBox(height: 1),
+      Text(
+        value,
+        key: const Key('multi-night-recommended-time-value'),
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+          color: AppColors.messier,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ],
+  );
+}
+
+class _ResultValue extends StatelessWidget {
+  const _ResultValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+      ),
+      const SizedBox(height: 1),
+      Text(
+        value,
+        style: const TextStyle(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  );
 }
 
 class _InlineValue extends StatelessWidget {

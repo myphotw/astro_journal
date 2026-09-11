@@ -18,21 +18,36 @@ void main() {
       ),
     );
 
-    final imagingWrap = find.ancestor(
-      of: find.text('S30'),
-      matching: find.byType(Wrap),
-    );
-    expect(imagingWrap, findsOneWidget);
     expect(
-      find.descendant(of: imagingWrap, matching: find.text('★★★★☆')),
+      find.byKey(const ValueKey('equipment-imaging-summary-s30')),
+      findsOneWidget,
+    );
+    final imagingSummary = find.byKey(
+      const ValueKey('equipment-imaging-summary-s30'),
+    );
+    expect(imagingSummary, findsOneWidget);
+    expect(
+      tester.widget<Container>(imagingSummary).decoration,
+      isA<BoxDecoration>(),
+    );
+    expect(
+      find.descendant(of: imagingSummary, matching: find.text('S30')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: imagingWrap, matching: find.text('화면의 38%')),
+      find.descendant(of: imagingSummary, matching: find.text('★★★★☆')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: imagingWrap, matching: find.text('촬영 가능')),
+      find.descendant(of: imagingSummary, matching: find.text('38%')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: imagingSummary, matching: find.text('여유 있음')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: imagingSummary, matching: find.text('촬영 가능')),
       findsOneWidget,
     );
     expect(
@@ -54,6 +69,32 @@ void main() {
     expect(find.text('20mm'), findsOneWidget);
     expect(find.text('6mm'), findsOneWidget);
     expect(find.byType(Table), findsOneWidget);
+  });
+
+  testWidgets('imaging summary wraps without overflow on a narrow screen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              child: EquipmentRecommendationSection(
+                recommendation: _recommendation,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('equipment-imaging-details-s30')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 }
 

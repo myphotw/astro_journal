@@ -111,6 +111,23 @@ void main() {
       ),
       findsOneWidget,
     );
+    final summaryKeys = [
+      const Key('catalog-today-status'),
+      const Key('catalog-available-window'),
+      const Key('catalog-optimal-window'),
+      const Key('catalog-recommended-duration'),
+    ];
+    final firstTop = tester.getTopLeft(find.byKey(summaryKeys.first)).dy;
+    for (final key in summaryKeys.skip(1)) {
+      expect(
+        (tester.getTopLeft(find.byKey(key)).dy - firstTop).abs(),
+        lessThanOrEqualTo(1),
+      );
+    }
+    expect(
+      tester.widget<Text>(find.text('60분')).style?.fontWeight,
+      FontWeight.w600,
+    );
     expect(find.text('20:00 ~ 21:30'), findsOneWidget);
     expect(find.text('20:10 ~ 21:20'), findsOneWidget);
     expect(find.textContaining('현재 환경'), findsNothing);
@@ -118,5 +135,34 @@ void main() {
     expect(find.text('OFF'), findsOneWidget);
     expect(find.text('모자이크'), findsOneWidget);
     expect(find.text('ON'), findsOneWidget);
+
+    final section = tester.widget<CatalogExposureGuidanceSection>(
+      find.byType(CatalogExposureGuidanceSection),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              child: CatalogExposureGuidanceSection(
+                guidance: section.guidance,
+                site: section.site,
+                availability: section.availability,
+                isAvailabilityLoading: section.isAvailabilityLoading,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('catalog-available-window'))).dy,
+      greaterThan(
+        tester.getTopLeft(find.byKey(const Key('catalog-today-status'))).dy,
+      ),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

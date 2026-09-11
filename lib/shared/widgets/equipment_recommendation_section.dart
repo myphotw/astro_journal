@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/models/equipment_recommendation.dart';
+import '../../data/models/fov_box.dart';
 
 /// 천체 상세·추천 상세 공용 장비 추천 섹션.
 class EquipmentRecommendationSection extends StatelessWidget {
@@ -25,7 +26,7 @@ class EquipmentRecommendationSection extends StatelessWidget {
     return Card(
       color: AppColors.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -37,11 +38,13 @@ class EquipmentRecommendationSection extends StatelessWidget {
                 color: AppColors.textPrimary,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             if (recommendation.imaging.isNotEmpty) ...[
               _SectionHeader(icon: '📷', label: isToday ? '오늘 추천' : '촬영'),
-              const SizedBox(height: 8),
-              ...recommendation.imaging.map(_buildImagingRow),
+              const SizedBox(height: 6),
+              ...recommendation.imaging.map(
+                (item) => _buildImagingRow(context, item),
+              ),
             ] else ...[
               const _SectionHeader(icon: '📷', label: '촬영'),
               const SizedBox(height: 4),
@@ -50,9 +53,9 @@ class EquipmentRecommendationSection extends StatelessWidget {
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _SectionHeader(icon: '👁', label: '안시'),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             if (recommendation.visual.isNotEmpty)
               _buildVisualSection(recommendation.visual)
             else
@@ -66,7 +69,10 @@ class EquipmentRecommendationSection extends StatelessWidget {
     );
   }
 
-  Widget _buildImagingRow(ImagingEquipmentRecommendation item) {
+  Widget _buildImagingRow(
+    BuildContext context,
+    ImagingEquipmentRecommendation item,
+  ) {
     final medal = switch (item.rank) {
       1 => '🥇 ',
       2 => '🥈 ',
@@ -74,68 +80,101 @@ class EquipmentRecommendationSection extends StatelessWidget {
       _ => '',
     };
     final stars = '${'★' * item.starCount}${'☆' * (5 - item.starCount)}';
+    final description = item.screenFillNote;
+    final statusColor =
+        item.framingRecommendation == FramingRecommendation.good ||
+            item.framingRecommendation == FramingRecommendation.optimal
+        ? Colors.lightGreenAccent
+        : Colors.orangeAccent;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 5,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 110),
-            child: Text(
-              '$medal${item.equipment.name}',
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        key: ValueKey('equipment-imaging-summary-${item.equipment.id}'),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          border: Border.all(
+            color: AppColors.textSecondary.withValues(alpha: 0.18),
+          ),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 110),
+                  child: Text(
+                    '$medal${item.equipment.name}',
+                    key: ValueKey(
+                      'equipment-imaging-name-${item.equipment.id}',
+                    ),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Text(
+                  stars,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              key: ValueKey('equipment-imaging-details-${item.equipment.id}'),
+              spacing: 18,
+              runSpacing: 5,
+              children: [
+                _ImagingMetric(
+                  key: ValueKey('equipment-imaging-fill-${item.equipment.id}'),
+                  label: '화면 점유율',
+                  value: '${item.screenFillPercent}%',
+                  valueColor: AppColors.messier,
+                ),
+                _ImagingMetric(
+                  key: ValueKey(
+                    'equipment-imaging-framing-${item.equipment.id}',
+                  ),
+                  label: '프레이밍',
+                  value: item.framingRecommendation.labelKo,
+                  valueColor: AppColors.messier,
+                ),
+                _ImagingMetric(
+                  key: ValueKey(
+                    'equipment-imaging-status-${item.equipment.id}',
+                  ),
+                  label: '촬영 상태',
+                  value: item.reason,
+                  valueColor: statusColor,
+                ),
+              ],
+            ),
+            if (description != null && description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.3,
+                ),
               ),
-            ),
-          ),
-          Text(
-            stars,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 13,
-              height: 1.3,
-            ),
-          ),
-          Text(
-            '화면의 ${item.screenFillPercent}%',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 13,
-              height: 1.3,
-            ),
-          ),
-          Text(
-            item.framingRecommendation.labelKo,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (item.screenFillNote != null)
-            Text(
-              item.screenFillNote!,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                height: 1.3,
-              ),
-            )
-          else if (item.reason.isNotEmpty)
-            Text(
-              item.reason,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                height: 1.3,
-              ),
-            ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -222,6 +261,42 @@ class EquipmentRecommendationSection extends StatelessWidget {
       children: blocks,
     );
   }
+}
+
+class _ImagingMetric extends StatelessWidget {
+  const _ImagingMetric({
+    super.key,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minWidth: 88),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// 아이피스별 안시 추천을 가로 비교 표로 표시한다.
@@ -352,7 +427,7 @@ class _TableLabelCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       child: Text(
         text,
         style: const TextStyle(
@@ -379,7 +454,7 @@ class _TableHeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       child: Text(
         text,
         textAlign: TextAlign.center,
@@ -417,7 +492,7 @@ class _TableValueCell extends StatelessWidget {
         : AppColors.textPrimary;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       child: Text(
         text,
         textAlign: TextAlign.center,
@@ -494,7 +569,7 @@ class _EmptyCard extends StatelessWidget {
     return Card(
       color: AppColors.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
