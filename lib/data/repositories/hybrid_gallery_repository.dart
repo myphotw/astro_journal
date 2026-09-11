@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../../services/app_logger.dart';
@@ -12,6 +13,9 @@ import '../../services/tc_backend_auth_service.dart';
 typedef GalleryRemoteFactory = GalleryRemoteDataSource Function(String baseUrl);
 
 class HybridGalleryRepository implements GalleryRepository {
+  static const _listCacheKey = 'astro:gallery:list';
+  static const _fullSnapshotCacheKey = 'astro:gallery:full_snapshot';
+
   factory HybridGalleryRepository({
     required TcBackendSettingsService settingsService,
     required GalleryCacheDataSource cache,
@@ -48,17 +52,25 @@ class HybridGalleryRepository implements GalleryRepository {
   final DateTime Function() _now;
   final Duration listTtl;
   final Duration detailTtl;
+  Future<void> _listMutationTail = Future<void>.value();
 
   @override
   Future<List<GalleryItem>> getAll({bool forceRefresh = false}) async =>
       (await getSnapshot(forceRefresh: forceRefresh)).items;
 
   @override
-  Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async {
-    const key = 'astro:gallery:list';
+  Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) =>
+      _serializeListMutation(
+        () => _getSnapshotLocked(forceRefresh: forceRefresh),
+      );
+
+  Future<GallerySnapshot> _getSnapshotLocked({
+    required bool forceRefresh,
+  }) async {
     final settings = await _settingsService.load();
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
-    final cached = await _cache.read(key);
+    final cached = await _cache.read(_listCacheKey);
+    final fullSnapshot = await _cache.read(_fullSnapshotCacheKey);
     final cachedItems = _cachedItems(cached);
     if (!settings.enabled || baseUrl == null) {
       return GallerySnapshot(
@@ -69,7 +81,9 @@ class HybridGalleryRepository implements GalleryRepository {
         backendEnabled: false,
       );
     }
-    if (!forceRefresh && _isFresh(cached, listTtl)) {
+    if (!forceRefresh &&
+        cached != null &&
+        _isFresh(fullSnapshot, listTtl)) {
       return GallerySnapshot(
         items: cachedItems,
         source: GallerySnapshotSource.cache,
@@ -98,7 +112,11 @@ class HybridGalleryRepository implements GalleryRepository {
             ),
           )
           .toList(growable: false);
-      await _write(key, synced.map((item) => item.toJson()).toList());
+      await _write(
+        _listCacheKey,
+        synced.map((item) => item.toJson()).toList(),
+      );
+      await _write(_fullSnapshotCacheKey, const {'completed': true});
       return GallerySnapshot(
         items: synced,
         source: GallerySnapshotSource.remote,
@@ -215,9 +233,20 @@ class HybridGalleryRepository implements GalleryRepository {
     String backendRecordId,
     Map<String, Object?> fields, {
     int? revision,
+  }) => _serializeListMutation(
+    () => _applyLocalPatchLocked(
+      backendRecordId,
+      fields,
+      revision: revision,
+    ),
+  );
+
+  Future<void> _applyLocalPatchLocked(
+    String backendRecordId,
+    Map<String, Object?> fields, {
+    int? revision,
   }) async {
-    const listKey = 'astro:gallery:list';
-    final listEntry = await _cache.read(listKey);
+    final listEntry = await _cache.read(_listCacheKey);
     final items = _cachedItems(listEntry);
     GalleryItem? target;
     for (final item in items) {
@@ -239,7 +268,10 @@ class HybridGalleryRepository implements GalleryRepository {
             return item;
           })
           .toList(growable: false);
-      await _write(listKey, rewritten.map((item) => item.toJson()).toList());
+      await _write(
+        _listCacheKey,
+        rewritten.map((item) => item.toJson()).toList(),
+      );
     }
 
     final detailKey = 'astro:gallery:detail:$backendRecordId';
@@ -253,15 +285,20 @@ class HybridGalleryRepository implements GalleryRepository {
   }
 
   @override
-  Future<void> applyLocalDelete(String backendRecordId) async {
-    const listKey = 'astro:gallery:list';
-    final entry = await _cache.read(listKey);
+  Future<void> applyLocalDelete(String backendRecordId) =>
+      _serializeListMutation(() => _applyLocalDeleteLocked(backendRecordId));
+
+  Future<void> _applyLocalDeleteLocked(String backendRecordId) async {
+    final entry = await _cache.read(_listCacheKey);
     if (entry != null) {
-      final remaining = _cachedItems(entry)
+      final before = _cachedItems(entry);
+      final remaining = before
           .where((item) => item.backendRecordId != backendRecordId)
-          .map((item) => item.toJson())
           .toList(growable: false);
-      await _write(listKey, remaining);
+      await _write(
+        _listCacheKey,
+        remaining.map((item) => item.toJson()).toList(growable: false),
+      );
     }
     // An invalidated detail entry parses as null and cannot resurrect a
     // locally deleted record while the durable DELETE is pending.
@@ -275,7 +312,7 @@ class HybridGalleryRepository implements GalleryRepository {
       await _cache.read('astro:gallery:detail:$backendRecordId'),
     );
     if (detail != null) revisions.add(detail.revision);
-    for (final item in _cachedItems(await _cache.read('astro:gallery:list'))) {
+    for (final item in _cachedItems(await _cache.read(_listCacheKey))) {
       if (item.backendRecordId == backendRecordId) {
         revisions.add(item.revision);
         break;
@@ -290,13 +327,15 @@ class HybridGalleryRepository implements GalleryRepository {
   }
 
   @override
-  Future<bool> upsertPulledItem(GalleryItem item) async {
+  Future<bool> upsertPulledItem(GalleryItem item) =>
+      _serializeListMutation(() => _upsertPulledItemLocked(item));
+
+  Future<bool> _upsertPulledItemLocked(GalleryItem item) async {
     final currentRevision = await getCachedRevision(item.backendRecordId);
     if (currentRevision != null && currentRevision >= item.revision) {
       return false;
     }
-    const listKey = 'astro:gallery:list';
-    final current = _cachedItems(await _cache.read(listKey));
+    final current = _cachedItems(await _cache.read(_listCacheKey));
     final synced = item.copyWith(syncedAt: _now(), syncState: 'SYNCED');
     var replaced = false;
     final updated = current.map((existing) {
@@ -308,7 +347,10 @@ class HybridGalleryRepository implements GalleryRepository {
       );
     }).toList();
     if (!replaced) updated.add(synced);
-    await _write(listKey, updated.map((entry) => entry.toJson()).toList());
+    await _write(
+      _listCacheKey,
+      updated.map((entry) => entry.toJson()).toList(),
+    );
     final detailKey = 'astro:gallery:detail:${item.backendRecordId}';
     final existingDetail = _cachedItem(await _cache.read(detailKey));
     final mergedDetail = synced.copyWith(
@@ -325,6 +367,18 @@ class HybridGalleryRepository implements GalleryRepository {
     String backendRecordId, {
     required int revision,
     DateTime? deletedAt,
+  }) => _serializeListMutation(
+    () => _applyPulledDeleteLocked(
+      backendRecordId,
+      revision: revision,
+      deletedAt: deletedAt,
+    ),
+  );
+
+  Future<bool> _applyPulledDeleteLocked(
+    String backendRecordId, {
+    required int revision,
+    DateTime? deletedAt,
   }) async {
     final tombstoneKey = 'astro:gallery:tombstone:$backendRecordId';
     final existingTombstone = _tombstone(await _cache.read(tombstoneKey));
@@ -333,7 +387,7 @@ class HybridGalleryRepository implements GalleryRepository {
     }
     final currentRevision = await getCachedRevision(backendRecordId);
     if (currentRevision != null && currentRevision > revision) return false;
-    await applyLocalDelete(backendRecordId);
+    await _applyLocalDeleteLocked(backendRecordId);
     await _write(tombstoneKey, {
       'record_id': backendRecordId,
       'revision': revision,
@@ -424,11 +478,31 @@ class HybridGalleryRepository implements GalleryRepository {
     }
   }
 
-  Future<void> _write(String key, Object payload) => _cache.write(
-    GalleryCacheEntry(
-      key: key,
-      payloadJson: jsonEncode(payload),
-      cachedAt: _now().toUtc(),
-    ),
-  );
+  Future<void> _write(String key, Object payload) async {
+    await _cache.write(
+      GalleryCacheEntry(
+        key: key,
+        payloadJson: jsonEncode(payload),
+        cachedAt: _now().toUtc(),
+      ),
+    );
+  }
+
+  Future<T> _serializeListMutation<T>(
+    Future<T> Function() operation,
+  ) async {
+    final previous = _listMutationTail;
+    final completed = Completer<void>();
+    _listMutationTail = completed.future;
+    try {
+      await previous;
+    } on Object {
+      // A failed operation must not permanently block later cache work.
+    }
+    try {
+      return await operation();
+    } finally {
+      completed.complete();
+    }
+  }
 }

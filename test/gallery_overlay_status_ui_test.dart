@@ -6,6 +6,7 @@ import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/shooting_record_repository.dart';
 import 'package:astro_journal/features/gallery/view/gallery_detail_screen.dart';
+import 'package:astro_journal/features/gallery/widgets/photo_overlay_view.dart';
 import 'package:astro_journal/features/gallery/viewmodel/gallery_detail_view_model.dart';
 import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
@@ -138,6 +139,120 @@ void main() {
     expect(find.text('Overlay 계산 대기 중'), findsNothing);
     expect(find.text('이미지 크기 정보를 확인할 수 없습니다.'), findsOneWidget);
   });
+
+  testWidgets(
+    'zoomed photo owns pan gestures and restores page swipe at base scale',
+    (tester) async {
+      final records = [
+        ShootingRecord(
+          id: 'gesture-one',
+          celestialObjectId: 'M31',
+          capturedAt: DateTime.utc(2026, 9, 10),
+          createdAt: DateTime.utc(2026, 9, 10),
+          photoUri: '/missing-gesture-one.jpg',
+          plateSolve: PlateSolveResult.success(
+            centerRa: 10.68,
+            centerDec: 41.27,
+            fovWidth: 2.2,
+            fovHeight: 3.9,
+            imageWidth: 1080,
+            imageHeight: 1920,
+          ),
+        ),
+        ShootingRecord(
+          id: 'gesture-two',
+          celestialObjectId: 'M42',
+          capturedAt: DateTime.utc(2026, 9, 11),
+          createdAt: DateTime.utc(2026, 9, 11),
+          photoUri: '/missing-gesture-two.jpg',
+        ),
+      ];
+      final detail = GalleryDetailViewModel(
+        records: records,
+        initialIndex: 0,
+        overlayService: _ImmediateOverlayService(),
+      );
+      final gallery = GalleryViewModel(
+        _RecordListRepository(records),
+        _CatalogRepository(),
+        CatalogSearchService(),
+      );
+      await gallery.load();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<GalleryViewModel>.value(value: gallery),
+            ChangeNotifierProvider<GalleryDetailViewModel>.value(value: detail),
+          ],
+          child: const MaterialApp(home: GalleryDetailScreen()),
+        ),
+      );
+      await tester.pump();
+
+      final pageViewFinder = find.byKey(const Key('gallery-detail-page-view'));
+      final viewerFinder = find.byKey(
+        const ValueKey<String>(
+          'gallery-photo-interactive-/missing-gesture-one.jpg',
+        ),
+      );
+
+      PageView pageView() => tester.widget<PageView>(pageViewFinder);
+      TransformationController controller() => tester
+          .widget<InteractiveViewer>(viewerFinder)
+          .transformationController!;
+
+      expect(pageView().physics, isA<ClampingScrollPhysics>());
+
+      final zoomed = controller().value.clone()
+        ..setIdentity()
+        ..setEntry(0, 0, 2)
+        ..setEntry(1, 1, 2);
+      controller().value = zoomed;
+      await tester.pump();
+
+      expect(pageView().physics, isA<NeverScrollableScrollPhysics>());
+      final translationBefore = controller().value.entry(0, 3);
+      await tester.drag(viewerFinder, const Offset(-40, 0));
+      await tester.pump();
+      expect(controller().value.entry(0, 3), isNot(translationBefore));
+      expect(detail.currentIndex, 0);
+
+      controller().value = controller().value.clone()..setIdentity();
+      await tester.pump();
+      expect(pageView().physics, isA<ClampingScrollPhysics>());
+
+      detail.toggleOverlayEnabled();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: viewerFinder,
+          matching: find.byType(PhotoOverlayView),
+        ),
+        findsOneWidget,
+      );
+
+      controller().value = zoomed;
+      await tester.pump();
+      expect(pageView().physics, isA<NeverScrollableScrollPhysics>());
+      final overlayTranslationBefore = controller().value.entry(0, 3);
+      await tester.drag(viewerFinder, const Offset(-40, 0));
+      await tester.pump();
+      expect(controller().value.entry(0, 3), isNot(overlayTranslationBefore));
+      expect(detail.currentIndex, 0);
+
+      controller().value = controller().value.clone()..setIdentity();
+      await tester.pump();
+      expect(pageView().physics, isA<ClampingScrollPhysics>());
+
+      await tester.drag(pageViewFinder, const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(detail.currentIndex, 1);
+    },
+  );
 }
 
 class _ControlledOverlayService extends PhotoOverlayService {
@@ -155,6 +270,19 @@ class _ControlledOverlayService extends PhotoOverlayService {
   }
 }
 
+class _ImmediateOverlayService extends PhotoOverlayService {
+  _ImmediateOverlayService() : super(_CatalogRepository());
+
+  @override
+  Future<PhotoOverlayResult> buildOverlay(ShootingRecord record) async {
+    return const PhotoOverlayResult(
+      imageWidth: 1080,
+      imageHeight: 1920,
+      objects: [],
+    );
+  }
+}
+
 class _RecordRepository extends Fake implements ShootingRecordRepository {
   _RecordRepository(this.record);
 
@@ -166,6 +294,23 @@ class _RecordRepository extends Fake implements ShootingRecordRepository {
   @override
   Future<ShootingRecord?> getById(String id) async =>
       id == record.id ? record : null;
+}
+
+class _RecordListRepository extends Fake implements ShootingRecordRepository {
+  _RecordListRepository(this.records);
+
+  final List<ShootingRecord> records;
+
+  @override
+  Future<List<ShootingRecord>> getAll() async => records;
+
+  @override
+  Future<ShootingRecord?> getById(String id) async {
+    for (final record in records) {
+      if (record.id == id) return record;
+    }
+    return null;
+  }
 }
 
 class _CatalogRepository extends Fake implements CatalogRepository {

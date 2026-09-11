@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:astro_journal/data/datasources/gallery_cache_local_datasource.dart';
@@ -43,10 +44,12 @@ void main() {
     expect(result.single.syncedAt, now);
     expect(remote.galleryCalls, 1);
     expect(cache.entries['astro:gallery:list'], isNotNull);
+    expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, now);
   });
 
   test('fresh cache is returned without backend call', () async {
     cache.putItems('astro:gallery:list', [_item('cached')], now);
+    cache.putFullSnapshot(now);
 
     final result = await repository().getAll();
 
@@ -106,15 +109,21 @@ void main() {
   });
 
   test('backend failure falls back to expired SQLite cache', () async {
+    final staleSnapshotAt = now.subtract(const Duration(hours: 2));
     cache.putItems('astro:gallery:list', [
       _item('fallback'),
-    ], now.subtract(const Duration(hours: 2)));
+    ], staleSnapshotAt);
+    cache.putFullSnapshot(staleSnapshotAt);
     remote.failure = const RemoteGalleryException('offline');
 
     final result = await repository().getAll();
 
     expect(remote.galleryCalls, 1);
     expect(result.single.backendFileId, 'fallback');
+    expect(
+      cache.entries['astro:gallery:full_snapshot']?.cachedAt,
+      staleSnapshotAt,
+    );
   });
 
   test('backend off uses SQLite cache only', () async {
@@ -135,12 +144,14 @@ void main() {
     cache.putItems('astro:gallery:list', [
       _item('expired'),
     ], now.subtract(const Duration(minutes: 31)));
+    cache.putFullSnapshot(now.subtract(const Duration(minutes: 31)));
     remote.items = [_item('fresh')];
 
     final result = await repository().getAll();
 
     expect(remote.galleryCalls, 1);
     expect(result.single.backendFileId, 'fresh');
+    expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, now);
   });
 
   test(
@@ -149,6 +160,7 @@ void main() {
       cache.putItems('astro:gallery:list', [
         _item('same', plateSolveStatus: PlateSolveQueueStatus.processing),
       ], now.subtract(const Duration(minutes: 31)));
+      cache.putFullSnapshot(now.subtract(const Duration(minutes: 31)));
       remote.items = [_item('same')];
 
       final result = await repository().getAll();
@@ -167,6 +179,7 @@ void main() {
         plateSolve: PlateSolveResult.success(centerRa: 83.8, centerDec: -5.4),
       ),
     ], now.subtract(const Duration(minutes: 31)));
+    cache.putFullSnapshot(now.subtract(const Duration(minutes: 31)));
     remote.items = [
       _item(
         'same',
@@ -447,18 +460,145 @@ void main() {
     expect(await subject.upsertPulledItem(revision2), isFalse);
     expect(await subject.getAll(), isEmpty);
   });
+
+  test(
+    'partial pull cache without full snapshot marker fetches full gallery',
+    () async {
+      final subject = repository();
+      final partial = _item('partial', catalogObjectId: 'M54');
+      final second = _item('second', catalogObjectId: 'M31');
+
+      expect(await subject.upsertPulledItem(partial), isTrue);
+      expect(cache.entries['astro:gallery:full_snapshot'], isNull);
+      remote.items = [partial, second];
+
+      final result = await subject.getAll();
+
+      expect(remote.galleryCalls, 1);
+      expect(result, hasLength(2));
+      expect(
+        result.map((item) => item.backendRecordId),
+        containsAll(['record-partial', 'record-second']),
+      );
+      expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, now);
+    },
+  );
+
+  test('pull mutations do not extend full snapshot freshness', () async {
+    await settings.save(
+      const TcBackendSettings(baseUrl: 'https://backend.test', enabled: false),
+    );
+    final snapshotAt = now.subtract(const Duration(minutes: 5));
+    cache.putItems('astro:gallery:list', [_item('existing')], snapshotAt);
+    cache.putFullSnapshot(snapshotAt);
+    final subject = repository();
+
+    final created = _item('created', catalogObjectId: 'M31');
+    expect(await subject.upsertPulledItem(created), isTrue);
+    expect(
+      cache.entries['astro:gallery:full_snapshot']?.cachedAt,
+      snapshotAt,
+    );
+
+    final updated = _item(
+      'created',
+      catalogObjectId: 'M31',
+      revision: 2,
+    );
+    expect(await subject.upsertPulledItem(updated), isTrue);
+    expect(
+      cache.entries['astro:gallery:full_snapshot']?.cachedAt,
+      snapshotAt,
+    );
+
+    expect(
+      await subject.applyPulledDelete('record-created', revision: 3),
+      isTrue,
+    );
+    expect(
+      cache.entries['astro:gallery:full_snapshot']?.cachedAt,
+      snapshotAt,
+    );
+  });
+
+  test('full snapshot followed by pull keeps the complete list', () async {
+    final subject = repository();
+    remote.items = [
+      _item('first', catalogObjectId: 'M8'),
+      _item('second', catalogObjectId: 'M31'),
+    ];
+
+    final snapshot = await subject.getAll();
+    expect(snapshot, hasLength(2));
+    final snapshotAt = cache.entries['astro:gallery:full_snapshot']?.cachedAt;
+
+    expect(
+      await subject.upsertPulledItem(
+        _item('third', catalogObjectId: 'NGC7293'),
+      ),
+      isTrue,
+    );
+
+    await settings.save(
+      const TcBackendSettings(baseUrl: 'https://backend.test', enabled: false),
+    );
+    final result = await subject.getAll();
+    expect(result, hasLength(3));
+    expect(
+      result.map((item) => item.backendRecordId),
+      containsAll(['record-first', 'record-second', 'record-third']),
+    );
+    expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, snapshotAt);
+  });
+
+  test(
+    'concurrent full snapshot then pull serializes list mutations',
+    () async {
+      final subject = repository();
+      remote.items = [
+        _item('first', catalogObjectId: 'M8'),
+        _item('second', catalogObjectId: 'M31'),
+      ];
+      remote.galleryStarted = Completer<void>();
+      remote.galleryRelease = Completer<void>();
+
+      final snapshotFuture = subject.getAll();
+      await remote.galleryStarted!.future;
+      final pullFuture = subject.upsertPulledItem(
+        _item('third', catalogObjectId: 'NGC7293'),
+      );
+      remote.galleryRelease!.complete();
+
+      expect(await snapshotFuture, hasLength(2));
+      expect(await pullFuture, isTrue);
+      await settings.save(
+        const TcBackendSettings(
+          baseUrl: 'https://backend.test',
+          enabled: false,
+        ),
+      );
+      final result = await subject.getAll();
+      expect(result, hasLength(3));
+      expect(
+        result.map((item) => item.backendRecordId),
+        containsAll(['record-first', 'record-second', 'record-third']),
+      );
+    },
+  );
 }
 
 GalleryItem _item(
   String id, {
+  int revision = 1,
+  String catalogObjectId = 'M42',
   int? commonFileId,
   PlateSolveQueueStatus? plateSolveStatus,
   String? plateSolveJobId,
   PlateSolveResult? plateSolve,
 }) => GalleryItem(
   backendRecordId: 'record-$id',
-  revision: 1,
-  catalogObjectId: 'M42',
+  revision: revision,
+  catalogObjectId: catalogObjectId,
   capturedAt: DateTime.utc(2026, 8, 7),
   favorite: false,
   representative: false,
@@ -483,6 +623,14 @@ class _FakeCache implements GalleryCacheDataSource {
     );
   }
 
+  void putFullSnapshot(DateTime cachedAt) {
+    entries['astro:gallery:full_snapshot'] = GalleryCacheEntry(
+      key: 'astro:gallery:full_snapshot',
+      payloadJson: jsonEncode(const {'completed': true}),
+      cachedAt: cachedAt,
+    );
+  }
+
   @override
   Future<GalleryCacheEntry?> read(String key) async => entries[key];
 
@@ -498,11 +646,17 @@ class _FakeRemote implements GalleryRemoteDataSource {
   List<GalleryItem> items = const [];
   GalleryItem? detail;
   RemoteGalleryException? failure;
+  Completer<void>? galleryStarted;
+  Completer<void>? galleryRelease;
 
   @override
   Future<List<GalleryItem>> getGallery({Map<String, String>? query}) async {
     galleryCalls++;
     if (failure case final error?) throw error;
+    final started = galleryStarted;
+    if (started != null && !started.isCompleted) started.complete();
+    final release = galleryRelease;
+    if (release != null) await release.future;
     return items;
   }
 

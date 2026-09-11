@@ -129,6 +129,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
   PageController? _pageController;
   bool _editMode = false;
   bool _pageReady = false;
+  bool _isPhotoZoomed = false;
 
   // 편집용 상태/컨트롤러
   DateTime? _capturedAt;
@@ -226,8 +227,16 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
     if (_editMode) return;
     final detailVm = context.read<GalleryDetailViewModel>();
     detailVm.onPageChanged(index);
-    setState(() => _syncRecord(detailVm.currentRecord));
+    setState(() {
+      _isPhotoZoomed = false;
+      _syncRecord(detailVm.currentRecord);
+    });
     _liveRefreshController?.resume();
+  }
+
+  void _onPhotoZoomChanged(bool isZoomed) {
+    if (_isPhotoZoomed == isZoomed) return;
+    setState(() => _isPhotoZoomed = isZoomed);
   }
 
   void _initControllers() {
@@ -288,7 +297,10 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       // 편집 취소 → 컨트롤러 초기화 (사용자 수정 데이터 보호 안 함 — 취소이므로 원복)
       _initControllers();
     }
-    setState(() => _editMode = !_editMode);
+    setState(() {
+      _editMode = !_editMode;
+      _isPhotoZoomed = false;
+    });
   }
 
   Future<void> _save(BuildContext context) async {
@@ -522,8 +534,9 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       body: pageController == null
           ? const Center(child: CircularProgressIndicator())
           : PageView.builder(
+              key: const Key('gallery-detail-page-view'),
               controller: pageController,
-              physics: _editMode
+              physics: _editMode || _isPhotoZoomed
                   ? const NeverScrollableScrollPhysics()
                   : const ClampingScrollPhysics(),
               itemCount: detailVm.records.length,
@@ -555,7 +568,11 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
                     onMapLocationChanged: _onMapLocationChanged,
                   );
                 }
-                return _ViewBody(record: record, obj: recordObj);
+                return _ViewBody(
+                  record: record,
+                  obj: recordObj,
+                  onPhotoZoomChanged: _onPhotoZoomChanged,
+                );
               },
             ),
     );
@@ -722,7 +739,10 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
                 return;
               }
               _pageController?.jumpToPage(detailVm.currentIndex);
-              setState(() => _syncRecord(detailVm.currentRecord));
+              setState(() {
+                _isPhotoZoomed = false;
+                _syncRecord(detailVm.currentRecord);
+              });
             },
             child: const Text('삭제'),
           ),
@@ -735,10 +755,15 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
 // ── 보기 모드 (원본 사진 우선 + 상세정보 Bottom Sheet) ───────────────────────
 
 class _ViewBody extends StatelessWidget {
-  const _ViewBody({required this.record, this.obj});
+  const _ViewBody({
+    required this.record,
+    required this.onPhotoZoomChanged,
+    this.obj,
+  });
 
   final ShootingRecord record;
   final dynamic obj;
+  final ValueChanged<bool> onPhotoZoomChanged;
 
   String _formatDateTime(DateTime dt) {
     String p(int n) => n.toString().padLeft(2, '0');
@@ -924,6 +949,7 @@ class _ViewBody extends StatelessWidget {
       children: [
         Expanded(
           child: _PhotoSection(
+            key: ValueKey(record.id),
             photoUri: record.galleryPreviewUri,
             overlay: detailVm.overlayFor(record.id),
             isOverlayLoading: detailVm.isOverlayLoadingFor(record.id),
@@ -936,6 +962,7 @@ class _ViewBody extends StatelessWidget {
             onToggleShowTarget: detailVm.toggleShowTarget,
             onToggleShowNearby: detailVm.toggleShowNearby,
             onRequestOverlayLoad: detailVm.requestOverlayForCurrent,
+            onZoomChanged: onPhotoZoomChanged,
             fillViewport: true,
           ),
         ),
@@ -2431,8 +2458,9 @@ class _EditField extends StatelessWidget {
 
 // ── _PhotoSection ────────────────────────────────────────────────────────────
 
-class _PhotoSection extends StatelessWidget {
+class _PhotoSection extends StatefulWidget {
   const _PhotoSection({
+    super.key,
     required this.photoUri,
     this.overlay,
     this.isOverlayLoading = false,
@@ -2445,6 +2473,7 @@ class _PhotoSection extends StatelessWidget {
     this.onToggleShowTarget,
     this.onToggleShowNearby,
     this.onRequestOverlayLoad,
+    this.onZoomChanged,
     this.fillViewport = false,
   });
 
@@ -2460,16 +2489,50 @@ class _PhotoSection extends StatelessWidget {
   final VoidCallback? onToggleShowTarget;
   final VoidCallback? onToggleShowNearby;
   final VoidCallback? onRequestOverlayLoad;
+  final ValueChanged<bool>? onZoomChanged;
   final bool fillViewport;
 
-  bool get _hasOverlayControls => onToggleOverlayEnabled != null;
-  bool get _hasOverlayData => overlay != null && overlay!.isAvailable;
+  @override
+  State<_PhotoSection> createState() => _PhotoSectionState();
+}
+
+class _PhotoSectionState extends State<_PhotoSection> {
+  static const double _zoomThreshold = 1.01;
+
+  final TransformationController _transformationController =
+      TransformationController();
+  bool _isZoomed = false;
+
+  bool get _hasOverlayControls => widget.onToggleOverlayEnabled != null;
+  bool get _hasOverlayData =>
+      widget.overlay != null && widget.overlay!.isAvailable;
+
+  @override
+  void initState() {
+    super.initState();
+    _transformationController.addListener(_handleTransformChanged);
+  }
+
+  void _handleTransformChanged() {
+    final isZoomed =
+        _transformationController.value.getMaxScaleOnAxis() > _zoomThreshold;
+    if (_isZoomed == isZoomed) return;
+    _isZoomed = isZoomed;
+    widget.onZoomChanged?.call(isZoomed);
+  }
+
+  @override
+  void dispose() {
+    _transformationController.removeListener(_handleTransformChanged);
+    _transformationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (photoUri == null) {
+    if (widget.photoUri == null) {
       return Container(
-        height: fillViewport ? double.infinity : 200,
+        height: widget.fillViewport ? double.infinity : 200,
         color: AppColors.surface,
         child: const Center(
           child: Icon(
@@ -2481,24 +2544,24 @@ class _PhotoSection extends StatelessWidget {
       );
     }
 
-    final showOverlay = overlayEnabled && _hasOverlayData;
+    final showOverlay = widget.overlayEnabled && _hasOverlayData;
     final image = showOverlay
         ? PhotoOverlayView(
-            photoPath: photoUri!,
-            imageWidth: overlay!.imageWidth,
-            imageHeight: overlay!.imageHeight,
-            objects: overlay!.objects,
-            showTarget: showTarget,
-            showNearby: showNearby,
+            photoPath: widget.photoUri!,
+            imageWidth: widget.overlay!.imageWidth,
+            imageHeight: widget.overlay!.imageHeight,
+            objects: widget.overlay!.objects,
+            showTarget: widget.showTarget,
+            showNearby: widget.showNearby,
           )
         : AppFileImage(
-            path: photoUri!,
+            path: widget.photoUri!,
             fit: BoxFit.contain,
-            memCacheWidth: fillViewport ? 2048 : 1600,
+            memCacheWidth: widget.fillViewport ? 2048 : 1600,
             filterQuality: FilterQuality.medium,
             gaplessPlayback: true,
             errorBuilder: (_, _, _) => Container(
-              height: fillViewport ? null : 200,
+              height: widget.fillViewport ? null : 200,
               color: AppColors.surface,
               child: const Center(
                 child: Icon(
@@ -2511,7 +2574,7 @@ class _PhotoSection extends StatelessWidget {
           );
 
     return Container(
-      constraints: fillViewport
+      constraints: widget.fillViewport
           ? const BoxConstraints.expand()
           : const BoxConstraints(maxHeight: 280),
       width: double.infinity,
@@ -2520,24 +2583,29 @@ class _PhotoSection extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Positioned.fill(
-            child: InteractiveViewer(maxScale: 6, child: Center(child: image)),
+            child: InteractiveViewer(
+              key: ValueKey('gallery-photo-interactive-${widget.photoUri}'),
+              transformationController: _transformationController,
+              maxScale: 6,
+              child: Center(child: image),
+            ),
           ),
           if (_hasOverlayControls)
             Positioned(
               top: 8,
               right: 8,
               child: _OverlayControlButton(
-                isLoading: isOverlayLoading,
+                isLoading: widget.isOverlayLoading,
                 hasData: _hasOverlayData,
-                overlayState: overlayState!,
-                overlayRecordId: overlayRecordId!,
-                overlayEnabled: overlayEnabled,
-                showTarget: showTarget,
-                showNearby: showNearby,
-                onToggleOverlayEnabled: onToggleOverlayEnabled!,
-                onToggleShowTarget: onToggleShowTarget!,
-                onToggleShowNearby: onToggleShowNearby!,
-                onOpenMenu: onRequestOverlayLoad,
+                overlayState: widget.overlayState!,
+                overlayRecordId: widget.overlayRecordId!,
+                overlayEnabled: widget.overlayEnabled,
+                showTarget: widget.showTarget,
+                showNearby: widget.showNearby,
+                onToggleOverlayEnabled: widget.onToggleOverlayEnabled!,
+                onToggleShowTarget: widget.onToggleShowTarget!,
+                onToggleShowNearby: widget.onToggleShowNearby!,
+                onOpenMenu: widget.onRequestOverlayLoad,
               ),
             ),
         ],
