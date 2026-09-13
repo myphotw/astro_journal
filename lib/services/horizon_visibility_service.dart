@@ -1,20 +1,45 @@
+import '../data/models/horizon_point.dart';
 import '../data/models/site_horizon_profile.dart';
 
-/// 방위각별 최소 가시 고도를 원형 선형 보간으로 계산한다.
+/// 방위각별 최소/최대 가시 고도를 원형 선형 보간으로 계산한다.
 class HorizonVisibilityService {
   const HorizonVisibilityService();
 
   double minimumVisibleAltitude(SiteHorizonProfile profile, double azimuth) {
-    if (!azimuth.isFinite || profile.points.isEmpty) return 0;
+    return _interpolatedAltitude(
+      profile,
+      azimuth,
+      fallback: 0,
+      valueOf: (point) => point.minAltitude,
+    );
+  }
+
+  double maximumVisibleAltitude(SiteHorizonProfile profile, double azimuth) {
+    return _interpolatedAltitude(
+      profile,
+      azimuth,
+      fallback: 90,
+      valueOf: (point) => point.maxAltitude ?? 90,
+    );
+  }
+
+  double _interpolatedAltitude(
+    SiteHorizonProfile profile,
+    double azimuth, {
+    required double fallback,
+    required double Function(HorizonPoint point) valueOf,
+  }) {
+    if (!azimuth.isFinite || profile.points.isEmpty) return fallback;
 
     // 저장 계층은 중복 방위각을 막지만, 계산 계층도 외부/향후 스캔 입력에
     // 안전하도록 마지막 값을 canonical 값으로 사용한다.
     final byAzimuth = <double, double>{};
     for (final point in profile.points) {
-      if (!point.azimuth.isFinite || !point.minAltitude.isFinite) continue;
-      byAzimuth[_normalize(point.azimuth)] = point.minAltitude.clamp(0, 90);
+      final value = valueOf(point);
+      if (!point.azimuth.isFinite || !value.isFinite) continue;
+      byAzimuth[_normalize(point.azimuth)] = value.clamp(0, 90).toDouble();
     }
-    if (byAzimuth.isEmpty) return 0;
+    if (byAzimuth.isEmpty) return fallback;
 
     final samples = byAzimuth.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
@@ -42,7 +67,7 @@ class HorizonVisibilityService {
       return left.value + (right.value - left.value) * ratio;
     }
 
-    return 0;
+    return fallback;
   }
 
   bool isVisible({
@@ -55,7 +80,8 @@ class HorizonVisibilityService {
     if (profile.blockedRanges.any((range) => range.contains(normalized))) {
       return false;
     }
-    return altitude >= minimumVisibleAltitude(profile, normalized);
+    return altitude >= minimumVisibleAltitude(profile, normalized) &&
+        altitude <= maximumVisibleAltitude(profile, normalized);
   }
 
   double _normalize(double azimuth) {

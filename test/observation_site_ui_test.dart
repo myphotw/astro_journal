@@ -623,7 +623,8 @@ void main() {
 
       expect(find.text('촬영 가능 시야'), findsWidgets);
       expect(find.byKey(const Key('horizon-visibility-legend')), findsOneWidget);
-      expect(find.text('장애물 / 촬영 불가 영역'), findsOneWidget);
+      expect(find.text('보이는 하늘 영역'), findsOneWidget);
+      expect(find.text('가려진 영역'), findsOneWidget);
       expect(
         find.byKey(const Key('observation-site-horizon-visualization')),
         findsOneWidget,

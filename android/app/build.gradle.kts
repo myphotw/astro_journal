@@ -167,4 +167,5 @@ dependencies {
     implementation("com.google.android.gms:play-services-maps:20.0.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.activity:activity-ktx:1.9.3")
+    testImplementation("junit:junit:4.13.2")
 }

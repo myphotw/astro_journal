@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../data/models/horizon_point.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/models/site_horizon_profile.dart';
-import '../../../services/horizon_visibility_service.dart';
 import 'horizon_visibility_overview.dart';
 
 class ObservationSiteHorizonSummary extends StatelessWidget {
@@ -16,8 +16,6 @@ class ObservationSiteHorizonSummary extends StatelessWidget {
       points: site.horizonPoints,
       blockedRanges: site.blockedAzimuthRanges,
     );
-    const visibility = HorizonVisibilityService();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -39,7 +37,7 @@ class ObservationSiteHorizonSummary extends StatelessWidget {
             ),
             Expanded(
               child: _Metric(
-                label: '막힌 방향',
+                label: '차단 구간',
                 value: '${site.blockedAzimuthRanges.length}개',
               ),
             ),
@@ -50,53 +48,68 @@ class ObservationSiteHorizonSummary extends StatelessWidget {
           points: site.horizonPoints,
           blockedRanges: site.blockedAzimuthRanges,
         ),
-        if (site.horizonPoints.isNotEmpty) ...[
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children:
-                const <(double, String)>[
-                  (0, '북'),
-                  (45, '북동'),
-                  (90, '동'),
-                  (135, '남동'),
-                  (180, '남'),
-                  (225, '남서'),
-                  (270, '서'),
-                  (315, '북서'),
-                ].map((direction) {
-                  final altitude = visibility.minimumVisibleAltitude(
-                    profile,
-                    direction.$1,
-                  );
-                  return Chip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text('${direction.$2} ${altitude.round()}°'),
-                  );
-                }).toList(),
+        const SizedBox(height: 10),
+        Semantics(
+          container: true,
+          label: '시야 범위 요약',
+          child: Column(
+            key: const Key('horizon-visibility-summary'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '촬영 가능 방향: ${_availableAzimuthLabel(site)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                site.horizonPoints.isEmpty
+                    ? '방향별 고도 제한이 없습니다.'
+                    : _altitudeLabel(site),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-        ],
-        Text(
-          site.blockedAzimuthRanges.isEmpty
-              ? '촬영 가능 방향: 360° 전체'
-              : '막힌 방향: ${site.blockedAzimuthRanges.map((range) => '${range.startAzimuth.toStringAsFixed(0)}°~${range.endAzimuth.toStringAsFixed(0)}°').join(', ')}',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          site.horizonPoints.isEmpty
-              ? '방향별 고도 제한이 없습니다.'
-              : '방향별 고도 ${site.horizonPoints.length}개가 저장되어 있습니다.',
-          style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 2),
         Text(
-          '저장된 방향·고도를 단순화한 대략적인 요약입니다.',
+          '그래프는 방향별로 실제 보이는 고도 범위를 나타냅니다.',
           style: Theme.of(context).textTheme.labelSmall,
         ),
       ],
     );
+  }
+
+  String _availableAzimuthLabel(ObservationSite site) {
+    final ranges = site.blockedAzimuthRanges;
+    if (ranges.isEmpty) return '360° 전체';
+    if (ranges.length == 1 &&
+        ranges.single.source == HorizonDataSource.cameraScan) {
+      final blocked = ranges.single;
+      final start = (blocked.endAzimuth + 1) % 360;
+      final end = (blocked.startAzimuth - 1 + 360) % 360;
+      return '${start.toStringAsFixed(0)}° ~ ${end.toStringAsFixed(0)}°';
+    }
+    return '차단 구간 ${ranges.length}개 제외';
+  }
+
+  String _altitudeLabel(ObservationSite site) {
+    final minimums = site.horizonPoints.map((point) => point.minAltitude);
+    final minLower = minimums.reduce((a, b) => a < b ? a : b);
+    final maxLower = minimums.reduce((a, b) => a > b ? a : b);
+    final maximums = site.horizonPoints.map(
+      (point) => point.maxAltitude ?? 90,
+    );
+    final minUpper = maximums.reduce((a, b) => a < b ? a : b);
+    final maxUpper = maximums.reduce((a, b) => a > b ? a : b);
+    final lowerLabel = minLower == maxLower
+        ? '${minLower.round()}°'
+        : '${minLower.round()}°~${maxLower.round()}°';
+    final upperLabel = minUpper >= 90 && maxUpper >= 90
+        ? '제한 없음'
+        : minUpper == maxUpper
+        ? '${minUpper.round()}°'
+        : '${minUpper.round()}°~${maxUpper.round()}°';
+    return '하단 경계 $lowerLabel · 상단 경계 $upperLabel';
   }
 }
 

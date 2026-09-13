@@ -4,6 +4,7 @@ import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/models/blocked_azimuth_range.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
+import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/multi_night_framing_reference.dart';
 import 'package:astro_journal/data/models/observation_site.dart';
 import 'package:astro_journal/services/multi_night_framing_match_service.dart';
@@ -146,6 +147,29 @@ void main() {
 
     expect(highMinimum.isAvailable, isFalse);
     expect(blocked.isAvailable, isFalse);
+  });
+
+  test('directional maximum altitude makes an exact HA unavailable', () {
+    final result = service.findToday(
+      object: _m16,
+      reference: _reference(),
+      site: _site.copyWith(
+        defaultMinAltitude: -90,
+        horizonPoints: const [
+          HorizonPoint(
+            id: 'ceiling',
+            observationSiteId: _siteId,
+            azimuth: 0,
+            minAltitude: 0,
+            maxAltitude: 0,
+          ),
+        ],
+      ),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+
+    expect(result.isAvailable, isFalse);
   });
 
   test('recommended range obeys the single PA tolerance', () {

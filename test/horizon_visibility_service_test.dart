@@ -7,12 +7,18 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const service = HorizonVisibilityService();
 
-  HorizonPoint point(double azimuth, double altitude, {String? id}) =>
+  HorizonPoint point(
+    double azimuth,
+    double altitude, {
+    String? id,
+    double? maxAltitude,
+  }) =>
       HorizonPoint(
         id: id ?? 'p-$azimuth',
         observationSiteId: 'site',
         azimuth: azimuth,
         minAltitude: altitude,
+        maxAltitude: maxAltitude,
       );
 
   test('no horizon falls back to unrestricted zero degrees', () {
@@ -72,5 +78,44 @@ void main() {
       service.isVisible(profile: profile, azimuth: 180, altitude: 0),
       isTrue,
     );
+  });
+
+  test('minimum and maximum boundaries are inclusive', () {
+    final profile = SiteHorizonProfile(
+      points: [point(0, 20, maxAltitude: 65)],
+    );
+
+    expect(
+      service.isVisible(profile: profile, azimuth: 0, altitude: 20),
+      isTrue,
+    );
+    expect(
+      service.isVisible(profile: profile, azimuth: 0, altitude: 50),
+      isTrue,
+    );
+    expect(
+      service.isVisible(profile: profile, azimuth: 0, altitude: 65),
+      isTrue,
+    );
+    expect(
+      service.isVisible(profile: profile, azimuth: 0, altitude: 19.9),
+      isFalse,
+    );
+    expect(
+      service.isVisible(profile: profile, azimuth: 0, altitude: 65.1),
+      isFalse,
+    );
+  });
+
+  test('maximum altitude interpolates and null remains unrestricted to zenith', () {
+    final profile = SiteHorizonProfile(
+      points: [
+        point(0, 0, maxAltitude: 60),
+        point(180, 0),
+      ],
+    );
+
+    expect(service.maximumVisibleAltitude(profile, 90), 75);
+    expect(service.maximumVisibleAltitude(profile, 180), 90);
   });
 }

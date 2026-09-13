@@ -18,6 +18,7 @@ import '../../../services/horizon_visibility_service.dart';
 import '../../../services/location_service.dart';
 import '../../../services/observation_condition_service.dart';
 import '../../../services/observation_site_validator.dart';
+import '../../horizon_scan/models/horizon_measurement_result.dart';
 import '../../horizon_scan/view/horizon_scan_screen.dart';
 import '../../observation_site/widgets/horizon_visibility_overview.dart';
 import '../widgets/observation_location_search_sheet.dart';
@@ -178,7 +179,7 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
 
   Future<void> _openHorizonScan() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    final points = await Navigator.of(context).push<List<HorizonPoint>>(
+    final result = await Navigator.of(context).push<HorizonMeasurementResult>(
       MaterialPageRoute(
         builder: (_) => HorizonScanScreen(
           observationSiteId: _siteId,
@@ -188,9 +189,10 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
         ),
       ),
     );
-    if (!mounted || points == null) return;
+    if (!mounted || result == null) return;
     setState(() {
-      _points = points;
+      _points = result.points;
+      _blockedRanges = result.blockedRanges;
     });
   }
 
@@ -753,12 +755,12 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               key: const Key('start-horizon-scan'),
               onPressed: _openHorizonScan,
               icon: const Icon(Icons.panorama_horizontal_select_outlined),
-              label: const Text('카메라로 시야 자동 스캔'),
+              label: const Text('시야 측정 도우미'),
             ),
             const Padding(
               padding: EdgeInsets.only(top: 6, bottom: 12),
               child: Text(
-                '한 바퀴 천천히 돌면 자동 측정값을 먼저 만들고 아래에서 미리보기를 확인합니다.',
+                '카메라 중앙의 방향과 고도를 이용해 시야 경계를 선택합니다.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
             ),
@@ -813,7 +815,9 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
                 contentPadding: EdgeInsets.zero,
                 title: Text('방향 ${point.azimuth}°'),
                 subtitle: Text(
-                  '최소 가시 고도 ${point.minAltitude.toStringAsFixed(0)}°',
+                  point.maxAltitude == null
+                      ? '최소 가시 고도 ${point.minAltitude.toStringAsFixed(0)}°'
+                      : '가시 고도 ${point.minAltitude.toStringAsFixed(0)}°~${point.maxAltitude!.toStringAsFixed(0)}°',
                 ),
                 onTap: () => _editHorizonPoint(point),
                 trailing: IconButton(

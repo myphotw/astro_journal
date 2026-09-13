@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/equipment.dart';
-import '../../../data/models/horizon_point.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_repository.dart';
 import '../../home/viewmodel/home_view_model.dart';
+import '../../horizon_scan/models/horizon_measurement_result.dart';
 import '../../horizon_scan/view/horizon_scan_screen.dart';
 import '../../settings/view/observation_site_edit_screen.dart';
 import '../viewmodel/active_observation_site_view_model.dart';
@@ -110,7 +110,7 @@ class _ObservationSiteDetailScreenState
     }
     final site = _site;
     if (site == null) return;
-    final points = await Navigator.of(context).push<List<HorizonPoint>>(
+    final result = await Navigator.of(context).push<HorizonMeasurementResult>(
       MaterialPageRoute(
         builder: (_) => HorizonScanScreen(
           observationSiteId: site.id,
@@ -120,9 +120,13 @@ class _ObservationSiteDetailScreenState
         ),
       ),
     );
-    if (!mounted || points == null) return;
+    if (!mounted || result == null) return;
     await _updateSite(
-      site.copyWith(horizonPoints: points, updatedAt: DateTime.now()),
+      site.copyWith(
+        horizonPoints: result.points,
+        blockedAzimuthRanges: result.blockedRanges,
+        updatedAt: DateTime.now(),
+      ),
     );
   }
 
@@ -206,11 +210,11 @@ class _ObservationSiteDetailScreenState
                     key: const Key('site-detail-horizon-scan'),
                     onPressed: _openScan,
                     icon: const Icon(Icons.panorama_horizontal_select_outlined),
-                    label: const Text('시야 자동 측정 (Beta)'),
+                    label: const Text('시야 측정 도우미'),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '카메라로 주변 방향과 기울기를 확인합니다.',
+                    '카메라 중앙의 방향과 고도로 관측 가능한 시야를 빠르게 등록합니다.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   TextButton.icon(

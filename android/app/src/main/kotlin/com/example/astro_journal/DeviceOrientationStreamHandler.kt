@@ -7,7 +7,6 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import io.flutter.plugin.common.EventChannel
-import kotlin.math.asin
 import kotlin.math.atan2
 
 /**
@@ -26,6 +25,7 @@ class DeviceOrientationStreamHandler(
     private var activeSensor: Sensor? = null
     private var sensorAccuracy = SensorManager.SENSOR_STATUS_UNRELIABLE
     private var declinationDegrees: Float? = null
+    private var lastMagneticAzimuthDegrees: Double? = null
     private val rotationMatrix = FloatArray(9)
 
     override fun onListen(
@@ -69,17 +69,16 @@ class DeviceOrientationStreamHandler(
         sensorAccuracy = event.accuracy
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
 
-        // SensorManager's matrix transforms device coordinates to East/North/Up.
-        // The rear-facing camera forward vector is device -Z.
-        val east = -rotationMatrix[2].toDouble()
-        val north = -rotationMatrix[5].toDouble()
-        val up = -rotationMatrix[8].toDouble()
-        if (east * east + north * north < 0.0001) return
-
-        val magneticAzimuth = Math.toDegrees(atan2(east, north))
+        val cameraAim = CameraAimOrientationCalculator
+            .fromDeviceToWorldRotationMatrix(rotationMatrix)
+        val currentMagneticAzimuth = cameraAim.magneticAzimuthDegrees
+        if (currentMagneticAzimuth != null) {
+            lastMagneticAzimuthDegrees = currentMagneticAzimuth
+        }
+        val magneticAzimuth = currentMagneticAzimuth ?: lastMagneticAzimuthDegrees ?: return
         val trueNorthCorrection = declinationDegrees?.toDouble() ?: 0.0
         val azimuth = normalizeDegrees(magneticAzimuth + trueNorthCorrection)
-        val pitch = Math.toDegrees(asin(up.coerceIn(-1.0, 1.0)))
+        val pitch = cameraAim.altitudeDegrees
 
         // Roll is the world-up projection on the screen right/up axes.
         val roll = Math.toDegrees(
@@ -114,6 +113,7 @@ class DeviceOrientationStreamHandler(
         activeSensor = null
         eventSink = null
         sensorAccuracy = SensorManager.SENSOR_STATUS_UNRELIABLE
+        lastMagneticAzimuthDegrees = null
     }
 
     private fun readDeclination(arguments: Any?): Float? {

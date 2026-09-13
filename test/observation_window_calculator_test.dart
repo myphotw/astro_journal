@@ -172,6 +172,52 @@ void main() {
       expect(result.exclusion, ObservationWindowExclusion.azimuth);
     });
 
+    test('site horizon excludes a target above the physical ceiling', () {
+      final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
+      final profile = profileProvider.profileFor(object);
+      final session = TonightObservationSession(
+        start: DateTime(2026, 7, 20, 21),
+        end: DateTime(2026, 7, 21, 5),
+      );
+      final context = ObservationContext(
+        latitude: 37.5,
+        longitude: 127,
+        bortle: 2,
+        moonIllumination: 0.1,
+        moonAltitude: -10,
+        moonAzimuth: 180,
+        cloudCover: 0,
+        observationStart: session.start,
+        observationEnd: session.end,
+        currentTime: session.start,
+        horizonProfile: const SiteHorizonProfile(
+          points: [
+            HorizonPoint(
+              id: 'all-sky-ceiling',
+              observationSiteId: 'site',
+              azimuth: 0,
+              minAltitude: 0,
+              maxAltitude: 0,
+            ),
+          ],
+        ),
+      );
+
+      final result = calculator.calculate(
+        object: object,
+        profile: profile,
+        context: context,
+        settings: RecommendationSettings.defaults,
+        session: session,
+        referenceTime: session.start,
+        minimumExposure: const Duration(minutes: 10),
+        recommendedExposure: const Duration(minutes: 30),
+      );
+
+      expect(result.window, isNull);
+      expect(result.exclusion, ObservationWindowExclusion.azimuth);
+    });
+
     test('site horizon shortens the target visible slots', () {
       final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
       final profile = profileProvider.profileFor(object);
