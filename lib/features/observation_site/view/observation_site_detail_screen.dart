@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -206,17 +207,22 @@ class _ObservationSiteDetailScreenState
                   const Divider(height: 32),
                   ObservationSiteHorizonSummary(site: site),
                   const SizedBox(height: 12),
-                  FilledButton.icon(
-                    key: const Key('site-detail-horizon-scan'),
-                    onPressed: _openScan,
-                    icon: const Icon(Icons.panorama_horizontal_select_outlined),
-                    label: const Text('시야 측정 도우미'),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '카메라 중앙의 방향과 고도로 관측 가능한 시야를 빠르게 등록합니다.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  if (kIsWeb ||
+                      defaultTargetPlatform != TargetPlatform.windows) ...[
+                    FilledButton.icon(
+                      key: const Key('site-detail-horizon-scan'),
+                      onPressed: _openScan,
+                      icon: const Icon(
+                        Icons.panorama_horizontal_select_outlined,
+                      ),
+                      label: const Text('시야 측정 도우미'),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '카메라 중앙의 방향과 고도로 관측 가능한 시야를 빠르게 등록합니다.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   TextButton.icon(
                     key: const Key('site-detail-manual-horizon'),
                     onPressed: _openEditor,

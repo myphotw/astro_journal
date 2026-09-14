@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -751,19 +752,24 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
               blockedRanges: _blockedRanges,
             ),
             const SizedBox(height: 12),
-            FilledButton.icon(
-              key: const Key('start-horizon-scan'),
-              onPressed: _openHorizonScan,
-              icon: const Icon(Icons.panorama_horizontal_select_outlined),
-              label: const Text('시야 측정 도우미'),
-            ),
-            const Padding(
-              padding: EdgeInsets.only(top: 6, bottom: 12),
-              child: Text(
-                '카메라 중앙의 방향과 고도를 이용해 시야 경계를 선택합니다.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) ...[
+              FilledButton.icon(
+                key: const Key('start-horizon-scan'),
+                onPressed: _openHorizonScan,
+                icon: const Icon(Icons.panorama_horizontal_select_outlined),
+                label: const Text('시야 측정 도우미'),
               ),
-            ),
+              const Padding(
+                padding: EdgeInsets.only(top: 6, bottom: 12),
+                child: Text(
+                  '카메라 중앙의 방향과 고도를 이용해 시야 경계를 선택합니다.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
             Text('필요 시 수동 보정', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),
             ..._horizonDirections.map(
