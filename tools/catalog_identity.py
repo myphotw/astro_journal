@@ -68,7 +68,11 @@ def type_family(value: str | None) -> str | None:
         (("planetary", "행성상"), "planetary_nebula"),
         (("open cluster", "산개"), "open_cluster"),
         (("globular", "구상"), "globular_cluster"),
-        (("nebula", "성운", "snr"), "nebula"),
+        (("supernova remnant", "초신성잔해", "snr"), "supernova_remnant"),
+        (("double star", "쌍성"), "double_star"),
+        (("star cloud", "별구름"), "star_cloud"),
+        (("star", "항성"), "star"),
+        (("nebula", "성운"), "nebula"),
     )
     for needles, family in rules:
         if any(needle in lowered for needle in needles):

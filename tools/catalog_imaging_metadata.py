@@ -50,7 +50,7 @@ LOCAL_SOURCES = (
     ("project_extended", ROOT / "assets" / "catalog" / "extended_catalogs.json"),
 )
 
-OBJECT_TYPES = {
+OBJECT_TYPES: dict[str, str | None] = {
     "G": "은하",
     "GPair": "은하",
     "GTrpl": "은하",
@@ -63,7 +63,28 @@ OBJECT_TYPES = {
     "RfN": "반사성운",
     "SNR": "초신성잔해",
     "Cl+N": "성단과 성운",
+    "*": "항성",
+    "**": "쌍성",
+    "Neb": "발광성운",
+    # AstroJournal has no canonical stellar-association label. Keep this
+    # explicit and unresolved rather than inventing a physical classification.
+    "*Ass": None,
+    # A nova is a stellar event; the closest existing canonical family is star.
+    "Nova": "항성",
+    # These OpenNGC bookkeeping values are not physical object types.
+    "Dup": None,
+    "Other": None,
+    "NonEx": None,
 }
+
+NON_PHYSICAL_OPENNGC_TYPES = frozenset({"Dup", "Other", "NonEx"})
+
+
+def openngc_object_type(raw_type: str) -> str | None:
+    """Return the explicit OpenNGC type policy, failing on new raw codes."""
+    if raw_type not in OBJECT_TYPES:
+        raise ValueError(f"Unknown OpenNGC object type: {raw_type!r}")
+    return OBJECT_TYPES[raw_type]
 
 
 def missing(value: Any) -> bool:
@@ -221,22 +242,25 @@ class MetadataSource:
     minor_axis: float | None = None
     position_angle: float | None = None
     object_type: str | None = None
+    raw_object_type: str | None = None
     constellation: str | None = None
     ra_degrees: float | None = None
     dec_degrees: float | None = None
 
 
 def load_openngc() -> dict[str, MetadataSource]:
-    result: dict[str, MetadataSource] = {}
+    candidates: dict[str, list[tuple[int, MetadataSource]]] = {}
     with OPENNGC_PATH.open(encoding="utf-8") as handle:
         for row in csv.DictReader(handle, delimiter=";"):
             source_id = row.get("Name", "").strip()
             match = re.fullmatch(r"(NGC|IC)0*(\d+)([A-Z]?)", source_id, re.I)
-            identifiers: set[str] = set()
+            direct_id = None
             if match:
-                identifiers.add(
-                    f"{match.group(1).upper()}{int(match.group(2))}{match.group(3).upper()}"
+                direct_id = (
+                    f"{match.group(1).upper()}{int(match.group(2))}"
+                    f"{match.group(3).upper()}"
                 )
+            identifiers: set[str] = {direct_id} if direct_id else set()
             for prefix, column in (("M", "M"), ("NGC", "NGC"), ("IC", "IC")):
                 identifier = typed_id(prefix, row.get(column, ""))
                 if identifier:
@@ -247,6 +271,8 @@ def load_openngc() -> dict[str, MetadataSource]:
             minor = number(row.get("MinAx"))
             magnitude = row.get("V-Mag", "").strip() or row.get("B-Mag", "").strip()
             angular = angular_text(major, minor) if major is not None else None
+            raw_object_type = row.get("Type", "").strip()
+            object_type = openngc_object_type(raw_object_type)
             source = MetadataSource(
                 name="OpenNGC",
                 object_id=source_id,
@@ -255,13 +281,37 @@ def load_openngc() -> dict[str, MetadataSource]:
                 major_axis=major,
                 minor_axis=minor,
                 position_angle=number(row.get("PosAng")),
-                object_type=OBJECT_TYPES.get(row.get("Type", "").strip()),
+                object_type=object_type,
+                raw_object_type=raw_object_type,
                 constellation=IAU_TO_KO.get(row.get("Const", "").strip()),
                 ra_degrees=parse_ra_degrees(row.get("RA")),
                 dec_degrees=parse_dec_degrees(row.get("Dec")),
             )
             for identifier in identifiers:
-                result[identifier] = source
+                if raw_object_type in NON_PHYSICAL_OPENNGC_TYPES:
+                    priority = 0
+                elif identifier == direct_id:
+                    priority = 40 if object_type is not None else 30
+                else:
+                    priority = 20 if object_type is not None else 10
+                candidates.setdefault(identifier, []).append((priority, source))
+
+    result: dict[str, MetadataSource] = {}
+    for identifier, sources in candidates.items():
+        # Sort the complete candidate set so CSV input order cannot affect the
+        # winner. Direct canonical identity outranks cross-ID aliases, while
+        # Dup/Other/NonEx bookkeeping rows can never replace physical sources.
+        sources.sort(
+            key=lambda item: (
+                -item[0],
+                item[1].object_id,
+                item[1].raw_object_type or "",
+                item[1].object_type or "",
+                item[1].ra_degrees if item[1].ra_degrees is not None else -1.0,
+                item[1].dec_degrees if item[1].dec_degrees is not None else -91.0,
+            )
+        )
+        result[identifier] = sources[0][1]
     return result
 
 
@@ -476,7 +526,26 @@ def repair_from_source(
     source_family = type_family(source.object_type)
     current_type = row.get("object_type") or row.get("type")
     current_family = type_family(current_type)
-    if authoritative and source_family and current_family and source_family != current_family:
+    component_or_region = bool(row.get("suffix")) or (
+        current_family == "nebula" and source.raw_object_type in {"*", "**"}
+    )
+    type_conflict = (
+        authoritative
+        and source_family
+        and source_family != current_family
+    )
+    if type_conflict and component_or_region:
+        state.issue(
+            object_id,
+            "component_or_region_type_conflict",
+            "object_type",
+            current_type,
+            source,
+            source.object_type,
+            severity="WARNING",
+            decision="MANUAL_REVIEW; component or broad region type not replaced",
+        )
+    elif type_conflict:
         state.object_type_conflicts += 1
         set_field(row, "object_type", source.object_type, changed)
         set_field(row, "type", source.object_type, changed)
