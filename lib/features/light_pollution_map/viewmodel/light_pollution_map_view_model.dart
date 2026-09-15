@@ -23,6 +23,7 @@ import '../../../services/light_pollution_tile_preload_service.dart';
 import '../../../services/observation_condition_service.dart';
 import '../../../services/observation_engine.dart';
 import '../../../services/observation_score_service.dart';
+import '../../../services/recommendation/catalog_recommendation_eligibility_policy.dart';
 import '../../../services/recommendation_engine.dart';
 import '../../../services/recommendation_settings_service.dart';
 import '../../../services/weather_service.dart';
@@ -943,6 +944,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
         limit: 3,
         windSpeed: weatherInfo.windSpeed,
         referenceTime: now,
+        candidateScope: RecommendationCandidateScope.all,
       );
 
       for (final rec in result.allRecommendations.take(3)) {

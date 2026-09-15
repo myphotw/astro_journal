@@ -182,8 +182,10 @@ class _FakeCatalogRepository implements CatalogRepository {
     final all = _byCatalog.values.expand((e) => e);
     final matches = <(CatalogObject, double)>[];
     for (final candidate in all) {
-      final raDeg = CelestialPositionService.parseRaHours(candidate.ra) * 15;
+      final raHours = CelestialPositionService.parseRaHours(candidate.ra);
       final decDeg = CelestialPositionService.parseDecDeg(candidate.dec);
+      if (raHours == null || decDeg == null) continue;
+      final raDeg = raHours * 15;
       final offset = PlateSolveProjection.tangentPlaneOffsetDeg(
         centerRaDeg: centerRaDeg,
         centerDecDeg: centerDecDeg,

@@ -34,6 +34,7 @@ import '../../../services/location_service.dart';
 import '../../../services/observation_engine.dart';
 import '../../../services/observation_quality_service.dart';
 import '../../../services/observation_score_service.dart';
+import '../../../services/recommendation/catalog_recommendation_eligibility_policy.dart';
 import '../../../services/recommendation_engine.dart';
 import '../../../services/recommendation_settings_service.dart';
 import '../../../services/scheduler_engine.dart';
@@ -684,6 +685,7 @@ class HomeViewModel extends ChangeNotifier {
         windSpeed: windSpeed,
         referenceTime: now,
         trackingMode: sessionContext.trackingMode,
+        candidateScope: RecommendationCandidateScope.representative,
         equipmentFitResolver: (object, window) => _equipmentFitFor(
           object: object,
           window: window,
@@ -763,14 +765,10 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<void> _autoGenerateTonightPlanIfNeeded() async {
-    if (_plannedObjectOrder.isNotEmpty || _userEditedTonightPlan) {
-      return;
-    }
+    if (_userEditedTonightPlan) return;
 
     final autoIds = _extractAutoPlanIds();
-    if (autoIds.isEmpty) {
-      return;
-    }
+    if (listEquals(_plannedObjectOrder, autoIds)) return;
 
     _plannedObjectOrder = autoIds;
     _userEditedTonightPlan = false;
@@ -857,7 +855,7 @@ class HomeViewModel extends ChangeNotifier {
 
     if (plannedTargets.isEmpty) {
       _scheduleItems = [];
-      _scheduleEmptyMessage = '촬영 계획 대상의 촬영 순서를 계산할 수 없습니다';
+      _scheduleEmptyMessage = '현재 조건에서 촬영 가능한 계획 대상이 없습니다';
       return;
     }
 
@@ -911,14 +909,18 @@ class HomeViewModel extends ChangeNotifier {
           window.peakAltitudeTime;
       final end = window.observationEndTime ?? window.optimalEndTime;
       if (start != null && end != null && end.isAfter(start)) {
-        orientation = ImagingOrientationContext(
-          latitude: context.latitude,
-          longitude: context.longitude,
-          raHours: CelestialPositionService.parseRaHours(object.ra),
-          declinationDeg: CelestialPositionService.parseDecDeg(object.dec),
-          windowStart: start,
-          windowEnd: end,
-        );
+        final raHours = CelestialPositionService.parseRaHours(object.ra);
+        final declinationDeg = CelestialPositionService.parseDecDeg(object.dec);
+        if (raHours != null && declinationDeg != null) {
+          orientation = ImagingOrientationContext(
+            latitude: context.latitude,
+            longitude: context.longitude,
+            raHours: raHours,
+            declinationDeg: declinationDeg,
+            windowStart: start,
+            windowEnd: end,
+          );
+        }
       }
     }
 

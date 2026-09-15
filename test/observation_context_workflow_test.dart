@@ -37,6 +37,7 @@ import 'package:astro_journal/services/location_service.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
 import 'package:astro_journal/services/observation_condition_service.dart';
 import 'package:astro_journal/services/observation_engine.dart';
+import 'package:astro_journal/services/recommendation/catalog_recommendation_eligibility_policy.dart';
 import 'package:astro_journal/services/recommendation_engine.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
 import 'package:astro_journal/services/scheduler_engine.dart';
@@ -165,10 +166,28 @@ class _WeatherCache extends WeatherCacheService {
 }
 
 class _Plan extends TonightShootingPlanService {
+  _Plan({
+    this.snapshot = const TonightShootingPlanSnapshot(orderedObjectIds: []),
+  });
+
+  final TonightShootingPlanSnapshot snapshot;
+  final List<List<String>> savedOrders = [];
+  final List<bool> savedUserEdited = [];
+
   @override
   Future<TonightShootingPlanSnapshot> loadSnapshotForDate(
     DateTime planDate,
-  ) async => const TonightShootingPlanSnapshot(orderedObjectIds: []);
+  ) async => snapshot;
+
+  @override
+  Future<void> saveOrderedForDate(
+    DateTime planDate,
+    List<String> orderedObjectIds, {
+    required bool userEdited,
+  }) async {
+    savedOrders.add(List<String>.from(orderedObjectIds));
+    savedUserEdited.add(userEdited);
+  }
 }
 
 class _UnusedBortleRepository implements BortleRepository {
@@ -224,6 +243,9 @@ class _ObservationEngine extends ObservationEngine {
 }
 
 class _Scheduler extends SchedulerEngine {
+  _Scheduler({this.returnItems = false});
+
+  final bool returnItems;
   int builds = 0;
   final List<List<String>> candidateIds = [];
   final List<TrackingMode> trackingModes = [];
@@ -237,12 +259,42 @@ class _Scheduler extends SchedulerEngine {
     );
     trackingModes.add(input.context.trackingMode);
     horizonPointCounts.add(input.context.horizonProfile.points.length);
-    return ScheduleResult(slots: generateSlots(input.session));
+    final result = input.targets.isEmpty
+        ? null
+        : input.resultsById[input.targets.first.object.id];
+    if (!returnItems || input.targets.isEmpty || result == null) {
+      return ScheduleResult(slots: generateSlots(input.session));
+    }
+
+    final target = input.targets.first;
+    return ScheduleResult(
+      slots: generateSlots(input.session),
+      items: [
+        ScheduleItem(
+          target: target,
+          startTime: input.session.start,
+          endTime: input.session.start.add(target.minimumExposure),
+          shootingDuration: target.minimumExposure,
+          recommendedDuration: target.recommendedExposure,
+          optimalTime: target.window.optimalTime ?? input.session.start,
+          optimalAltitude: target.window.optimalAltitude ?? 0,
+          recommendationScore: target.score,
+          schedulerPriority: target.score,
+          urgencyScore: 0,
+          status: ScheduleItemStatus.recommended,
+          result: result,
+        ),
+      ],
+    );
   }
 }
 
 class _RecommendationEngine extends RecommendationEngine {
-  _RecommendationEngine(this.scheduler, CelestialPositionService positions)
+  _RecommendationEngine(
+    this.scheduler,
+    CelestialPositionService positions, {
+    this.exposeRecommendations = false,
+  })
     : super(
         positions,
         ExposurePolicy(),
@@ -251,7 +303,9 @@ class _RecommendationEngine extends RecommendationEngine {
       );
 
   final _Scheduler scheduler;
+  final bool exposeRecommendations;
   final List<TrackingMode> trackingModes = [];
+  final List<RecommendationCandidateScope> candidateScopes = [];
   final List<int> horizonPointCounts = [];
   final List<Set<CatalogType>> enabledCatalogs = [];
   Completer<void>? nextBuildGate;
@@ -268,6 +322,8 @@ class _RecommendationEngine extends RecommendationEngine {
     double windSpeed = 0,
     DateTime? referenceTime,
     TrackingMode trackingMode = TrackingMode.altAz,
+    RecommendationCandidateScope candidateScope =
+        RecommendationCandidateScope.all,
     ImagingEquipmentFit? Function(
       CatalogObject object,
       ObjectObservationWindow window,
@@ -275,6 +331,7 @@ class _RecommendationEngine extends RecommendationEngine {
     equipmentFitResolver,
   }) async {
     trackingModes.add(trackingMode);
+    candidateScopes.add(candidateScope);
     horizonPointCounts.add(context.horizonProfile.points.length);
     enabledCatalogs.add(Set.of(settings.enabledCatalogs));
     final gate = nextBuildGate;
@@ -342,8 +399,8 @@ class _RecommendationEngine extends RecommendationEngine {
     );
     return RecommendationBuildResult(
       session: session,
-      recommendations: const [],
-      allRecommendations: const [],
+      recommendations: exposeRecommendations ? [result] : const [],
+      allRecommendations: exposeRecommendations ? [result] : const [],
       scheduleItems: schedule.items,
       exclusionReasons: [
         'tracking:${trackingMode.name}',
@@ -358,6 +415,128 @@ class _RecommendationEngine extends RecommendationEngine {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  Future<
+    ({
+      HomeViewModel home,
+      _Plan plan,
+      _RecommendationEngine recommendation,
+      _Scheduler scheduler,
+    })
+  >
+  loadPlanWorkflow(TonightShootingPlanSnapshot snapshot) async {
+    final invalidator = ObservationContextInvalidator();
+    final now = DateTime(2026, 9, 15);
+    final initialSite = ObservationSite(
+      id: 'site-1',
+      name: 'Initial',
+      latitude: 37.5,
+      longitude: 127,
+      bortle: 8,
+      trackingMode: TrackingMode.altAz,
+      defaultMinAltitude: 20,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final sites = _SiteRepository(invalidator, initialSite);
+    final active = ActiveObservationSiteViewModel(
+      sites,
+      contextInvalidator: invalidator,
+    );
+    await active.load();
+    await active.selectSavedSite(initialSite);
+
+    final equipment = _EquipmentRepository(invalidator);
+    equipment.items.add(
+      const Equipment(
+        id: 'scope-1',
+        name: 'Workflow scope',
+        kind: EquipmentKind.smartTelescope,
+        purpose: EquipmentPurpose.imaging,
+        fovWidthDegrees: 2,
+        fovHeightDegrees: 1,
+      ),
+    );
+    final positions = CelestialPositionService();
+    final scheduler = _Scheduler(returnItems: true);
+    final plan = _Plan(snapshot: snapshot);
+    final recommendation = _RecommendationEngine(
+      scheduler,
+      positions,
+      exposeRecommendations: true,
+    );
+    final home = HomeViewModel(
+      _CatalogRepository(),
+      _Weather(),
+      _Location(),
+      _Settings(),
+      _ObservationEngine(positions),
+      recommendation,
+      positions,
+      _WeatherCache(),
+      plan,
+      equipment,
+      const EquipmentRecommendationService(),
+      scheduler,
+      active,
+      invalidator,
+    );
+    await home.load();
+    while (home.isWeatherLoading) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    return (
+      home: home,
+      plan: plan,
+      recommendation: recommendation,
+      scheduler: scheduler,
+    );
+  }
+
+  test('stale automatic plan is replaced by current schedulable targets', () async {
+    final workflow = await loadPlanWorkflow(
+      const TonightShootingPlanSnapshot(
+        orderedObjectIds: ['stale-id'],
+      ),
+    );
+    addTearDown(workflow.home.dispose);
+
+    final currentId = workflow.home.recommendedObjects.single.object.id;
+    expect(workflow.home.plannedObjectIds, {currentId});
+    expect(workflow.home.lastScheduleCandidateIds, [currentId]);
+    expect(workflow.home.scheduleItems, hasLength(1));
+    expect(workflow.home.scheduleItems.single.target.object.id, currentId);
+    expect(workflow.home.scheduleEmptyMessage, isNull);
+    expect(workflow.recommendation.candidateScopes, isNotEmpty);
+    expect(
+      workflow.recommendation.candidateScopes,
+      everyElement(RecommendationCandidateScope.representative),
+    );
+    expect(workflow.plan.savedOrders, [
+      [currentId],
+    ]);
+    expect(workflow.plan.savedUserEdited, [false]);
+  });
+
+  test('user-edited plan is not overwritten by automatic refresh', () async {
+    final workflow = await loadPlanWorkflow(
+      const TonightShootingPlanSnapshot(
+        orderedObjectIds: ['user-selected-id'],
+        userEdited: true,
+      ),
+    );
+    addTearDown(workflow.home.dispose);
+
+    expect(workflow.home.recommendedObjects, hasLength(1));
+    expect(workflow.home.plannedObjectIds, {'user-selected-id'});
+    expect(workflow.home.userEditedTonightPlan, isTrue);
+    expect(workflow.home.scheduleItems, isEmpty);
+    expect(
+      workflow.home.scheduleEmptyMessage,
+      '현재 조건에서 촬영 가능한 계획 대상이 없습니다',
+    );
+    expect(workflow.plan.savedOrders, isEmpty);
+  });
 
   test(
     'equipment, tracking, site and camera Horizon changes rebuild Home',

@@ -8,6 +8,7 @@ import '../data/models/weather_data.dart';
 import '../data/models/weather_forecast_slot.dart';
 import 'observation_engine.dart';
 import 'observation_score_service.dart';
+import 'recommendation/catalog_recommendation_eligibility_policy.dart';
 import 'recommendation_engine.dart';
 import 'recommendation_settings_service.dart';
 import 'weather_service.dart';
@@ -131,6 +132,7 @@ class TargetImagingAvailabilityService {
       limit: 1,
       referenceTime: date,
       trackingMode: site.trackingMode,
+      candidateScope: RecommendationCandidateScope.directTarget,
     );
     // The engine only receives one object; avoiding a second identity policy
     // keeps this adapter aligned with its candidate construction contract.

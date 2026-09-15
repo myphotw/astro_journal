@@ -73,6 +73,14 @@ class ObservationWindowCalculator {
     final longitude = context.longitude;
     final raH = CelestialPositionService.parseRaHours(object.ra);
     final decD = CelestialPositionService.parseDecDeg(object.dec);
+    if (raH == null || decD == null) {
+      performance?.astrometry.stop();
+      return const ObservationWindowCalculation(
+        window: null,
+        exclusion: ObservationWindowExclusion.noWindow,
+        moonSeparation: double.nan,
+      );
+    }
 
     final moonCoords = _positionService.getMoonEquatorial(referenceTime);
     final moonSeparation = CelestialPositionService.angularSeparationDeg(

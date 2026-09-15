@@ -309,12 +309,15 @@ class EquipmentRecommendationService {
         window.peakAltitudeTime;
     final end = window.observationEndTime ?? window.optimalEndTime;
     if (start == null || end == null || !end.isAfter(start)) return null;
+    final raHours = CelestialPositionService.parseRaHours(object.ra);
+    final declinationDeg = CelestialPositionService.parseDecDeg(object.dec);
+    if (raHours == null || declinationDeg == null) return null;
 
     return ImagingOrientationContext(
       latitude: observerLatitude,
       longitude: observerLongitude,
-      raHours: CelestialPositionService.parseRaHours(object.ra),
-      declinationDeg: CelestialPositionService.parseDecDeg(object.dec),
+      raHours: raHours,
+      declinationDeg: declinationDeg,
       windowStart: start,
       windowEnd: end,
     );

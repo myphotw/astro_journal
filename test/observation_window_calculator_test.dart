@@ -275,5 +275,41 @@ void main() {
         lessThan(unrestricted.window!.slotObservationScores.length),
       );
     });
+
+    test('missing catalog coordinates fail closed without a window', () {
+      final object = buildObject(id: 'ic1318a', ra: '-', dec: '-');
+      final profile = profileProvider.profileFor(object);
+      final session = TonightObservationSession(
+        start: DateTime(2026, 7, 20, 21),
+        end: DateTime(2026, 7, 21, 5),
+      );
+      final context = ObservationContext(
+        latitude: 37.5,
+        longitude: 127,
+        bortle: 2,
+        moonIllumination: 0.1,
+        moonAltitude: -10,
+        moonAzimuth: 180,
+        cloudCover: 0,
+        observationStart: session.start,
+        observationEnd: session.end,
+        currentTime: session.start,
+      );
+
+      final result = calculator.calculate(
+        object: object,
+        profile: profile,
+        context: context,
+        settings: RecommendationSettings.defaults,
+        session: session,
+        referenceTime: session.start,
+        minimumExposure: const Duration(minutes: 10),
+        recommendedExposure: const Duration(minutes: 30),
+      );
+
+      expect(result.window, isNull);
+      expect(result.exclusion, ObservationWindowExclusion.noWindow);
+      expect(result.moonSeparation.isNaN, isTrue);
+    });
   });
 }

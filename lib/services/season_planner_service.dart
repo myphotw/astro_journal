@@ -34,11 +34,8 @@ class SeasonPlannerService {
   }
 
   /// RA 문자열이 계절 계산에 사용 가능한지 확인한다.
-  static bool hasValidRa(String ra) {
-    final trimmed = ra.trim();
-    if (trimmed.isEmpty || trimmed == '-') return false;
-    return RegExp(r'\d+h', caseSensitive: false).hasMatch(trimmed);
-  }
+  static bool hasValidRa(String ra) =>
+      CelestialPositionService.parseRaHours(ra) != null;
 
   /// DB 저장용 계절 정보 (없으면 null).
   SeasonFields? computeSeasonFields(CatalogObject object) {
@@ -63,7 +60,7 @@ class SeasonPlannerService {
   double scoreForMonth(CatalogObject object, int month) {
     if (!isSeasonPlannerEligible(object) || !hasValidRa(object.ra)) return 0;
     final raHours = CelestialPositionService.parseRaHours(object.ra);
-    if (raHours.isNaN) return 0;
+    if (raHours == null) return 0;
 
     final optimalRa = optimalRaByMonth[month - 1].toDouble();
     final dist = _raDistance(optimalRa, raHours);

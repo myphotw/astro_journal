@@ -20,6 +20,7 @@ import 'exposure_policy.dart';
 import 'equipment/alt_az_imaging_policy.dart';
 import 'imaging_suitability_service.dart';
 import 'object_imaging_profile_provider.dart';
+import 'recommendation/catalog_recommendation_eligibility_policy.dart';
 import 'recommendation/feasibility_exclusion_messages.dart';
 import 'recommendation/limited_recommendation_policy.dart';
 import 'recommendation/recommendation_candidate_sorter.dart';
@@ -69,6 +70,8 @@ class RecommendationEngine {
     double windSpeed = 0,
     DateTime? referenceTime,
     TrackingMode trackingMode = TrackingMode.altAz,
+    RecommendationCandidateScope candidateScope =
+        RecommendationCandidateScope.all,
     ImagingEquipmentFit? Function(
       CatalogObject object,
       ObjectObservationWindow window,
@@ -78,7 +81,7 @@ class RecommendationEngine {
     final diagnostics = kDebugMode ? _RecommendationDiagnostics() : null;
     diagnostics?.total.start();
     diagnostics?.filter.start();
-    final prefilter = _prefilterCatalog(catalog, settings);
+    final prefilter = _prefilterCatalog(catalog, settings, candidateScope);
     final filtered = prefilter.cheapEligible;
     diagnostics?.filter.stop();
     if (filtered.isEmpty) {
@@ -86,7 +89,11 @@ class RecommendationEngine {
         session: session,
         context: context,
         referenceTime: referenceTime ?? context.currentTime,
-        exclusionReasons: const ['선택된 카탈로그의 대상이 없습니다'],
+        exclusionReasons: [
+          candidateScope == RecommendationCandidateScope.representative
+              ? '선택한 필터에 맞는 대표 촬영 대상이 없습니다'
+              : '선택된 카탈로그의 대상이 없습니다',
+        ],
       );
     }
 
@@ -408,6 +415,7 @@ class RecommendationEngine {
   _RecommendationPrefilter _prefilterCatalog(
     List<CatalogObject> catalog,
     RecommendationSettings settings,
+    RecommendationCandidateScope candidateScope,
   ) {
     final userFiltered = catalog
         .where(
@@ -417,7 +425,15 @@ class RecommendationEngine {
                   settings.enabledObjectTypes.contains(object.resolvedObjectType)),
         )
         .toList(growable: false);
-    final cheapEligible = userFiltered
+    final scopeEligible = userFiltered
+        .where(
+          (object) => CatalogRecommendationEligibilityPolicy.allows(
+            object,
+            candidateScope,
+          ),
+        )
+        .toList(growable: false);
+    final cheapEligible = scopeEligible
         .where(
           (object) =>
               object.catalog != CatalogType.solar &&

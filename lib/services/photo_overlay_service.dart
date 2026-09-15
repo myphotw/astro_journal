@@ -152,25 +152,26 @@ class PhotoOverlayService {
       final targetPrimaryId =
           targetObject?.effectivePrimaryId ?? record.celestialObjectId;
 
-      final objects = <PhotoOverlayObject>[
-        for (final candidate in candidates)
-          _toOverlayObject(
-            candidate: candidate,
-            photoId: record.id,
-            centerRa: centerRa,
-            centerDec: centerDec,
-            fovWidth: fovWidth,
-            fovHeight: fovHeight,
-            rotationDeg: rotationDeg,
-            parity: parity,
-            pixelScale: pixelScale,
-            wcs: wcs,
-            rasterMapping: rasterMapping,
-            imageWidth: imageWidth,
-            imageHeight: imageHeight,
-            targetPrimaryId: targetPrimaryId,
-          ),
-      ];
+      final objects = <PhotoOverlayObject>[];
+      for (final candidate in candidates) {
+        final overlayObject = _toOverlayObject(
+          candidate: candidate,
+          photoId: record.id,
+          centerRa: centerRa,
+          centerDec: centerDec,
+          fovWidth: fovWidth,
+          fovHeight: fovHeight,
+          rotationDeg: rotationDeg,
+          parity: parity,
+          pixelScale: pixelScale,
+          wcs: wcs,
+          rasterMapping: rasterMapping,
+          imageWidth: imageWidth,
+          imageHeight: imageHeight,
+          targetPrimaryId: targetPrimaryId,
+        );
+        if (overlayObject != null) objects.add(overlayObject);
+      }
 
       objects.sort((a, b) {
         if (a.isTarget == b.isTarget) return 0;
@@ -203,7 +204,7 @@ class PhotoOverlayService {
     }
   }
 
-  PhotoOverlayObject _toOverlayObject({
+  PhotoOverlayObject? _toOverlayObject({
     required CatalogObject candidate,
     required String photoId,
     required double centerRa,
@@ -219,8 +220,10 @@ class PhotoOverlayService {
     required int imageHeight,
     required String targetPrimaryId,
   }) {
-    final raDeg = CelestialPositionService.parseRaHours(candidate.ra) * 15;
+    final raHours = CelestialPositionService.parseRaHours(candidate.ra);
     final decDeg = CelestialPositionService.parseDecDeg(candidate.dec);
+    if (raHours == null || decDeg == null) return null;
+    final raDeg = raHours * 15;
 
     final wcsWidth = rasterMapping?.wcsWidth.round() ?? imageWidth;
     final wcsHeight = rasterMapping?.wcsHeight.round() ?? imageHeight;

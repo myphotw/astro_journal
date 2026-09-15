@@ -250,25 +250,60 @@ class CelestialPositionService {
 
   // ── RA / Dec 파싱 ────────────────────────────────────────────────────────
 
-  /// RA 문자열(예: "5h 35m", "5h35m") → 시간(double)
-  static double parseRaHours(String ra) {
-    final match = RegExp(r'(\d+)h(?:\s*(\d+(?:\.\d+)?)m)?').firstMatch(ra);
-    if (match == null) return 0;
-    final hours = double.tryParse(match.group(1) ?? '') ?? 0;
-    final minutes = double.tryParse(match.group(2) ?? '0') ?? 0;
-    return hours + minutes / 60;
+  /// RA 문자열(예: "5h 35m", "5h35m17s") → 시간(double).
+  /// 형식 또는 범위가 올바르지 않으면 null을 반환한다.
+  static double? parseRaHours(String? ra) {
+    final value = ra?.trim();
+    if (value == null || value.isEmpty || value == '-') return null;
+    final match = RegExp(
+      r'^(\d{1,2})h(?:\s*(\d{1,2}(?:\.\d+)?)m(?:\s*(\d{1,2}(?:\.\d+)?)s)?)?$',
+    ).firstMatch(value);
+    if (match == null) return null;
+
+    final hours = double.tryParse(match.group(1) ?? '');
+    final minutes = double.tryParse(match.group(2) ?? '0');
+    final seconds = double.tryParse(match.group(3) ?? '0');
+    if (hours == null ||
+        minutes == null ||
+        seconds == null ||
+        hours < 0 ||
+        hours >= 24 ||
+        minutes < 0 ||
+        minutes >= 60 ||
+        seconds < 0 ||
+        seconds >= 60) {
+      return null;
+    }
+    return hours + minutes / 60 + seconds / 3600;
   }
 
-  /// Dec 문자열(예: "+30° 00m", "-05d30m") → 도(double)
-  static double parseDecDeg(String dec) {
+  /// Dec 문자열(예: "+30° 00m", "-05d30m15s") → 도(double).
+  /// 형식 또는 범위가 올바르지 않으면 null을 반환한다.
+  static double? parseDecDeg(String? dec) {
+    final value = dec?.trim();
+    if (value == null || value.isEmpty || value == '-') return null;
     final match = RegExp(
-      r'([+-]?)(\d+)[°d]?\s*(\d+(?:\.\d+)?)?',
-    ).firstMatch(dec);
-    if (match == null) return 0;
+      r'''^([+-]?)(\d{1,2})(?:°|d)(?:\s*(\d{1,2}(?:\.\d+)?)(?:'|′|m)(?:\s*(\d{1,2}(?:\.\d+)?)(?:"|″|s))?)?$''',
+    ).firstMatch(value);
+    if (match == null) return null;
+
     final sign = match.group(1) == '-' ? -1.0 : 1.0;
-    final degrees = double.tryParse(match.group(2) ?? '0') ?? 0;
-    final minutes = double.tryParse(match.group(3) ?? '0') ?? 0;
-    return sign * (degrees + minutes / 60);
+    final degrees = double.tryParse(match.group(2) ?? '');
+    final minutes = double.tryParse(match.group(3) ?? '0');
+    final seconds = double.tryParse(match.group(4) ?? '0');
+    if (degrees == null ||
+        minutes == null ||
+        seconds == null ||
+        degrees < 0 ||
+        degrees > 90 ||
+        minutes < 0 ||
+        minutes >= 60 ||
+        seconds < 0 ||
+        seconds >= 60 ||
+        (degrees == 90 && (minutes != 0 || seconds != 0))) {
+      return null;
+    }
+    return sign * (degrees + minutes / 60 + seconds / 3600);
   }
 
   // ── 내부 천체역학 수식 ────────────────────────────────────────────────────

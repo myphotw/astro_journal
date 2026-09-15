@@ -7,9 +7,10 @@ void main() {
   ImagingSuitabilityAssessment assessment({
     required FilterMode filterMode,
     required MosaicMode mosaicMode,
+    ExpectedResultQuality quality = ExpectedResultQuality.mainStructure,
   }) {
     return ImagingSuitabilityAssessment(
-      quality: ExpectedResultQuality.mainStructure,
+      quality: quality,
       filterMode: filterMode,
       mosaicMode: mosaicMode,
       trackingMode: TrackingMode.altAz,
@@ -39,6 +40,9 @@ void main() {
     expect(find.byKey(const Key('recommendation-mosaic-on')), findsOneWidget);
     expect(find.text('모자이크'), findsOneWidget);
     expect(find.byKey(const Key('recommendation-quality')), findsOneWidget);
+    expect(find.text('예상 결과'), findsOneWidget);
+    expect(find.text('★★★☆☆'), findsOneWidget);
+    expect(find.text('· 주요 구조 확인'), findsOneWidget);
   });
 
   testWidgets('Filter OFF remains visible and Mosaic OFF is omitted', (
@@ -60,4 +64,51 @@ void main() {
     expect(find.byKey(const Key('recommendation-mosaic-on')), findsNothing);
     expect(find.byKey(const Key('recommendation-quality')), findsOneWidget);
   });
+
+  for (final quality in [
+    ExpectedResultQuality.detail,
+    ExpectedResultQuality.excellent,
+  ]) {
+    testWidgets(
+      '${quality.name} quality remains separated at narrow width and large text scale',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: MediaQuery(
+                  data: const MediaQueryData(
+                    textScaler: TextScaler.linear(1.4),
+                  ),
+                  child: SizedBox(
+                    width: 120,
+                    child: RecommendationImagingStatusChips(
+                      assessment: assessment(
+                        filterMode: FilterMode.on,
+                        mosaicMode: MosaicMode.off,
+                        quality: quality,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final label = find.text('예상 결과');
+        final stars = find.text(quality.starLabel);
+        final description = find.text('· ${quality.label}');
+        expect(label, findsOneWidget);
+        expect(stars, findsOneWidget);
+        expect(description, findsOneWidget);
+        expect(tester.getRect(label).overlaps(tester.getRect(stars)), isFalse);
+        expect(
+          tester.getRect(stars).overlaps(tester.getRect(description)),
+          isFalse,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }

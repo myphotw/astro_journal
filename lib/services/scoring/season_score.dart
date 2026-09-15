@@ -17,6 +17,7 @@ class SeasonScore {
     final month = context.currentTime.month;
     final optimalRa = _optimalRaByMonth[month - 1].toDouble();
     final raHours = CelestialPositionService.parseRaHours(object.ra);
+    if (raHours == null) return 0;
     final dist = _raDistance(optimalRa, raHours);
     return (math.max(0.0, 1 - dist / 12.0) * 100.0).clamp(0.0, 100.0);
   }

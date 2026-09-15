@@ -120,10 +120,9 @@ abstract final class RecommendationReasonBuilder {
 
   static double _seasonScore(int month, String ra) {
     final optimalRa = _optimalRaByMonth[month - 1].toDouble();
-    final dist = _raDistance(
-      optimalRa,
-      CelestialPositionService.parseRaHours(ra),
-    );
+    final objectRa = CelestialPositionService.parseRaHours(ra);
+    if (objectRa == null) return 0;
+    final dist = _raDistance(optimalRa, objectRa);
     return math.max(0.0, 1 - dist / 12.0) * 40;
   }
 

@@ -115,24 +115,33 @@ class CelestialObjectSearchService {
       rotationDeg: rotationDeg,
     );
 
-    final found = <_Match>[
-      for (final candidate in candidates)
-        _buildMatch(candidate, centerRa, centerDec, fovWidth, fovHeight),
-    ];
+    final found = <_Match>[];
+    for (final candidate in candidates) {
+      final match = _buildMatch(
+        candidate,
+        centerRa,
+        centerDec,
+        fovWidth,
+        fovHeight,
+      );
+      if (match != null) found.add(match);
+    }
 
     found.sort((a, b) => a.angularDistance.compareTo(b.angularDistance));
     return found;
   }
 
-  _Match _buildMatch(
+  _Match? _buildMatch(
     CatalogObject candidate,
     double centerRa,
     double centerDec,
     double fovWidth,
     double fovHeight,
   ) {
-    final raDeg = CelestialPositionService.parseRaHours(candidate.ra) * 15;
+    final raHours = CelestialPositionService.parseRaHours(candidate.ra);
     final decDeg = CelestialPositionService.parseDecDeg(candidate.dec);
+    if (raHours == null || decDeg == null) return null;
+    final raDeg = raHours * 15;
     final angularDistance = CelestialPositionService.angularSeparationDeg(
       ra1Hours: centerRa / 15,
       dec1Deg: centerDec,

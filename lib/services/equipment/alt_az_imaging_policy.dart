@@ -106,6 +106,13 @@ class AltAzImagingPolicy {
 
     final raHours = CelestialPositionService.parseRaHours(object.ra);
     final declinationDeg = CelestialPositionService.parseDecDeg(object.dec);
+    if (raHours == null || declinationDeg == null) {
+      return const AltAzImagingPlan(
+        recommendedDailyExposure: Duration.zero,
+        dailyDurationLimitedByFieldRotation: false,
+        fieldRotationSpanDegrees: 0,
+      );
+    }
     final rotationCache = <DateTime, double>{};
     final altitudeCache = <DateTime, double>{};
 

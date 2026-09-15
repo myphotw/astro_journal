@@ -308,11 +308,13 @@ abstract final class SchedulerAssignmentPlanner {
         preferred == null) {
       return null;
     }
+    final raHours = CelestialPositionService.parseRaHours(target.object.ra);
+    if (raHours == null) return null;
     return AltAzImagingPolicy.haMatchQuality(
       preferred: preferred,
       longitudeDeg: context.longitude,
       candidateCenter: time,
-      raHours: CelestialPositionService.parseRaHours(target.object.ra),
+      raHours: raHours,
     );
   }
 

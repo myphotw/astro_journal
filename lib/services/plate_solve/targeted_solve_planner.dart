@@ -153,13 +153,7 @@ class TargetedSolvePlanner {
     }
     final raHours = CelestialPositionService.parseRaHours(raRaw);
     final decDeg = CelestialPositionService.parseDecDeg(decRaw);
-    // parse 실패 시 0,0 이 될 수 있으므로, 원문이 실제로 0인지 느슨히 허용.
-    if (raHours == 0 &&
-        decDeg == 0 &&
-        !raRaw.contains('0') &&
-        !decRaw.contains('0')) {
-      return null;
-    }
+    if (raHours == null || decDeg == null) return null;
     return (ra: raHours * 15.0, dec: decDeg);
   }
 

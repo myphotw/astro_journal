@@ -15,6 +15,8 @@ class SchedulerEngine {
           priorityCalculator ?? const SchedulerPriorityCalculator();
 
   static const slotDuration = Duration(minutes: 10);
+  static const assignmentEmptyMessage =
+      '최소 촬영시간을 만족하는 연속 촬영 구간을 배정할 수 없습니다.';
 
   final SchedulerPriorityCalculator _priorityCalculator;
 
@@ -76,11 +78,17 @@ class SchedulerEngine {
       ),
       state: 'targets=${input.targets.length} slots=${slots.length}',
     );
+    final hasUsableItems = items.any(
+      (item) => item.status != ScheduleItemStatus.excluded,
+    );
 
     return ScheduleResult(
       slots: slots,
       targets: prioritizedTargets,
       items: items,
+      emptyMessage: hasTargets && !hasUsableItems
+          ? assignmentEmptyMessage
+          : null,
     );
   }
 

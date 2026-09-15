@@ -99,6 +99,9 @@ class MultiNightFramingMatchService {
   }) {
     final raHours = CelestialPositionService.parseRaHours(object.ra);
     final decDeg = CelestialPositionService.parseDecDeg(object.dec);
+    if (raHours == null || decDeg == null) {
+      throw ArgumentError('Catalog object has invalid RA/Dec: ${object.id}');
+    }
     final signedHa = signedHourAngleDegrees(
       longitudeDeg: site.longitude,
       time: capturedAt,
@@ -142,6 +145,14 @@ class MultiNightFramingMatchService {
     final end = start.add(const Duration(days: 1));
     final raHours = CelestialPositionService.parseRaHours(object.ra);
     final decDeg = CelestialPositionService.parseDecDeg(object.dec);
+    if (raHours == null || decDeg == null) {
+      return _unavailable(
+        reference: reference,
+        site: site,
+        equipment: equipment,
+        reason: '대상의 좌표를 확인할 수 없어 같은 구도를 계산할 수 없습니다.',
+      );
+    }
 
     DateTime? best;
     var bestDistance = double.infinity;

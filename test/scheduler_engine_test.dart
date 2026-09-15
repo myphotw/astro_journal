@@ -196,6 +196,7 @@ void main() {
       );
 
       expect(result.items, isEmpty);
+      expect(result.emptyMessage, SchedulerEngine.assignmentEmptyMessage);
     });
 
     test('does not overlap assignments for two targets', () {
@@ -326,6 +327,7 @@ void main() {
       );
 
       expect(result.items, isEmpty);
+      expect(result.emptyMessage, SchedulerEngine.assignmentEmptyMessage);
     });
 
     test('Alt-Az uses daily duration and preserves 10-minute slots', () {

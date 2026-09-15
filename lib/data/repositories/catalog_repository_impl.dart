@@ -83,6 +83,7 @@ class CatalogRepositoryImpl
 
       final objectRaHours = CelestialPositionService.parseRaHours(object.ra);
       final objectDecDeg = CelestialPositionService.parseDecDeg(object.dec);
+      if (objectRaHours == null || objectDecDeg == null) continue;
       final distance = CelestialPositionService.angularSeparationDeg(
         ra1Hours: raHours,
         dec1Deg: decDeg,
@@ -132,8 +133,10 @@ class CatalogRepositoryImpl
 
     final matches = <(CatalogObject, double)>[];
     for (final candidate in candidates) {
-      final raDeg = CelestialPositionService.parseRaHours(candidate.ra) * 15;
+      final raHours = CelestialPositionService.parseRaHours(candidate.ra);
       final decDeg = CelestialPositionService.parseDecDeg(candidate.dec);
+      if (raHours == null || decDeg == null) continue;
+      final raDeg = raHours * 15;
 
       final offset = PlateSolveProjection.tangentPlaneOffsetDeg(
         centerRaDeg: centerRaDeg,

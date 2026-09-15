@@ -2368,30 +2368,87 @@ class RecommendationImagingStatusChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 4,
-      runSpacing: 3,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _RecommendationStatusChip(
-          key: Key('recommendation-filter-${assessment.filterMode.name}'),
-          label: '필터 ${assessment.filterMode.label}',
-          color: assessment.filterMode == FilterMode.on
-              ? AppColors.solar
-              : AppColors.textSecondary,
+        Wrap(
+          spacing: 4,
+          runSpacing: 3,
+          children: [
+            _RecommendationStatusChip(
+              key: Key('recommendation-filter-${assessment.filterMode.name}'),
+              label: '필터 ${assessment.filterMode.label}',
+              color: assessment.filterMode == FilterMode.on
+                  ? AppColors.solar
+                  : AppColors.textSecondary,
+            ),
+            if (assessment.mosaicMode == MosaicMode.on)
+              const _RecommendationStatusChip(
+                key: Key('recommendation-mosaic-on'),
+                label: '모자이크',
+                color: AppColors.ic,
+              ),
+          ],
         ),
-        if (assessment.mosaicMode == MosaicMode.on)
-          const _RecommendationStatusChip(
-            key: Key('recommendation-mosaic-on'),
-            label: '모자이크',
-            color: AppColors.ic,
-          ),
-        _RecommendationStatusChip(
+        const SizedBox(height: 3),
+        _RecommendationQualitySummary(
           key: const Key('recommendation-quality'),
-          label:
-              '${assessment.quality.starLabel} ${assessment.quality.label}',
-          color: AppColors.textSecondary,
+          quality: assessment.quality,
         ),
       ],
+    );
+  }
+}
+
+class _RecommendationQualitySummary extends StatelessWidget {
+  const _RecommendationQualitySummary({super.key, required this.quality});
+
+  final ExpectedResultQuality quality;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.textSecondary.withAlpha(28),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.textSecondary.withAlpha(90)),
+      ),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 1,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text(
+            '예상 결과',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            quality.starLabel,
+            style: const TextStyle(
+              color: AppColors.solar,
+              fontSize: 9,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '· ${quality.label}',
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 9,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

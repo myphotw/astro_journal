@@ -15,6 +15,7 @@ class MoonScore {
   }) {
     final raHours = CelestialPositionService.parseRaHours(object.ra);
     final decDeg = CelestialPositionService.parseDecDeg(object.dec);
+    if (raHours == null || decDeg == null) return 0;
     return calculateForCoordinates(
       raHours: raHours,
       decDeg: decDeg,

@@ -218,8 +218,10 @@ class SkyMapViewModel extends ChangeNotifier {
       return const [];
     }
     if (_canvasSize == Size.zero || !fov.isValid) return const [];
-    final ra = CelestialPositionService.parseRaHours(selected.ra) * 15;
+    final raHours = CelestialPositionService.parseRaHours(selected.ra);
     final dec = CelestialPositionService.parseDecDeg(selected.dec);
+    if (raHours == null || dec == null) return const [];
+    final ra = raHours * 15;
     return SkyMapProjectionService.projectFovCorners(
       objectRaDeg: ra,
       objectDecDeg: dec,
@@ -381,8 +383,14 @@ class SkyMapViewModel extends ChangeNotifier {
   void selectObject(CatalogObject? object) {
     _selectedObject = object;
     if (object != null) {
-      _centerRaDeg = CelestialPositionService.parseRaHours(object.ra) * 15;
-      _centerDecDeg = CelestialPositionService.parseDecDeg(object.dec);
+      final raHours = CelestialPositionService.parseRaHours(object.ra);
+      final decDeg = CelestialPositionService.parseDecDeg(object.dec);
+      if (raHours == null || decDeg == null) {
+        notifyListeners();
+        return;
+      }
+      _centerRaDeg = raHours * 15;
+      _centerDecDeg = decDeg;
       final major = object.majorAxis;
       final axes = SkyMapAngularSize.resolveArcmin(object);
       final sizeMajor = axes?.major ?? major;
@@ -637,8 +645,10 @@ class SkyMapViewModel extends ChangeNotifier {
       final hay = '${obj.displayName} ${obj.displayCommonName} ${obj.name}'
           .toLowerCase();
       if (!hay.contains(q)) continue;
-      final ra = CelestialPositionService.parseRaHours(obj.ra) * 15;
+      final raHours = CelestialPositionService.parseRaHours(obj.ra);
       final dec = CelestialPositionService.parseDecDeg(obj.dec);
+      if (raHours == null || dec == null) continue;
+      final ra = raHours * 15;
       results.add(
         SkyMapSearchResult(
           kind: SkyMapSearchKind.catalog,
@@ -728,8 +738,10 @@ class SkyMapViewModel extends ChangeNotifier {
         if (!hay.contains(query)) continue;
       }
 
-      final ra = CelestialPositionService.parseRaHours(obj.ra) * 15;
+      final raHours = CelestialPositionService.parseRaHours(obj.ra);
       final dec = CelestialPositionService.parseDecDeg(obj.dec);
+      if (raHours == null || dec == null) continue;
+      final ra = raHours * 15;
       final axes = SkyMapAngularSize.resolveArcmin(obj);
       final projected = SkyMapProjectionService.projectWithSize(
         raDeg: ra,

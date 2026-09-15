@@ -8,6 +8,7 @@ import 'package:astro_journal/data/models/tonight_observation_session.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
+import 'package:astro_journal/services/recommendation/catalog_recommendation_eligibility_policy.dart';
 import 'package:astro_journal/services/recommendation/observation_window_calculator.dart';
 import 'package:astro_journal/services/recommendation_engine.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
@@ -18,6 +19,7 @@ class _CountingWindowCalculator extends ObservationWindowCalculator {
   _CountingWindowCalculator() : super(CelestialPositionService());
 
   final List<CatalogType> calls = [];
+  final List<String> objectIds = [];
 
   @override
   ObservationWindowCalculation calculate({
@@ -33,6 +35,7 @@ class _CountingWindowCalculator extends ObservationWindowCalculator {
     ObservationWindowSharedCache? sharedCache,
   }) {
     calls.add(object.catalog);
+    objectIds.add(object.id);
     return ObservationWindowCalculation(
       exclusion: ObservationWindowExclusion.none,
       moonSeparation: 120,
@@ -94,9 +97,16 @@ void main() {
     ),
   ];
 
-  Future<({List<CatalogType> calls, List<CatalogType> scheduled})> run(
+  Future<({
+    List<CatalogType> calls,
+    List<String> objectIds,
+    List<CatalogType> scheduled,
+  })> run(
     Set<CatalogType> enabled, {
     Set<ObjectType> objectTypes = const {},
+    RecommendationCandidateScope candidateScope =
+        RecommendationCandidateScope.all,
+    List<CatalogObject>? sourceCatalog,
   }) async {
     final calculator = _CountingWindowCalculator();
     final engine = RecommendationEngine(
@@ -107,7 +117,7 @@ void main() {
       windowCalculator: calculator,
     );
     final result = await engine.build(
-      catalog: catalog,
+      catalog: sourceCatalog ?? catalog,
       settings: RecommendationSettings(
         enabledCatalogs: enabled,
         enabledObjectTypes: objectTypes,
@@ -119,9 +129,11 @@ void main() {
       context: context,
       session: session,
       referenceTime: session.start,
+      candidateScope: candidateScope,
     );
     return (
       calls: calculator.calls,
+      objectIds: calculator.objectIds,
       scheduled: result.scheduleResult.targets
           .map((target) => target.object.catalog)
           .toList(),
@@ -239,6 +251,86 @@ void main() {
       expect(result.scheduled, isEmpty);
     },
   );
+
+  test(
+    'representative scope keeps Messier and featured primary targets only',
+    () async {
+      final result = await run(
+        {CatalogType.messier, CatalogType.ngc, CatalogType.ic},
+        candidateScope: RecommendationCandidateScope.representative,
+        sourceCatalog: [
+          _object('M42', CatalogType.messier, 42),
+          _object(
+            'NGC7000',
+            CatalogType.ngc,
+            7000,
+            isFeatured: true,
+          ),
+          _object(
+            'IC1805',
+            CatalogType.ic,
+            1805,
+            isFeatured: true,
+          ),
+          _object('IC4659', CatalogType.ic, 4659),
+          _object(
+            'IC_SECONDARY',
+            CatalogType.ic,
+            1,
+            isFeatured: true,
+            isPrimaryCatalog: false,
+          ),
+        ],
+      );
+
+      expect(result.objectIds, ['M42', 'NGC7000', 'IC1805']);
+    },
+  );
+
+  test('representative scope preserves the user catalog filter', () async {
+    final result = await run(
+      {CatalogType.ic},
+      candidateScope: RecommendationCandidateScope.representative,
+      sourceCatalog: [
+        _object('M42', CatalogType.messier, 42),
+        _object('IC1805', CatalogType.ic, 1805, isFeatured: true),
+      ],
+    );
+
+    expect(result.objectIds, ['IC1805']);
+  });
+
+  test('representative scope preserves the user object type filter', () async {
+    final result = await run(
+      {CatalogType.messier, CatalogType.ngc},
+      objectTypes: {ObjectType.galaxy},
+      candidateScope: RecommendationCandidateScope.representative,
+      sourceCatalog: [
+        _object('M31', CatalogType.messier, 31, type: '은하'),
+        _object('M42', CatalogType.messier, 42, type: '발광성운'),
+        _object(
+          'NGC7000',
+          CatalogType.ngc,
+          7000,
+          type: '발광성운',
+          isFeatured: true,
+        ),
+      ],
+    );
+
+    expect(result.objectIds, ['M31']);
+  });
+
+  test('direct-target scope keeps a non-featured target', () async {
+    final result = await run(
+      {CatalogType.ic},
+      candidateScope: RecommendationCandidateScope.directTarget,
+      sourceCatalog: [_object('IC4659', CatalogType.ic, 4659)],
+    );
+
+    expect(result.objectIds, ['IC4659']);
+    expect(result.scheduled, [CatalogType.ic]);
+  });
 }
 
 CatalogObject _object(
@@ -247,6 +339,8 @@ CatalogObject _object(
   int number, {
   String type = '발광성운',
   List<String> tags = const [],
+  bool isFeatured = false,
+  bool isPrimaryCatalog = true,
 }) {
   return CatalogObject(
     id: id,
@@ -259,5 +353,7 @@ CatalogObject _object(
     dec: '-24° 23m',
     magnitude: '5.0',
     tags: tags,
+    isFeatured: isFeatured,
+    isPrimaryCatalog: isPrimaryCatalog,
   );
 }
