@@ -115,6 +115,7 @@ class RecommendationEngine {
     var excludedLightPollution = 0;
     var excludedInsufficientDuration = 0;
     var excludedLimitedDifficulty = 0;
+    var excludedEquipmentUnsuitable = 0;
 
     final isLimited =
         evalContext.observationStatus == ObservationStatus.limited;
@@ -238,6 +239,10 @@ class RecommendationEngine {
                 .toDouble(),
         fieldRotationSpanDegrees: altAzPlan.fieldRotationSpanDegrees,
       );
+      if (!assessment.hasMeaningfulImagingResult) {
+        excludedEquipmentUnsuitable++;
+        continue;
+      }
       final evaluationTime =
           window.optimalTime ?? window.peakAltitudeTime ?? session.start;
       var score = _recommendationScore.calculate(
@@ -306,14 +311,19 @@ class RecommendationEngine {
         session: session,
         context: context,
         referenceTime: refTime,
-        exclusionReasons: RecommendationExclusionMessages.build(
-          altitudeExcluded: excludedAltitude,
-          azimuthExcluded: excludedAzimuth,
-          noWindow: excludedNoWindow,
-          lightPollutionExcluded: excludedLightPollution,
-          insufficientDuration: excludedInsufficientDuration,
-          limitedDifficultyExcluded: excludedLimitedDifficulty,
-        ),
+        exclusionReasons: [
+          ...RecommendationExclusionMessages.build(
+            altitudeExcluded: excludedAltitude,
+            azimuthExcluded: excludedAzimuth,
+            noWindow: excludedNoWindow,
+            lightPollutionExcluded: excludedLightPollution,
+            insufficientDuration: excludedInsufficientDuration,
+            limitedDifficultyExcluded: excludedLimitedDifficulty,
+          ),
+          if (excludedEquipmentUnsuitable > 0)
+            '현재 장비에서 의미 있는 결과를 얻기 어려운 대상 '
+                '$excludedEquipmentUnsuitable개를 제외했습니다',
+        ],
       );
     }
 

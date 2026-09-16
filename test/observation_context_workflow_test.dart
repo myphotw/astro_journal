@@ -180,6 +180,15 @@ class _Plan extends TonightShootingPlanService {
   ) async => snapshot;
 
   @override
+  Future<void> saveSnapshotForDate(
+    DateTime planDate,
+    TonightShootingPlanSnapshot snapshot,
+  ) async {
+    savedOrders.add(List<String>.from(snapshot.orderedObjectIds));
+    savedUserEdited.add(snapshot.userEdited);
+  }
+
+  @override
   Future<void> saveOrderedForDate(
     DateTime planDate,
     List<String> orderedObjectIds, {

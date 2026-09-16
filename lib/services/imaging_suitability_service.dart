@@ -192,6 +192,9 @@ class ImagingSuitabilityService {
           dailyDurationLimitedByFieldRotation,
       dailyFieldRotationSpanDegrees: dailyFieldRotationSpanDegrees,
       fieldRotationSpanDegrees: fieldRotationSpanDegrees,
+      isExtremelyTiny: extremelyTiny,
+      equipmentId: equipmentFit?.equipmentId,
+      equipmentName: equipmentFit?.equipmentName,
     );
   }
 

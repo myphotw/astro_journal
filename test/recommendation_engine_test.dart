@@ -378,6 +378,40 @@ void main() {
       );
     });
 
+    test(
+      'extremely tiny equipment fit is excluded from imaging recommendations',
+      () async {
+        final result = await engine.build(
+          catalog: [
+            buildObject(
+              id: 'ngc7009',
+              number: 7009,
+              ra: '21h 04m',
+              dec: '-11° 22m',
+              type: '행성상성운',
+            ),
+          ],
+          settings: RecommendationSettings.defaults,
+          context: buildContext(),
+          session: buildSession(),
+          limit: 1,
+          equipmentFitResolver: (_, _) => const ImagingEquipmentFit(
+            score: 5,
+            screenFillPercent: 1,
+            equipmentId: 's30-pro',
+            equipmentName: 'S30 Pro',
+          ),
+        );
+
+        expect(result.recommendations, isEmpty);
+        expect(result.scheduleItems, isEmpty);
+        expect(
+          result.exclusionReasons,
+          contains('현재 장비에서 의미 있는 결과를 얻기 어려운 대상 1개를 제외했습니다'),
+        );
+      },
+    );
+
     test('site horizon applies equally to Alt-Az and EQ planning', () async {
       final context = buildContext().copyWith(
         horizonProfile: const SiteHorizonProfile(

@@ -14,6 +14,7 @@ import '../../../data/models/observation_score_contribution.dart';
 import '../../../data/models/observation_status.dart';
 import '../../../data/models/recommendation_result.dart';
 import '../../../data/models/scheduler_models.dart';
+import '../../../data/models/shooting_time_window.dart';
 import '../../../data/models/observation_quality_component.dart';
 import '../../../services/observation_score_service.dart';
 import '../../../shared/widgets/catalog_equipment_chips_row.dart';
@@ -45,15 +46,58 @@ String _formatDateTime(DateTime dt) {
   return '${l.month}/${l.day} ${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
 }
 
+Future<({DateTime start, DateTime end})?> _pickScheduleWindow(
+  BuildContext context, {
+  required DateTime planDate,
+  DateTime? initialStart,
+  DateTime? initialEnd,
+}) async {
+  final start = await showTimePicker(
+    context: context,
+    helpText: '촬영 시작시간',
+    initialTime: TimeOfDay.fromDateTime(
+      initialStart ?? planDate.copyWith(hour: 22),
+    ),
+  );
+  if (start == null || !context.mounted) return null;
+  final end = await showTimePicker(
+    context: context,
+    helpText: '촬영 종료시간',
+    initialTime: TimeOfDay.fromDateTime(
+      initialEnd ?? planDate.copyWith(hour: 23),
+    ),
+  );
+  if (end == null) return null;
+  var startTime = planDate.copyWith(
+    hour: start.hour,
+    minute: start.minute,
+    second: 0,
+    millisecond: 0,
+    microsecond: 0,
+  );
+  if (startTime.hour < 12) {
+    startTime = startTime.add(const Duration(days: 1));
+  }
+  var endTime = planDate.copyWith(
+    hour: end.hour,
+    minute: end.minute,
+    second: 0,
+    millisecond: 0,
+    microsecond: 0,
+  );
+  if (!endTime.isAfter(startTime)) {
+    endTime = endTime.add(const Duration(days: 1));
+  }
+  return (start: startTime, end: endTime);
+}
+
 String _scoreLevelLabel(double score) {
   if (score >= 75) return '높음';
   if (score >= 50) return '보통';
   return '낮음';
 }
 
-String? _resolveExposureTimeLineLabel(
-  RecommendationResult recommended,
-) {
+String? _resolveExposureTimeLineLabel(RecommendationResult recommended) {
   final minimum = recommended.minimumExposure;
   final recommendedExposure = recommended.recommendedExposure;
   if (minimum == null || recommendedExposure == null) return null;
@@ -472,6 +516,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 items: viewModel.scheduleItems,
                 onTap: (rec) => _showObjectDetail(context, rec),
                 onEdit: () => _showShootingOrderEditor(context, viewModel),
+                onManualAdd: () => _showShootingOrderEditor(context, viewModel),
               ),
             )
           else if (viewModel.scheduleEmptyMessage != null)
@@ -481,6 +526,7 @@ class _HomeBodyState extends State<_HomeBody> {
               ),
               child: _ScheduleEmptyWidget(
                 message: viewModel.scheduleEmptyMessage!,
+                onManualAdd: () => _showShootingOrderEditor(context, viewModel),
               ),
             ),
           if (viewModel.scheduleItems.isNotEmpty ||
@@ -2359,10 +2405,7 @@ class _RecommendCompactCard extends StatelessWidget {
 }
 
 class RecommendationImagingStatusChips extends StatelessWidget {
-  const RecommendationImagingStatusChips({
-    super.key,
-    required this.assessment,
-  });
+  const RecommendationImagingStatusChips({super.key, required this.assessment});
 
   final ImagingSuitabilityAssessment assessment;
 
@@ -2671,17 +2714,13 @@ class _RecommendDetailSheet extends StatelessWidget {
                     _InfoRow(label: '필터', value: assessment.filterMode.label),
                     _InfoRow(
                       label: '광해 민감도',
-                      value:
-                          assessment.targetLightPollutionSensitivity.label,
+                      value: assessment.targetLightPollutionSensitivity.label,
                     ),
                     _InfoRow(
                       label: '필터 효과',
                       value: assessment.filterEffectiveness.label,
                     ),
-                    _InfoRow(
-                      label: '모자이크',
-                      value: assessment.mosaicMode.label,
-                    ),
+                    _InfoRow(label: '모자이크', value: assessment.mosaicMode.label),
                     _InfoRow(
                       label: '관측조건',
                       value: _scoreLevelLabel(
@@ -3183,9 +3222,10 @@ class _RecommendListTile extends StatelessWidget {
 // ── 스케줄 없음 위젯 ───────────────────────────────────────────────────────────
 
 class _ScheduleEmptyWidget extends StatelessWidget {
-  const _ScheduleEmptyWidget({required this.message});
+  const _ScheduleEmptyWidget({required this.message, this.onManualAdd});
 
   final String message;
+  final VoidCallback? onManualAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -3211,6 +3251,12 @@ class _ScheduleEmptyWidget extends StatelessWidget {
               ),
             ),
           ),
+          if (onManualAdd != null)
+            TextButton.icon(
+              onPressed: onManualAdd,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('수기 등록'),
+            ),
         ],
       ),
     );
@@ -3224,11 +3270,13 @@ class _ObservationSessionTimeline extends StatelessWidget {
     required this.items,
     required this.onTap,
     required this.onEdit,
+    required this.onManualAdd,
   });
 
   final List<ScheduleItem> items;
   final void Function(RecommendationResult result) onTap;
   final VoidCallback onEdit;
+  final VoidCallback onManualAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -3261,6 +3309,11 @@ class _ObservationSessionTimeline extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              TextButton.icon(
+                onPressed: onManualAdd,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('수기 등록'),
+              ),
               IconButton(
                 tooltip: '촬영 순서 편집',
                 visualDensity: VisualDensity.compact,
@@ -3383,6 +3436,15 @@ class _SessionTableCell extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            if (item.hasTimeOverride)
+              Text(
+                item.isManual ? '수기 등록 · 사용자 시간' : '사용자 시간',
+                style: const TextStyle(
+                  color: AppColors.solar,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             Text(
               '★' * item.starCount,
               style: TextStyle(color: color.withAlpha(200), fontSize: 9),
@@ -3734,6 +3796,110 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
     }
   }
 
+  Future<void> _addManualSchedule() async {
+    final window = await _pickScheduleWindow(
+      context,
+      planDate: widget.viewModel.planDate,
+    );
+    if (window == null || !mounted) return;
+    final objectId = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      builder: (_) => _ManualScheduleCandidateSheet(
+        viewModel: widget.viewModel,
+        start: window.start,
+        end: window.end,
+      ),
+    );
+    if (objectId == null || !mounted) return;
+    await widget.viewModel.addManualSchedule(
+      objectId: objectId,
+      start: window.start,
+      end: window.end,
+    );
+    if (!mounted) return;
+    setState(() {
+      _items = List<ScheduleItem>.from(widget.viewModel.scheduleItems);
+    });
+  }
+
+  Future<void> _editScheduleTime(ScheduleItem item) async {
+    final window = await _pickScheduleWindow(
+      context,
+      planDate: widget.viewModel.planDate,
+      initialStart: item.startTime,
+      initialEnd: item.endTime,
+    );
+    if (window == null || !mounted) return;
+    await widget.viewModel.updateScheduleTime(
+      objectId: item.target.object.id,
+      start: window.start,
+      end: window.end,
+    );
+    if (!mounted) return;
+    setState(() {
+      _items = List<ScheduleItem>.from(widget.viewModel.scheduleItems);
+    });
+  }
+
+  Future<void> _resetItemTime(ScheduleItem item) async {
+    await widget.viewModel.resetScheduleTimeToAutomatic(item.target.object.id);
+    if (!mounted) return;
+    setState(() {
+      _items = List<ScheduleItem>.from(widget.viewModel.scheduleItems);
+    });
+  }
+
+  List<String> _timeWarnings(ScheduleItem item) {
+    final suitability = widget.viewModel.shootingSuitabilityFor(
+      item.target.object.id,
+    );
+    if (suitability == null) return const [];
+    final selected = ShootingTimeWindow(
+      start: item.startTime,
+      end: item.endTime,
+    );
+    final warnings = <String>[];
+    if (selected.duration < item.target.minimumExposure) {
+      warnings.add(
+        '선택한 촬영시간이 최소 실용 촬영시간 '
+        '${item.target.minimumExposure.inMinutes}분보다 짧습니다.',
+      );
+    }
+    if (!suitability.selectedWindowIsOptimal(selected)) {
+      warnings.add('선택한 촬영시간 일부가 최적 촬영 구간을 벗어납니다.');
+    }
+    if (!suitability.selectedWindowMatchesFraming(selected)) {
+      warnings.add(
+        '선택한 시간은 기준 구도 재현 가능 범위를 벗어납니다. '
+        '멀티데이 스택 시 유효 화각 손실이 발생할 수 있습니다.',
+      );
+    }
+    return warnings;
+  }
+
+  List<String> _timeGuidance(ScheduleItem item) {
+    final suitability = widget.viewModel.shootingSuitabilityFor(
+      item.target.object.id,
+    );
+    if (suitability == null) return const [];
+    final guidance = <String>[];
+    final optimal = suitability.optimalWindow;
+    final framing = suitability.framingWindow;
+    if (optimal != null) {
+      guidance.add(
+        '최적 촬영 ${_formatTime(optimal.start)} ~ ${_formatTime(optimal.end)}',
+      );
+    }
+    if (framing != null) {
+      guidance.add(
+        '같은 구도 ${_formatTime(framing.start)} ~ ${_formatTime(framing.end)}',
+      );
+    }
+    return guidance;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -3792,30 +3958,187 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
                         item.catalogObject,
                       ),
                     ),
-                    subtitle: Text(
-                      CatalogObjectDisplayFormatter.subtitleText(
-                        item.catalogObject,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${_formatTime(item.startTime)} ~ '
+                          '${_formatTime(item.endTime)} · '
+                          '${item.shootingDuration.inMinutes}분',
+                        ),
+                        for (final guidance in _timeGuidance(item))
+                          Text(
+                            guidance,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        for (final warning in _timeWarnings(item))
+                          Text(
+                            warning,
+                            style: TextStyle(
+                              color: warning.startsWith('선택한 시간은 기준')
+                                  ? Colors.redAccent
+                                  : AppColors.solar,
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
                     ),
-                    trailing: IconButton(
-                      tooltip: '목록에서 제거',
-                      icon: const Icon(Icons.remove_circle_outline),
-                      color: Colors.redAccent,
-                      onPressed: () => _removeAt(index),
+                    onTap: () => _editScheduleTime(item),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (item.hasTimeOverride)
+                          IconButton(
+                            tooltip: '자동 시간으로 되돌리기',
+                            icon: const Icon(Icons.auto_awesome_outlined),
+                            onPressed: () => _resetItemTime(item),
+                          ),
+                        IconButton(
+                          tooltip: '목록에서 제거',
+                          icon: const Icon(Icons.remove_circle_outline),
+                          color: Colors.redAccent,
+                          onPressed: () => _removeAt(index),
+                        ),
+                      ],
                     ),
                   );
                 },
               ),
             ),
             const SizedBox(height: AppTheme.spacingSm),
+            FilledButton.icon(
+              onPressed: _addManualSchedule,
+              icon: const Icon(Icons.add_alarm_outlined, size: 18),
+              label: const Text('수기 등록'),
+            ),
+            const SizedBox(height: AppTheme.spacingXs),
             OutlinedButton.icon(
               onPressed: _resetToRecommended,
               icon: const Icon(Icons.auto_awesome_outlined, size: 18),
               label: const Text('추천 순서로 되돌리기'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManualScheduleCandidateSheet extends StatefulWidget {
+  const _ManualScheduleCandidateSheet({
+    required this.viewModel,
+    required this.start,
+    required this.end,
+  });
+
+  final HomeViewModel viewModel;
+  final DateTime start;
+  final DateTime end;
+
+  @override
+  State<_ManualScheduleCandidateSheet> createState() =>
+      _ManualScheduleCandidateSheetState();
+}
+
+class _ManualScheduleCandidateSheetState
+    extends State<_ManualScheduleCandidateSheet> {
+  bool _onlyFramingMatches = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final candidates = widget.viewModel.manualCandidatesFor(
+      start: widget.start,
+      end: widget.end,
+      onlyFramingMatches: _onlyFramingMatches,
+    );
+    return SafeArea(
+      child: FractionallySizedBox(
+        heightFactor: 0.82,
+        child: Padding(
+          padding: const EdgeInsets.all(AppTheme.spacingLg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '시간대별 촬영 대상',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_formatDateTime(widget.start)} ~ '
+                '${_formatDateTime(widget.end)} · '
+                '${widget.end.difference(widget.start).inMinutes}분',
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('기준 구도 있는 대상만'),
+                subtitle: const Text('선택한 시간 전체에서 같은 구도 재현이 가능한 대상'),
+                value: _onlyFramingMatches,
+                onChanged: (value) =>
+                    setState(() => _onlyFramingMatches = value),
+              ),
+              const Divider(),
+              Expanded(
+                child: candidates.isEmpty
+                    ? const Center(
+                        child: Text(
+                          '선택한 시간에 품질 기준을 만족하는 대상이 없습니다.',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: candidates.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final candidate = candidates[index];
+                          final suitability = candidate.suitability;
+                          final optimal = suitability.optimalWindow;
+                          final framing = suitability.framingWindow;
+                          final detail = <String>[
+                            '추천 ${candidate.recommendation.starCount}★',
+                            '관측지 촬영 가능',
+                            '장비 적합',
+                            suitability.hasFramingReference
+                                ? '기준 구도 등록됨'
+                                : '기준 구도 없음',
+                            if (suitability.hasFramingReference)
+                              candidate.matchesFraming
+                                  ? '기준 구도 재현 가능'
+                                  : '기준 구도 재현 불가',
+                            if (optimal != null)
+                              '최적 ${_formatTime(optimal.start)}~${_formatTime(optimal.end)}',
+                            if (framing != null)
+                              '같은 구도 ${_formatTime(framing.start)}~${_formatTime(framing.end)}',
+                            candidate.isOptimal
+                                ? '선택 시간이 최적 구간 안에 있음'
+                                : candidate.overlapsOptimal
+                                ? '선택 시간이 최적 구간과 일부 겹침'
+                                : '선택 시간이 최적 구간 밖',
+                          ];
+                          return ListTile(
+                            title: Text(
+                              CatalogObjectDisplayFormatter.catalogTitle(
+                                candidate.target.object,
+                              ),
+                            ),
+                            subtitle: Text(detail.join(' · ')),
+                            isThreeLine: true,
+                            trailing: const Icon(Icons.add_circle_outline),
+                            onTap: () => Navigator.of(
+                              context,
+                            ).pop(candidate.target.object.id),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -3,6 +3,8 @@ import 'catalog_object.dart';
 import 'observation_context.dart';
 import 'recommendation_result.dart';
 import 'scored_observation_target.dart';
+import 'shooting_suitability.dart';
+import 'shooting_time_window.dart';
 import 'tonight_observation_session.dart';
 
 class ScheduleSlot {
@@ -60,6 +62,10 @@ class ScheduleItem {
     required this.status,
     required this.result,
     this.haMatchQuality,
+    this.isManual = false,
+    this.hasTimeOverride = false,
+    this.recommendedWindow,
+    this.framingWindow,
   });
 
   final ScoredObservationTarget target;
@@ -75,6 +81,10 @@ class ScheduleItem {
   final ScheduleItemStatus status;
   final RecommendationResult result;
   final double? haMatchQuality;
+  final bool isManual;
+  final bool hasTimeOverride;
+  final ShootingTimeWindow? recommendedWindow;
+  final ShootingTimeWindow? framingWindow;
 
   CatalogObject get catalogObject => target.object;
 
@@ -106,6 +116,8 @@ class SchedulerInput {
     this.currentAltitudes = const {},
     this.meridianPassTimes = const {},
     this.settingTimes = const {},
+    this.suitabilityByObjectId = const {},
+    this.occupiedWindows = const [],
   });
 
   final ObservationContext context;
@@ -116,6 +128,8 @@ class SchedulerInput {
   final Map<String, double> currentAltitudes;
   final Map<String, DateTime> meridianPassTimes;
   final Map<String, DateTime> settingTimes;
+  final Map<String, ShootingSuitability> suitabilityByObjectId;
+  final List<ShootingTimeWindow> occupiedWindows;
 }
 
 class ScheduleResult {

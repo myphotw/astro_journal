@@ -78,4 +78,44 @@ void main() {
       ['m42'],
     );
   });
+
+  test('persists manual time overrides with source metadata', () async {
+    final start = DateTime(2026, 7, 7, 22);
+    final end = DateTime(2026, 7, 7, 22, 40);
+    await service.saveSnapshotForDate(
+      planDate,
+      TonightShootingPlanSnapshot(
+        orderedObjectIds: const ['m42'],
+        userEdited: true,
+        entries: [
+          TonightShootingPlanEntry(
+            objectId: 'm42',
+            startTime: start,
+            endTime: end,
+            source: TonightPlanSource.manual,
+            hasTimeOverride: true,
+          ),
+        ],
+      ),
+    );
+
+    final entry = (await service.loadSnapshotForDate(planDate)).entryFor('m42');
+    expect(entry, isNotNull);
+    expect(entry!.startTime, start);
+    expect(entry.endTime, end);
+    expect(entry.source, TonightPlanSource.manual);
+    expect(entry.hasTimeOverride, isTrue);
+  });
+
+  test('legacy ordered ids remain readable without v3 entries', () async {
+    SharedPreferences.setMockInitialValues({
+      'tonight_shooting_plan_order_v2_2026-07-07': ['m31'],
+      'tonight_shooting_plan_user_edited_v2_2026-07-07': true,
+    });
+
+    final snapshot = await service.loadSnapshotForDate(planDate);
+    expect(snapshot.orderedObjectIds, ['m31']);
+    expect(snapshot.userEdited, isTrue);
+    expect(snapshot.entryFor('m31')?.hasTimeOverride, isFalse);
+  });
 }

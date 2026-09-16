@@ -117,6 +117,9 @@ class ImagingSuitabilityAssessment {
     this.dailyDurationLimitedByFieldRotation = false,
     this.dailyFieldRotationSpanDegrees = 0,
     this.fieldRotationSpanDegrees = 0,
+    this.isExtremelyTiny = false,
+    this.equipmentId,
+    this.equipmentName,
   }) : imagingEfficiencyScore = imagingEfficiencyScore ?? suitabilityScore;
 
   final ExpectedResultQuality quality;
@@ -134,6 +137,11 @@ class ImagingSuitabilityAssessment {
   final bool dailyDurationLimitedByFieldRotation;
   final double dailyFieldRotationSpanDegrees;
   final double fieldRotationSpanDegrees;
+  final bool isExtremelyTiny;
+  final String? equipmentId;
+  final String? equipmentName;
+
+  bool get hasMeaningfulImagingResult => !isExtremelyTiny;
 
   /// Backward-compatible name used by the existing detail and tests.
   double get suitabilityScore => imagingEfficiencyScore;

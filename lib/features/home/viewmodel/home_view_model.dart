@@ -25,8 +25,13 @@ import '../../../data/models/equipment_recommendation.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/object_observation_window.dart';
+import '../../../data/models/observation_site.dart';
+import '../../../data/models/multi_night_framing_reference.dart';
+import '../../../data/models/shooting_suitability.dart';
+import '../../../data/models/shooting_time_window.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
+import '../../../data/repositories/multi_night_framing_reference_repository.dart';
 import '../../../services/celestial_position_service.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/tonight_shooting_plan_service.dart';
@@ -38,6 +43,8 @@ import '../../../services/recommendation/catalog_recommendation_eligibility_poli
 import '../../../services/recommendation_engine.dart';
 import '../../../services/recommendation_settings_service.dart';
 import '../../../services/scheduler_engine.dart';
+import '../../../services/multi_night_framing_match_service.dart';
+import '../../../services/shooting_suitability_service.dart';
 import '../../../services/weather_cache_service.dart';
 import '../../../services/weather_service.dart';
 import '../../../services/rain_observation_policy.dart';
@@ -207,6 +214,28 @@ class CategoryProgress {
   double get progressPercent => progress * 100;
 }
 
+class ManualShootingCandidate {
+  const ManualShootingCandidate({
+    required this.target,
+    required this.recommendation,
+    required this.suitability,
+    required this.selectedWindow,
+  });
+
+  final ScoredObservationTarget target;
+  final RecommendationResult recommendation;
+  final ShootingSuitability suitability;
+  final ShootingTimeWindow selectedWindow;
+
+  bool get isObservable =>
+      suitability.selectedWindowIsObservable(selectedWindow);
+  bool get matchesFraming =>
+      suitability.selectedWindowMatchesFraming(selectedWindow);
+  bool get isOptimal => suitability.selectedWindowIsOptimal(selectedWindow);
+  bool get overlapsOptimal =>
+      suitability.selectedWindowOverlapsOptimal(selectedWindow);
+}
+
 // ── ViewModel ────────────────────────────────────────────────────────────────
 
 enum RecommendationComputationState { current, recalculating, failed }
@@ -229,6 +258,8 @@ class HomeViewModel extends ChangeNotifier {
     this._schedulerEngine,
     this._activeObservationSiteViewModel, [
     this._contextInvalidator,
+    this._multiNightFramingRepository,
+    this._multiNightFramingMatchService,
   ]) {
     _contextBindingToken = _contextInvalidator?.bind(
       _handleContextInvalidation,
@@ -249,6 +280,10 @@ class HomeViewModel extends ChangeNotifier {
   final SchedulerEngine _schedulerEngine;
   final ActiveObservationSiteViewModel _activeObservationSiteViewModel;
   final ObservationContextInvalidator? _contextInvalidator;
+  final MultiNightFramingReferenceRepository? _multiNightFramingRepository;
+  final MultiNightFramingMatchService? _multiNightFramingMatchService;
+  final ShootingSuitabilityService _shootingSuitabilityService =
+      const ShootingSuitabilityService();
   late final Object? _contextBindingToken;
 
   bool _isLoading = false;
@@ -262,6 +297,7 @@ class HomeViewModel extends ChangeNotifier {
   List<EquipmentTonightGroup> _equipmentTonightGroups = [];
   List<Equipment> _activeEquipment = [];
   List<String> _plannedObjectOrder = [];
+  final Map<String, TonightShootingPlanEntry> _planEntriesById = {};
   bool _userEditedTonightPlan = false;
   List<ScheduleItem> _recommendedScheduleItems = [];
   final Map<String, CatalogEquipmentChips> _todayEquipmentChipsByObjectId = {};
@@ -269,6 +305,7 @@ class HomeViewModel extends ChangeNotifier {
       {};
   List<ScoredObservationTarget> _scoredTargets = [];
   Map<String, RecommendationResult> _resultsById = {};
+  Map<String, ShootingSuitability> _shootingSuitabilityById = {};
   ObservationContext? _lastSessionContext;
   TonightObservationSession? _lastSession;
   DateTime? _lastReferenceTime;
@@ -312,6 +349,7 @@ class HomeViewModel extends ChangeNotifier {
   List<Equipment> get activeEquipment => List.unmodifiable(_activeEquipment);
   Set<String> get plannedObjectIds => Set.unmodifiable(_plannedObjectOrder);
   bool get userEditedTonightPlan => _userEditedTonightPlan;
+  DateTime get planDate => _planDate;
   List<CategoryProgress> get categoryProgress => _categoryProgress;
   ObservationCondition? get observationCondition => _observationCondition;
   List<String> get exclusionReasons => _exclusionReasons;
@@ -396,6 +434,107 @@ class HomeViewModel extends ChangeNotifier {
 
   bool isPlanned(String objectId) => _plannedObjectOrder.contains(objectId);
 
+  TonightShootingPlanEntry? planEntryFor(String objectId) =>
+      _planEntriesById[objectId];
+
+  ShootingSuitability? shootingSuitabilityFor(String objectId) =>
+      _shootingSuitabilityById[objectId];
+
+  List<ManualShootingCandidate> manualCandidatesFor({
+    required DateTime start,
+    required DateTime end,
+    bool onlyFramingMatches = false,
+  }) {
+    if (!end.isAfter(start)) return const [];
+    final selected = ShootingTimeWindow(start: start, end: end);
+    final candidates = <ManualShootingCandidate>[];
+    for (final target in _scoredTargets) {
+      final suitability = _shootingSuitabilityById[target.object.id];
+      final recommendation = _resultsById[target.object.id];
+      if (suitability == null || recommendation == null) continue;
+      if (!suitability.eligible ||
+          selected.duration < target.minimumExposure ||
+          !suitability.selectedWindowIsObservable(selected) ||
+          !suitability.selectedWindowMatchesFraming(selected)) {
+        continue;
+      }
+      if (onlyFramingMatches && !suitability.hasFramingReference) continue;
+      candidates.add(
+        ManualShootingCandidate(
+          target: target,
+          recommendation: recommendation,
+          suitability: suitability,
+          selectedWindow: selected,
+        ),
+      );
+    }
+    candidates.sort((a, b) {
+      final optimal = (b.isOptimal ? 1 : 0).compareTo(a.isOptimal ? 1 : 0);
+      if (optimal != 0) return optimal;
+      final overlap = (b.overlapsOptimal ? 1 : 0).compareTo(
+        a.overlapsOptimal ? 1 : 0,
+      );
+      if (overlap != 0) return overlap;
+      return b.recommendation.score.compareTo(a.recommendation.score);
+    });
+    return candidates;
+  }
+
+  Future<void> addManualSchedule({
+    required String objectId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!end.isAfter(start) || !_resultsById.containsKey(objectId)) return;
+    if (!_plannedObjectOrder.contains(objectId)) {
+      _plannedObjectOrder = [..._plannedObjectOrder, objectId];
+    }
+    _planEntriesById[objectId] = TonightShootingPlanEntry(
+      objectId: objectId,
+      startTime: start,
+      endTime: end,
+      source: TonightPlanSource.manual,
+      hasTimeOverride: true,
+    );
+    _userEditedTonightPlan = true;
+    await _persistTonightPlan();
+    _applyShootingPlanFilter();
+    await _persistResolvedPlanTimes();
+    notifyListeners();
+  }
+
+  Future<void> updateScheduleTime({
+    required String objectId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!end.isAfter(start) || !_plannedObjectOrder.contains(objectId)) return;
+    final current =
+        _planEntriesById[objectId] ??
+        TonightShootingPlanEntry(objectId: objectId);
+    _planEntriesById[objectId] = current.copyWith(
+      startTime: start,
+      endTime: end,
+      source: TonightPlanSource.manual,
+      hasTimeOverride: true,
+    );
+    _userEditedTonightPlan = true;
+    await _persistTonightPlan();
+    _applyShootingPlanFilter();
+    await _persistResolvedPlanTimes();
+    notifyListeners();
+  }
+
+  Future<void> resetScheduleTimeToAutomatic(String objectId) async {
+    if (!_plannedObjectOrder.contains(objectId)) return;
+    _planEntriesById[objectId] = TonightShootingPlanEntry(objectId: objectId);
+    _userEditedTonightPlan = true;
+    await _persistTonightPlan();
+    _applyShootingPlanFilter();
+    await _persistResolvedPlanTimes();
+    notifyListeners();
+  }
+
   Future<void> reorderTonightPlan(int oldIndex, int newIndex) async {
     if (oldIndex == newIndex) return;
     if (oldIndex < 0 ||
@@ -418,6 +557,22 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> resetTonightPlanToRecommended() async {
     final autoIds = _extractAutoPlanIds();
     _plannedObjectOrder = autoIds;
+    _planEntriesById
+      ..clear()
+      ..addEntries(
+        _recommendedScheduleItems
+            .where((item) => autoIds.contains(item.target.object.id))
+            .map(
+              (item) => MapEntry(
+                item.target.object.id,
+                TonightShootingPlanEntry(
+                  objectId: item.target.object.id,
+                  startTime: item.startTime,
+                  endTime: item.endTime,
+                ),
+              ),
+            ),
+      );
     _userEditedTonightPlan = false;
     await _persistTonightPlan();
     _applyShootingPlanFilter();
@@ -442,13 +597,16 @@ class HomeViewModel extends ChangeNotifier {
       _plannedObjectOrder = _plannedObjectOrder
           .where((id) => id != objectId)
           .toList();
+      _planEntriesById.remove(objectId);
     } else {
       if (!canAddToShootingPlan(objectId)) return;
       _plannedObjectOrder = [..._plannedObjectOrder, objectId];
+      _planEntriesById[objectId] = TonightShootingPlanEntry(objectId: objectId);
     }
     _userEditedTonightPlan = true;
     await _persistTonightPlan();
     _applyShootingPlanFilter();
+    await _persistResolvedPlanTimes();
     notifyListeners();
   }
 
@@ -709,10 +867,70 @@ class HomeViewModel extends ChangeNotifier {
       return false;
     }
 
-    final candidateIds = result.scoredTargets
+    final suitabilityById = await _buildShootingSuitability(
+      targets: result.scoredTargets,
+      session: session,
+      referenceTime: now,
+      equipment: equipment,
+      context: sessionContext,
+    );
+    if (_isDisposed ||
+        requestToken != _recommendationRequestToken ||
+        (expectedRevision != null &&
+            _contextInvalidator?.revision != expectedRevision)) {
+      PerformanceProbe.event(
+        'recommendation.suitability_stale_result_discarded',
+        state:
+            'request_token=$requestToken latest_token=$_recommendationRequestToken '
+            'expected_revision=$expectedRevision current_revision=${_contextInvalidator?.revision ?? 0}',
+      );
+      return false;
+    }
+    final eligibleTargets = result.scoredTargets
+        .where((target) => suitabilityById[target.object.id]?.eligible ?? false)
+        .toList();
+    final eligibleIds = eligibleTargets
+        .map((target) => target.object.id)
+        .toSet();
+    final eligibleRecommendations = result.allRecommendations
+        .where(
+          (recommendation) => eligibleIds.contains(recommendation.object.id),
+        )
+        .toList();
+    final eligibleResultsById = {
+      for (final recommendation in eligibleRecommendations)
+        recommendation.object.id: recommendation,
+    };
+    final needsFramingAwareReschedule =
+        _multiNightFramingRepository != null &&
+        _multiNightFramingMatchService != null;
+    final qualityScheduleItems = needsFramingAwareReschedule
+        ? _schedulerEngine
+              .buildSchedule(
+                SchedulerInput(
+                  context: sessionContext,
+                  session: session,
+                  targets: eligibleTargets,
+                  resultsById: eligibleResultsById,
+                  referenceTime: now,
+                  suitabilityByObjectId: suitabilityById,
+                ),
+              )
+              .items
+              .where((item) => item.status != ScheduleItemStatus.excluded)
+              .toList()
+        : result.scheduleItems
+              .where(
+                (item) =>
+                    eligibleIds.contains(item.target.object.id) &&
+                    item.status != ScheduleItemStatus.excluded,
+              )
+              .toList();
+
+    final candidateIds = eligibleTargets
         .map((target) => target.object.id)
         .toList(growable: false);
-    final scheduleIds = result.scheduleItems
+    final scheduleIds = qualityScheduleItems
         .map((item) => item.target.object.id)
         .toList(growable: false);
     _lastScheduleRequestToken = requestToken;
@@ -730,14 +948,20 @@ class HomeViewModel extends ChangeNotifier {
     );
 
     _activeEquipment = allEquipment;
-    _exclusionReasons = result.exclusionReasons;
-    _allRecommendedObjects = result.allRecommendations;
-    _recommendedObjects = result.allRecommendations.take(mainLimit).toList();
-    _scoredTargets = result.scoredTargets;
-    _recommendedScheduleItems = result.scheduleItems;
-    _resultsById = {
-      for (final rec in result.allRecommendations) rec.object.id: rec,
-    };
+    _exclusionReasons = [
+      ...result.exclusionReasons,
+      ...suitabilityById.values
+          .where((suitability) => !suitability.eligible)
+          .map((suitability) => suitability.rejectionReason)
+          .whereType<String>()
+          .toSet(),
+    ];
+    _allRecommendedObjects = eligibleRecommendations;
+    _recommendedObjects = eligibleRecommendations.take(mainLimit).toList();
+    _scoredTargets = eligibleTargets;
+    _recommendedScheduleItems = qualityScheduleItems;
+    _resultsById = eligibleResultsById;
+    _shootingSuitabilityById = suitabilityById;
     _lastSessionContext = sessionContext;
     _lastSession = session;
     _lastReferenceTime = now;
@@ -745,6 +969,7 @@ class HomeViewModel extends ChangeNotifier {
     await _buildEquipmentGroups(equipment: equipment);
     await _autoGenerateTonightPlanIfNeeded();
     _applyShootingPlanFilter();
+    await _persistResolvedPlanTimes();
     return !_isDisposed &&
         (expectedRevision == null ||
             _contextInvalidator?.revision == expectedRevision);
@@ -753,14 +978,28 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> _loadTonightPlan() async {
     final snapshot = await _shootingPlanService.loadSnapshotForDate(_planDate);
     _plannedObjectOrder = List<String>.from(snapshot.orderedObjectIds);
+    _planEntriesById
+      ..clear()
+      ..addEntries(
+        snapshot.entries.map((entry) => MapEntry(entry.objectId, entry)),
+      );
     _userEditedTonightPlan = snapshot.userEdited;
   }
 
   Future<void> _persistTonightPlan() async {
-    await _shootingPlanService.saveOrderedForDate(
+    await _shootingPlanService.saveSnapshotForDate(
       _planDate,
-      _plannedObjectOrder,
-      userEdited: _userEditedTonightPlan,
+      TonightShootingPlanSnapshot(
+        orderedObjectIds: _plannedObjectOrder,
+        userEdited: _userEditedTonightPlan,
+        entries: _plannedObjectOrder
+            .map(
+              (id) =>
+                  _planEntriesById[id] ??
+                  TonightShootingPlanEntry(objectId: id),
+            )
+            .toList(),
+      ),
     );
   }
 
@@ -768,11 +1007,46 @@ class HomeViewModel extends ChangeNotifier {
     if (_userEditedTonightPlan) return;
 
     final autoIds = _extractAutoPlanIds();
-    if (listEquals(_plannedObjectOrder, autoIds)) return;
-
     _plannedObjectOrder = autoIds;
+    _planEntriesById
+      ..clear()
+      ..addEntries(
+        _recommendedScheduleItems
+            .where((item) => autoIds.contains(item.target.object.id))
+            .map(
+              (item) => MapEntry(
+                item.target.object.id,
+                TonightShootingPlanEntry(
+                  objectId: item.target.object.id,
+                  startTime: item.startTime,
+                  endTime: item.endTime,
+                ),
+              ),
+            ),
+      );
     _userEditedTonightPlan = false;
     await _persistTonightPlan();
+  }
+
+  Future<void> _persistResolvedPlanTimes() async {
+    if (_plannedObjectOrder.isEmpty) return;
+    var changed = false;
+    for (final item in _scheduleItems) {
+      final id = item.target.object.id;
+      final current = _planEntriesById[id];
+      if (current?.hasTimeOverride ?? false) continue;
+      if (current?.startTime == item.startTime &&
+          current?.endTime == item.endTime) {
+        continue;
+      }
+      _planEntriesById[id] = TonightShootingPlanEntry(
+        objectId: id,
+        startTime: item.startTime,
+        endTime: item.endTime,
+      );
+      changed = true;
+    }
+    if (changed) await _persistTonightPlan();
   }
 
   List<String> _extractAutoPlanIds() {
@@ -870,19 +1144,48 @@ class HomeViewModel extends ChangeNotifier {
       resultsById[target.object.id] = recommendation;
     }
 
+    final fixedItems = <ScheduleItem>[];
+    final automaticTargets = <ScoredObservationTarget>[];
+    final occupiedWindows = <ShootingTimeWindow>[];
+    for (final target in plannedTargets) {
+      final entry = _planEntriesById[target.object.id];
+      final recommendation = resultsById[target.object.id];
+      if (entry != null &&
+          entry.hasTimeOverride &&
+          entry.hasValidTime &&
+          recommendation != null) {
+        final fixed = _manualScheduleItem(
+          target: target,
+          recommendation: recommendation,
+          entry: entry,
+        );
+        fixedItems.add(fixed);
+        occupiedWindows.add(
+          ShootingTimeWindow(start: fixed.startTime, end: fixed.endTime),
+        );
+      } else {
+        automaticTargets.add(target);
+      }
+    }
+
     final scheduleResult = _schedulerEngine.buildSchedule(
       SchedulerInput(
         context: context,
         session: session,
-        targets: plannedTargets,
+        targets: automaticTargets,
         resultsById: resultsById,
         referenceTime: referenceTime,
+        suitabilityByObjectId: _shootingSuitabilityById,
+        occupiedWindows: occupiedWindows,
       ),
     );
 
-    _scheduleItems = scheduleResult.items
-        .where((item) => item.status != ScheduleItemStatus.excluded)
-        .toList();
+    _scheduleItems = [
+      ...fixedItems,
+      ...scheduleResult.items.where(
+        (item) => item.status != ScheduleItemStatus.excluded,
+      ),
+    ]..sort((a, b) => a.startTime.compareTo(b.startTime));
 
     if (_userEditedTonightPlan) {
       _sortScheduleItemsByPlanOrder();
@@ -891,6 +1194,154 @@ class HomeViewModel extends ChangeNotifier {
     _scheduleEmptyMessage = _scheduleItems.isEmpty
         ? (scheduleResult.emptyMessage ?? '촬영 계획 대상의 촬영 순서를 계산할 수 없습니다')
         : null;
+  }
+
+  ScheduleItem _manualScheduleItem({
+    required ScoredObservationTarget target,
+    required RecommendationResult recommendation,
+    required TonightShootingPlanEntry entry,
+  }) {
+    final start = entry.startTime!;
+    final end = entry.endTime!;
+    final duration = end.difference(start);
+    final recommendedDuration =
+        target.imagingAssessment?.trackingMode == TrackingMode.altAz
+        ? target.imagingAssessment?.recommendedDailyExposure ??
+              target.recommendedExposure
+        : target.recommendedExposure;
+    final status = duration >= recommendedDuration
+        ? ScheduleItemStatus.optimal
+        : duration >= target.minimumExposure
+        ? ScheduleItemStatus.belowRecommended
+        : ScheduleItemStatus.excluded;
+    final suitability = _shootingSuitabilityById[target.object.id];
+    return ScheduleItem(
+      target: target,
+      startTime: start,
+      endTime: end,
+      shootingDuration: duration,
+      recommendedDuration: recommendedDuration,
+      optimalTime: start.add(Duration(minutes: duration.inMinutes ~/ 2)),
+      optimalAltitude:
+          target.window.optimalAltitude ?? target.window.peakAltitude ?? 0,
+      recommendationScore: target.score,
+      schedulerPriority: target.schedulerPriority,
+      urgencyScore: target.urgencyScore,
+      status: status,
+      result: recommendation,
+      isManual: entry.source == TonightPlanSource.manual,
+      hasTimeOverride: true,
+      recommendedWindow: suitability?.recommendedWindow,
+      framingWindow: suitability?.framingWindow,
+    );
+  }
+
+  Future<Map<String, ShootingSuitability>> _buildShootingSuitability({
+    required List<ScoredObservationTarget> targets,
+    required TonightObservationSession session,
+    required DateTime referenceTime,
+    required List<Equipment> equipment,
+    required ObservationContext context,
+  }) async {
+    final repository = _multiNightFramingRepository;
+    final matchService = _multiNightFramingMatchService;
+    final activeSite = _activeObservationSiteViewModel.active;
+    final site = activeSite.site ??
+        ObservationSite(
+          id: 'current-location',
+          name: activeSite.displayName,
+          latitude: context.latitude,
+          longitude: context.longitude,
+          bortle: context.bortle,
+          trackingMode: context.trackingMode,
+          defaultMinAltitude: 0,
+          defaultMaxAltitude: 90,
+          createdAt: referenceTime,
+          updatedAt: referenceTime,
+          horizonPoints: activeSite.horizonProfile.points,
+          blockedAzimuthRanges: activeSite.horizonProfile.blockedRanges,
+        );
+    final equipmentById = {for (final item in equipment) item.id: item};
+    final result = <String, ShootingSuitability>{};
+
+    for (final target in targets) {
+      final equipmentId = target.imagingAssessment?.equipmentId;
+      final selectedEquipment = equipmentId == null
+          ? null
+          : equipmentById[equipmentId];
+      var hasReference = false;
+      MultiNightFramingMatchResult? framingMatch;
+      if (repository != null && selectedEquipment != null) {
+        final reference = await repository.find(
+          catalogObjectId: target.object.effectivePrimaryId,
+          equipmentId: selectedEquipment.id,
+        );
+        hasReference = reference != null;
+        if (reference != null && matchService != null) {
+          framingMatch = _bestFramingMatchForSession(
+            target: target,
+            reference: reference,
+            site: site,
+            equipment: selectedEquipment,
+            session: session,
+            referenceTime: referenceTime,
+            matchService: matchService,
+          );
+        }
+      }
+      result[target.object.id] = _shootingSuitabilityService.evaluate(
+        target: target,
+        hasFramingReference: hasReference,
+        framingMatch: framingMatch,
+      );
+    }
+    return result;
+  }
+
+  MultiNightFramingMatchResult? _bestFramingMatchForSession({
+    required ScoredObservationTarget target,
+    required MultiNightFramingReference reference,
+    required ObservationSite site,
+    required Equipment equipment,
+    required TonightObservationSession session,
+    required DateTime referenceTime,
+    required MultiNightFramingMatchService matchService,
+  }) {
+    final dates = <DateTime>{
+      DateTime(session.start.year, session.start.month, session.start.day),
+      DateTime(session.end.year, session.end.month, session.end.day),
+    };
+    final darkWindows = <MultiNightDarkWindow>[
+      (nightStart: session.start, nightEnd: session.end),
+    ];
+    MultiNightFramingMatchResult? fallback;
+    MultiNightFramingMatchResult? best;
+    var bestMinutes = -1;
+    for (final date in dates) {
+      final candidate = matchService.findToday(
+        object: target.object,
+        reference: reference,
+        site: site,
+        equipment: equipment,
+        today: date,
+        now: referenceTime,
+        darkWindows: darkWindows,
+      );
+      fallback ??= candidate;
+      final start = candidate.rangeStart;
+      final end = candidate.rangeEnd;
+      if (!candidate.isAvailable || start == null || end == null) continue;
+      final clippedStart = start.isAfter(session.start) ? start : session.start;
+      final clippedEnd = end.isBefore(session.end) ? end : session.end;
+      final minutes = clippedEnd.isAfter(clippedStart)
+          ? clippedEnd.difference(clippedStart).inMinutes
+          : 0;
+      if (minutes > bestMinutes) {
+        best = candidate;
+        bestMinutes = minutes;
+      }
+    }
+    return best ?? fallback;
   }
 
   ImagingEquipmentFit? _equipmentFitFor({

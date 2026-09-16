@@ -4,9 +4,12 @@ import '../../data/models/observation_context.dart';
 import '../../data/models/recommendation_result.dart';
 import '../../data/models/scheduler_models.dart';
 import '../../data/models/scored_observation_target.dart';
+import '../../data/models/shooting_suitability.dart';
+import '../../data/models/shooting_time_window.dart';
 import '../celestial_position_service.dart';
 import '../equipment/alt_az_imaging_policy.dart';
 import '../scheduler_engine.dart';
+import '../shooting_suitability_service.dart';
 
 class _TargetAssignmentPlan {
   const _TargetAssignmentPlan({required this.target, required this.priority});
@@ -22,8 +25,19 @@ abstract final class SchedulerAssignmentPlanner {
     required List<ScoredObservationTarget> targets,
     required Map<String, RecommendationResult> resultsById,
     required ObservationContext context,
+    Map<String, ShootingSuitability> suitabilityByObjectId = const {},
+    List<ShootingTimeWindow> occupiedWindows = const [],
   }) {
-    final occupied = <DateTime>{};
+    final occupied = slots
+        .where(
+          (slot) => occupiedWindows.any(
+            (window) => window.overlaps(
+              ShootingTimeWindow(start: slot.start, end: slot.end),
+            ),
+          ),
+        )
+        .map((slot) => slot.start)
+        .toSet();
     final items = <ScheduleItem>[];
 
     final plans =
@@ -39,18 +53,25 @@ abstract final class SchedulerAssignmentPlanner {
 
     for (final plan in plans) {
       final target = plan.target;
+      final suitability =
+          suitabilityByObjectId[target.object.id] ??
+          const ShootingSuitabilityService().evaluate(target: target);
+      if (!suitability.automaticEligible) continue;
       final window = target.window;
-      final recommendStart = window.recommendStartTime;
-      final observationEnd = window.observationEndTime;
+      final recommendedWindow = suitability.recommendedWindow;
+      final recommendStart =
+          recommendedWindow?.start ?? window.recommendStartTime;
+      final observationEnd =
+          recommendedWindow?.end ?? window.observationEndTime;
       if (recommendStart == null || observationEnd == null) continue;
+      final exactWindowEnd = recommendedWindow != null;
 
       final minSlots = _slotCountFor(target.minimumExposure);
       final assessment = target.imagingAssessment;
       final scheduledRecommendedExposure =
           assessment?.trackingMode == TrackingMode.altAz
-              ? assessment?.recommendedDailyExposure ??
-                  target.recommendedExposure
-              : target.recommendedExposure;
+          ? assessment?.recommendedDailyExposure ?? target.recommendedExposure
+          : target.recommendedExposure;
       if (scheduledRecommendedExposure <= Duration.zero) continue;
       final recSlots = _slotCountFor(scheduledRecommendedExposure);
       final targetSlotStarts = window.slotObservationScores.keys.toSet();
@@ -64,6 +85,7 @@ abstract final class SchedulerAssignmentPlanner {
         context: context,
         target: target,
         targetSlotStarts: targetSlotStarts,
+        exactWindowEnd: exactWindowEnd,
       );
 
       List<ScheduleSlot>? selected;
@@ -79,6 +101,7 @@ abstract final class SchedulerAssignmentPlanner {
           minSlots: minSlots,
           maxSlots: recSlots,
           targetSlotStarts: targetSlotStarts,
+          exactWindowEnd: exactWindowEnd,
         );
         if (block.length >= minSlots) {
           selected = block;
@@ -128,6 +151,8 @@ abstract final class SchedulerAssignmentPlanner {
             start: startTime,
             end: endTime,
           ),
+          recommendedWindow: recommendedWindow,
+          framingWindow: suitability.framingWindow,
         ),
       );
     }
@@ -150,13 +175,16 @@ abstract final class SchedulerAssignmentPlanner {
     required ObservationContext context,
     required ScoredObservationTarget target,
     required Set<DateTime> targetSlotStarts,
+    required bool exactWindowEnd,
   }) {
     final windowEnd = observationEnd.add(SchedulerEngine.slotDuration);
     final candidates = <({DateTime time, double score})>[];
 
     for (final slot in slots) {
       if (slot.start.isBefore(recommendStart) ||
-          !slot.end.isBefore(windowEnd) ||
+          (exactWindowEnd
+              ? slot.end.isAfter(observationEnd)
+              : !slot.end.isBefore(windowEnd)) ||
           occupied.contains(slot.start) ||
           (targetSlotStarts.isNotEmpty &&
               !targetSlotStarts.contains(slot.start))) {
@@ -172,7 +200,8 @@ abstract final class SchedulerAssignmentPlanner {
         context: context,
         time: slot.start,
       );
-      final score = observationScore +
+      final score =
+          observationScore +
           (haMatchQuality ?? 0) * AltAzImagingPolicy.schedulerHaBonusWeight;
       candidates.add((time: slot.start, score: score));
     }
@@ -190,13 +219,16 @@ abstract final class SchedulerAssignmentPlanner {
     required int minSlots,
     required int maxSlots,
     required Set<DateTime> targetSlotStarts,
+    required bool exactWindowEnd,
   }) {
     final windowEnd = observationEnd.add(SchedulerEngine.slotDuration);
     final freeInWindow = slots
         .where(
           (slot) =>
               !slot.start.isBefore(recommendStart) &&
-              slot.end.isBefore(windowEnd) &&
+              (exactWindowEnd
+                  ? !slot.end.isAfter(observationEnd)
+                  : slot.end.isBefore(windowEnd)) &&
               !occupied.contains(slot.start) &&
               (targetSlotStarts.isEmpty ||
                   targetSlotStarts.contains(slot.start)),
@@ -327,11 +359,7 @@ abstract final class SchedulerAssignmentPlanner {
     final center = start.add(
       Duration(minutes: end.difference(start).inMinutes ~/ 2),
     );
-    return _haMatchQualityAt(
-      target: target,
-      context: context,
-      time: center,
-    );
+    return _haMatchQualityAt(target: target, context: context, time: center);
   }
 
   static ScheduleItemStatus _resolveStatus({

@@ -75,6 +75,8 @@ class SchedulerEngine {
         targets: prioritizedTargets,
         resultsById: input.resultsById,
         context: input.context,
+        suitabilityByObjectId: input.suitabilityByObjectId,
+        occupiedWindows: input.occupiedWindows,
       ),
       state: 'targets=${input.targets.length} slots=${slots.length}',
     );
@@ -93,7 +95,9 @@ class SchedulerEngine {
   }
 
   List<ScheduleSlot> _generateFeasibleSlots(SchedulerInput input) {
-    final slots = generateSlots(input.session);
+    final slots = generateSlots(input.session)
+        .where((slot) => !slot.start.isBefore(input.referenceTime))
+        .toList();
     // 관측 불가(기상) 시에는 전체 세션 슬롯을 사용해 촬영 순서를 제안한다.
     if (input.context.observationStatus == ObservationStatus.unavailable) {
       return slots;

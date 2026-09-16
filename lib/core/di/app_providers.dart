@@ -426,6 +426,8 @@ class AppProviders {
       schedulerEngine,
       activeObservationSiteViewModel,
       observationContextInvalidator,
+      multiNightFramingRepository,
+      multiNightFramingMatchService,
     );
 
     // Home/Catalog/Gallery/Stats 등은 AppStartupViewModel이 순차 preload한다.

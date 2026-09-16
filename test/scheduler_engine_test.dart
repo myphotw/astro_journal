@@ -14,6 +14,7 @@ import 'package:astro_journal/data/models/tonight_observation_session.dart';
 import 'package:astro_journal/services/equipment/field_orientation_calculator.dart';
 import 'package:astro_journal/services/scheduler_engine.dart';
 import 'package:astro_journal/data/models/scheduler_models.dart';
+import 'package:astro_journal/data/models/shooting_time_window.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -530,6 +531,82 @@ void main() {
           scheduledHa(second.items.single, secondContext),
         ),
         lessThanOrEqualTo(0.2),
+      );
+    });
+
+    test('automatic schedule stays inside the preferred quality window', () {
+      final sessionStart = DateTime(2026, 7, 1, 20);
+      final sessionEnd = DateTime(2026, 7, 2, 1);
+      final preferredStart = DateTime(2026, 7, 1, 22);
+      final preferredEnd = DateTime(2026, 7, 1, 22, 50);
+      final target = buildTarget(
+        windowStart: sessionStart,
+        minimumExposure: const Duration(minutes: 20),
+        recommendedExposure: const Duration(minutes: 90),
+        imagingAssessment: assessment(
+          trackingMode: TrackingMode.altAz,
+          dailyDuration: const Duration(minutes: 90),
+          preferredHaWindow: TargetPreferredHaWindow(
+            startHours: -1,
+            endHours: 1,
+            centerHours: 0,
+            durationMinutes: 50,
+            todayStartTime: preferredStart,
+            todayEndTime: preferredEnd,
+          ),
+        ),
+      );
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: buildContext(start: sessionStart, end: sessionEnd),
+          session: buildSession(start: sessionStart, end: sessionEnd),
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: sessionStart,
+        ),
+      );
+
+      expect(result.items, hasLength(1));
+      expect(result.items.single.startTime.isBefore(preferredStart), isFalse);
+      expect(result.items.single.endTime.isAfter(preferredEnd), isFalse);
+      expect(result.items.single.shootingDuration.inMinutes, 50);
+    });
+
+    test('fixed user window is occupied and past slots are not assigned', () {
+      final sessionStart = DateTime(2026, 7, 1, 20);
+      final sessionEnd = DateTime(2026, 7, 2, 1);
+      final referenceTime = DateTime(2026, 7, 1, 21, 30);
+      final target = buildTarget(
+        windowStart: sessionStart,
+        optimalTime: DateTime(2026, 7, 1, 22),
+        minimumExposure: const Duration(minutes: 20),
+        recommendedExposure: const Duration(minutes: 30),
+      );
+      final occupied = ShootingTimeWindow(
+        start: DateTime(2026, 7, 1, 21, 50),
+        end: DateTime(2026, 7, 1, 22, 20),
+      );
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: buildContext(start: sessionStart, end: sessionEnd),
+          session: buildSession(start: sessionStart, end: sessionEnd),
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: referenceTime,
+          occupiedWindows: [occupied],
+        ),
+      );
+
+      expect(result.items, hasLength(1));
+      expect(result.items.single.startTime.isBefore(referenceTime), isFalse);
+      expect(
+        ShootingTimeWindow(
+          start: result.items.single.startTime,
+          end: result.items.single.endTime,
+        ).overlaps(occupied),
+        isFalse,
       );
     });
   });
