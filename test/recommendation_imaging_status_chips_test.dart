@@ -40,9 +40,16 @@ void main() {
     expect(find.byKey(const Key('recommendation-mosaic-on')), findsOneWidget);
     expect(find.text('모자이크'), findsOneWidget);
     expect(find.byKey(const Key('recommendation-quality')), findsOneWidget);
-    expect(find.text('예상 결과'), findsOneWidget);
+    expect(find.text('예상 촬영 결과'), findsOneWidget);
     expect(find.text('★★★☆☆'), findsOneWidget);
     expect(find.text('· 주요 구조 확인'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('recommendation-quality')),
+        matching: find.byType(Container),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('Filter OFF remains visible and Mosaic OFF is omitted', (
@@ -96,7 +103,7 @@ void main() {
           ),
         );
 
-        final label = find.text('예상 결과');
+        final label = find.text('예상 촬영 결과');
         final stars = find.text(quality.starLabel);
         final description = find.text('· ${quality.label}');
         expect(label, findsOneWidget);

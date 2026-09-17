@@ -1,4 +1,5 @@
 import '../core/constants/object_type.dart';
+import '../core/constants/observation_feasibility_config.dart';
 import '../core/constants/surface_brightness_class.dart';
 import '../data/models/fov_box.dart';
 import '../data/models/imaging_suitability_assessment.dart';
@@ -86,7 +87,10 @@ class ImagingSuitabilityService {
     if (moonIllumination > 0.6 && moonSeparation < 45) {
       qualityLevel -= 1;
     }
-    if (cloudCover > 50) {
+    if (cloudCover >=
+        ObservationFeasibilityConfig.minInfeasibleCloudCoveragePercent) {
+      qualityLevel = 1;
+    } else if (cloudCover > 50) {
       qualityLevel -= 1;
     }
 
@@ -182,6 +186,7 @@ class ImagingSuitabilityService {
         screenFillPercent: screenFillPercent,
         fitScore: fitScore,
         altAzRotationRisk: altAzRotationRisk,
+        cloudCover: cloudCover,
       ),
       hasReliableSurfaceBrightness: hasReliableSurfaceBrightness,
       targetLightPollutionSensitivity: lightPollutionSensitivity,
@@ -300,7 +305,12 @@ class ImagingSuitabilityService {
     required int? screenFillPercent,
     required double? fitScore,
     required bool altAzRotationRisk,
+    required double cloudCover,
   }) {
+    if (cloudCover >=
+        ObservationFeasibilityConfig.minInfeasibleCloudCoveragePercent) {
+      return '구름량이 높게 예보되어 실제 하늘 상태 확인이 필요합니다.';
+    }
     if (profile.metadataReliability == ImagingMetadataReliability.missing) {
       return '밝기와 크기 정보가 부족해 예상 품질을 보수적으로 제한했습니다.';
     }

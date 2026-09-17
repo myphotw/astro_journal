@@ -116,6 +116,43 @@ void main() {
       expect(result.userMessage, contains('구름'));
     });
 
+    test('infeasible night uses representative forecast cloud, not current 0', () {
+      final slots = contiguousSlots(DateTime(2026, 7, 20, 22), 6);
+      final summary = TonightObservationSummary(
+        finalScore: 0,
+        averageScore: 0,
+        averageQuality: const ObservationQualityIndex(
+          oqi: 0,
+          components: [],
+        ),
+        slots: const [],
+        averageCloudCoverage: 93.75,
+        averageWindSpeed: 2,
+        averageTemperature: 15,
+        averageMoonIllumination: 0.1,
+        averagePrecipitationPop: 0,
+        averageVisibilityMeters: 10000,
+        isObservationFeasible: false,
+      );
+      final result = service.evaluate(
+        context: buildContext(
+          cloudCover: 0,
+          feasibility: {
+            for (final slot in slots)
+              slot: const ObservationFeasibilityResult.infeasible(
+                reason: '구름량이 높음',
+                failedConditions: [ObservationFeasibilityReason.cloudTooHigh],
+              ),
+          },
+        ),
+        summary: summary,
+      );
+
+      expect(result.averageCloudCoverage, 93.75);
+      expect(result.primaryReason, '구름량 94%');
+      expect(result.primaryReason, isNot(contains('구름량 0%')));
+    });
+
     test('returns UNAVAILABLE when OQI is below 45', () {
       final slots = contiguousSlots(DateTime(2026, 7, 20, 22, 0), 12);
       final result = service.evaluate(

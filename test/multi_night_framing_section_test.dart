@@ -100,7 +100,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('오늘 같은 구도로 촬영할 수 있습니다.'), findsOneWidget);
+      expect(find.text('같은 구도로 촬영할 수 있습니다.'), findsOneWidget);
       expect(
         find.byKey(const Key('multi-night-inline-result')),
         findsOneWidget,
@@ -118,11 +118,29 @@ void main() {
     },
   );
 
+  testWidgets('next-day match keeps the calendar relationship visible', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1, 1);
+    await tester.pumpWidget(
+      _app(
+        _FakeReferenceRepository([_reference]),
+        matchService: _StubMatchService(availableAt: tomorrow),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('내일 01:00'), findsWidgets);
+  });
+
   testWidgets('bright-time result uses natural inline guidance', (
     tester,
   ) async {
+    final now = DateTime.now();
     final service = _StubMatchService(
       cause: MultiNightFramingUnavailableCause.skyTooBright,
+      unavailableDarkStart: DateTime(now.year, now.month, now.day, 20),
     );
     await tester.pumpWidget(
       _app(_FakeReferenceRepository([_reference]), matchService: service),
@@ -131,7 +149,7 @@ void main() {
 
     expect(find.text('오늘은 같은 구도로 촬영하기 어렵습니다.'), findsOneWidget);
     expect(find.text('같은 구도가 되는 시간에는 아직 하늘이 밝습니다.'), findsOneWidget);
-    expect(find.text('20:00 이후 촬영을 권장합니다.'), findsOneWidget);
+    expect(find.text('오늘 20:00 이후 촬영을 권장합니다.'), findsOneWidget);
     final action = tester.widget<Text>(
       find.byKey(const Key('multi-night-action-guidance')),
     );
@@ -168,7 +186,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('현재 관측지에서 가려지는 방향입니다.'), findsOneWidget);
+    expect(find.text('선택한 관측지에서 가려지는 방향입니다.'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
   });
 
@@ -238,9 +256,15 @@ MultiNightDarkWindow _wholeDayDarkWindow(DateTime date) {
 }
 
 class _StubMatchService extends MultiNightFramingMatchService {
-  _StubMatchService({this.cause});
+  _StubMatchService({
+    this.cause,
+    this.availableAt,
+    this.unavailableDarkStart,
+  });
 
   final MultiNightFramingUnavailableCause? cause;
+  final DateTime? availableAt;
+  final DateTime? unavailableDarkStart;
   int calls = 0;
 
   @override
@@ -264,7 +288,7 @@ class _StubMatchService extends MultiNightFramingMatchService {
         framingMatchAt: DateTime(2026, 8, 4, 17, 36),
         darkStart:
             unavailableCause == MultiNightFramingUnavailableCause.skyTooBright
-            ? DateTime(2026, 8, 4, 20)
+            ? unavailableDarkStart ?? DateTime(2026, 8, 4, 20)
             : null,
         hourAngleDeg: -20,
         parallacticAngleDeg: 15,
@@ -275,18 +299,19 @@ class _StubMatchService extends MultiNightFramingMatchService {
         unavailableReason:
             unavailableCause == MultiNightFramingUnavailableCause.skyTooBright
             ? '같은 구도가 되는 시간에는 아직 하늘이 밝습니다.'
-            : '현재 관측지에서 가려지는 방향입니다.',
+            : '선택한 관측지에서 가려지는 방향입니다.',
       );
     }
+    final recommendationTime = availableAt ?? DateTime(2026, 8, 4, 20, 14);
     return MultiNightFramingMatchResult(
       reference: reference,
       site: site,
       equipment: equipment,
       isAvailable: true,
-      recommendedAt: DateTime(2026, 8, 4, 20, 14),
-      framingMatchAt: DateTime(2026, 8, 4, 20, 14),
-      rangeStart: DateTime(2026, 8, 4, 20, 9),
-      rangeEnd: DateTime(2026, 8, 4, 20, 19),
+      recommendedAt: recommendationTime,
+      framingMatchAt: recommendationTime,
+      rangeStart: recommendationTime.subtract(const Duration(minutes: 5)),
+      rangeEnd: recommendationTime.add(const Duration(minutes: 5)),
       darkStart: DateTime(2026, 8, 4, 20),
       darkEnd: DateTime(2026, 8, 5, 4),
       hourAngleDeg: -20,

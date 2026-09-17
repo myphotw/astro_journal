@@ -292,6 +292,38 @@ void main() {
     expect(result.recommendedAt, isNull);
     expect(result.unavailableCause, MultiNightFramingUnavailableCause.dawn);
   });
+
+  test('live search crosses midnight and never returns an elapsed match', () {
+    final now = DateTime(2026, 9, 16, 18, 43);
+    final site = _site.copyWith(defaultMinAltitude: -90);
+    final reference = service.buildReference(
+      object: _ngc7293,
+      capturedAt: DateTime(2026, 9, 16, 1),
+      site: site,
+      equipment: _equipment,
+      id: 'ngc7293-reference',
+    );
+
+    final result = service.findToday(
+      object: _ngc7293,
+      reference: reference,
+      site: site,
+      equipment: _equipment,
+      now: now,
+      darkWindows: [
+        (
+          nightStart: DateTime(2026, 9, 16, 19),
+          nightEnd: DateTime(2026, 9, 17, 5),
+        ),
+      ],
+    );
+
+    expect(result.isAvailable, isTrue);
+    expect(result.recommendedAt, isNotNull);
+    expect(result.recommendedAt!.isAfter(now), isTrue);
+    expect(result.recommendedAt!.day, 17);
+    expect(result.framingMatchAt!.day, 17);
+  });
 }
 
 MultiNightDarkWindow _wholeDayDarkWindow(DateTime date) {
@@ -331,6 +363,18 @@ const _m16 = CatalogObject(
   ra: '18h 18.8m',
   dec: '-13° 47m',
   magnitude: '6.0',
+);
+
+const _ngc7293 = CatalogObject(
+  id: 'NGC7293',
+  number: 7293,
+  catalog: CatalogType.ngc,
+  name: 'Helix Nebula',
+  type: '행성상성운',
+  constellation: '물병자리',
+  ra: '22h 29.6m',
+  dec: '-20° 50m',
+  magnitude: '7.6',
 );
 
 final _site = ObservationSite(

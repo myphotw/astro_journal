@@ -51,6 +51,7 @@ void main() {
               object: object,
               referenceDate: DateTime(2026, 8, 4),
               isAvailableTonight: true,
+              state: TargetImagingAvailabilityState.sufficientWindow,
               recommendation: RecommendationResult(
                 object: object,
                 reasons: const [],
@@ -82,8 +83,9 @@ void main() {
       ),
     );
 
-    expect(find.text('현재 관측지'), findsOneWidget);
-    expect(find.text('집 · Bortle 9'), findsOneWidget);
+    expect(find.text('현재 위치 촬영 가능성'), findsOneWidget);
+    expect(find.text('현재 위치 · Bortle 9'), findsOneWidget);
+    expect(find.text('현재 위치 기준 · 등록 시야각 정보 미적용'), findsOneWidget);
     expect(find.text('권장 촬영시간'), findsOneWidget);
     expect(find.text('60분'), findsOneWidget);
     final todaySummary = find.byKey(const Key('catalog-today-status'));
@@ -93,7 +95,11 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: todaySummary, matching: find.text('촬영 가능')),
+      find.descendant(of: todaySummary, matching: find.text('촬영 조건 양호')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: todaySummary, matching: find.text('최소 촬영시간 충족')),
       findsOneWidget,
     );
     final availableWindowSummary = find.byKey(
@@ -101,7 +107,10 @@ void main() {
     );
     expect(availableWindowSummary, findsOneWidget);
     expect(
-      find.descendant(of: availableWindowSummary, matching: find.text('촬영 가능')),
+      find.descendant(
+        of: availableWindowSummary,
+        matching: find.text('천문학적 관측 가능'),
+      ),
       findsOneWidget,
     );
     expect(
@@ -135,6 +144,7 @@ void main() {
     expect(find.text('OFF'), findsOneWidget);
     expect(find.text('모자이크'), findsOneWidget);
     expect(find.text('ON'), findsOneWidget);
+    expect(find.text('예상 결과 (기상 미반영)'), findsOneWidget);
 
     final section = tester.widget<CatalogExposureGuidanceSection>(
       find.byType(CatalogExposureGuidanceSection),
@@ -151,6 +161,7 @@ void main() {
                 site: section.site,
                 availability: section.availability,
                 isAvailabilityLoading: section.isAvailabilityLoading,
+                availabilityError: section.availabilityError,
               ),
             ),
           ),
@@ -164,5 +175,31 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('current location failure is explicit and has no site fallback', (
+    tester,
+  ) async {
+    const guidance = CatalogExposureGuidance(
+      referenceBortle: 5,
+      feasibility: CatalogExposureFeasibility.feasible,
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: CatalogExposureGuidanceSection(
+            guidance: guidance,
+            availabilityError: '현재 위치를 확인할 수 없습니다.',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('현재 위치 촬영 가능성'), findsOneWidget);
+    expect(find.text('현재 위치'), findsOneWidget);
+    expect(find.text('현재 위치를 확인할 수 없습니다.'), findsOneWidget);
+    expect(find.textContaining('집'), findsNothing);
+    expect(find.textContaining('구례'), findsNothing);
   });
 }

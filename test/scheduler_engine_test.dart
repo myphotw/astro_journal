@@ -8,6 +8,9 @@ import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
 import 'package:astro_journal/data/models/object_imaging_profile.dart';
 import 'package:astro_journal/data/models/object_observation_window.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
+import 'package:astro_journal/data/models/observation_feasibility_reason.dart';
+import 'package:astro_journal/data/models/observation_feasibility_result.dart';
+import 'package:astro_journal/data/models/observation_status.dart';
 import 'package:astro_journal/data/models/recommendation_result.dart';
 import 'package:astro_journal/data/models/scored_observation_target.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
@@ -78,7 +81,7 @@ void main() {
           optimalAltitude: 60,
           peakAltitude: 60,
           peakAltitudeTime: optimal,
-          observationEndTime: start.add(Duration(minutes: windowMinutes - 10)),
+          observationEndTime: start.add(Duration(minutes: windowMinutes)),
           totalObservableMinutes: windowMinutes,
           slotObservationScores: slotObservationScores,
         ),
@@ -174,6 +177,60 @@ void main() {
         result.items.first.optimalTime.isBefore(result.items.first.endTime),
         isTrue,
       );
+    });
+
+    test('bad weather slots do not remove an otherwise schedulable target', () {
+      final start = DateTime(2026, 7, 1, 20);
+      final end = DateTime(2026, 7, 2, 0, 30);
+      final session = buildSession(start: start, end: end);
+      final context = buildContext(start: start, end: end).copyWith(
+        observationStatus: ObservationStatus.limited,
+        siteSlotFeasibility: {
+          start: const ObservationFeasibilityResult.infeasible(
+            reason: '구름량 100%',
+            failedConditions: [ObservationFeasibilityReason.cloudTooHigh],
+          ),
+        },
+      );
+      final target = buildTarget();
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: context,
+          session: session,
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: start,
+        ),
+      );
+
+      expect(result.slots, isNotEmpty);
+      expect(result.items, hasLength(1));
+    });
+
+    test('unavailable weather preserves slots but suppresses auto schedule', () {
+      final start = DateTime(2026, 7, 1, 20);
+      final end = DateTime(2026, 7, 2, 0, 30);
+      final session = buildSession(start: start, end: end);
+      final context = buildContext(start: start, end: end).copyWith(
+        observationStatus: ObservationStatus.unavailable,
+      );
+      final target = buildTarget();
+
+      final result = engine.buildSchedule(
+        SchedulerInput(
+          context: context,
+          session: session,
+          targets: [target],
+          resultsById: {target.object.id: buildResult(target)},
+          referenceTime: start,
+        ),
+      );
+
+      expect(result.slots, isNotEmpty);
+      expect(result.targets, hasLength(1));
+      expect(result.items, isEmpty);
+      expect(result.emptyMessage, SchedulerEngine.weatherLimitedMessage);
     });
 
     test('skips assignment when window is shorter than minimum exposure', () {

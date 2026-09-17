@@ -8,10 +8,50 @@ import 'multi_night_framing_match_service.dart';
 class ShootingSuitabilityService {
   const ShootingSuitabilityService();
 
+  ManualShootingWindowProposal? proposeManualWindow({
+    required ScoredObservationTarget target,
+    required ShootingSuitability suitability,
+    required ShootingTimeWindow searchWindow,
+  }) {
+    if (!searchWindow.isValid || !suitability.eligible) return null;
+    final qualityWindow = suitability.recommendedWindow;
+    if (qualityWindow == null) return null;
+    final usableWindow = searchWindow.intersect(qualityWindow);
+    if (usableWindow == null) return null;
+
+    final minimumDuration = target.minimumExposure;
+    final recommendedDuration =
+        target.imagingAssessment?.recommendedDailyExposure ??
+        target.recommendedExposure;
+    if (recommendedDuration <= Duration.zero) return null;
+    final belowMinimum = usableWindow.duration < minimumDuration;
+    if (belowMinimum && !suitability.manualMultiNightEligible) return null;
+
+    final proposedDuration = usableWindow.duration < recommendedDuration
+        ? usableWindow.duration
+        : recommendedDuration;
+    final proposedWindow = _bestWindowWithin(
+      usableWindow: usableWindow,
+      duration: proposedDuration,
+      preferredCenter: target.window.optimalTime,
+    );
+    return ManualShootingWindowProposal(
+      searchWindow: searchWindow,
+      usableWindow: usableWindow,
+      proposedWindow: proposedWindow,
+      minimumDuration: minimumDuration,
+      recommendedDuration: recommendedDuration,
+      hasFramingReference: suitability.hasFramingReference,
+      framingMatched:
+          suitability.selectedWindowMatchesFraming(proposedWindow),
+    );
+  }
+
   ShootingSuitability evaluate({
     required ScoredObservationTarget target,
     bool hasFramingReference = false,
     MultiNightFramingMatchResult? framingMatch,
+    bool enforceMeaningfulEquipmentResult = true,
   }) {
     final observation = _observationWindow(target);
     if (observation == null) {
@@ -25,7 +65,8 @@ class ShootingSuitabilityService {
       );
     }
 
-    if (target.imagingAssessment?.isExtremelyTiny ?? false) {
+    if (enforceMeaningfulEquipmentResult &&
+        (target.imagingAssessment?.isExtremelyTiny ?? false)) {
       return ShootingSuitability(
         eligible: false,
         observationWindow: observation,
@@ -158,5 +199,22 @@ class ShootingSuitabilityService {
     final end = target.window.optimalEndTime;
     if (start == null || end == null || !end.isAfter(start)) return null;
     return ShootingTimeWindow(start: start, end: end);
+  }
+
+  ShootingTimeWindow _bestWindowWithin({
+    required ShootingTimeWindow usableWindow,
+    required Duration duration,
+    DateTime? preferredCenter,
+  }) {
+    if (duration >= usableWindow.duration) return usableWindow;
+    final latestStart = usableWindow.end.subtract(duration);
+    var start = preferredCenter == null
+        ? usableWindow.start
+        : preferredCenter.subtract(
+            Duration(milliseconds: duration.inMilliseconds ~/ 2),
+          );
+    if (start.isBefore(usableWindow.start)) start = usableWindow.start;
+    if (start.isAfter(latestStart)) start = latestStart;
+    return ShootingTimeWindow(start: start, end: start.add(duration));
   }
 }

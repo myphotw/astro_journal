@@ -6,6 +6,7 @@ import '../../data/models/observation_context.dart';
 import '../../data/models/observation_weather.dart';
 import '../../data/models/tonight_observation_session.dart';
 import '../../core/services/performance_probe.dart';
+import '../../core/constants/observation_feasibility_config.dart';
 import '../celestial_position_service.dart';
 import '../horizon_visibility_service.dart';
 import '../observation_feasibility_policy.dart';
@@ -23,6 +24,11 @@ enum ObservationWindowExclusion {
   altitude,
   azimuth,
   insufficientDuration,
+}
+
+enum ObservationWindowDurationPolicy {
+  strict,
+  informational,
 }
 
 class ObservationWindowCalculation {
@@ -64,6 +70,8 @@ class ObservationWindowCalculator {
     required DateTime referenceTime,
     required Duration minimumExposure,
     required Duration recommendedExposure,
+    ObservationWindowDurationPolicy durationPolicy =
+        ObservationWindowDurationPolicy.strict,
     ObservationWindowPerformance? performance,
     ObservationWindowSharedCache? sharedCache,
   }) {
@@ -148,7 +156,8 @@ class ObservationWindowCalculator {
     final horizonSpanMinutes =
         horizonEnd.difference(horizonStart).inMinutes + 10;
 
-    if (horizonSpanMinutes < minimumExposure.inMinutes) {
+    if (durationPolicy == ObservationWindowDurationPolicy.strict &&
+        horizonSpanMinutes < minimumExposure.inMinutes) {
       return ObservationWindowCalculation(
         window: null,
         exclusion: ObservationWindowExclusion.insufficientDuration,
@@ -179,7 +188,6 @@ class ObservationWindowCalculator {
     var bestScore = -1.0;
     CelestialTimePoint? bestPoint;
     var hadLightPollutionFailure = false;
-    var hadWeatherFailure = false;
 
     performance?.slotScoring.start();
     for (final point in visiblePoints) {
@@ -195,15 +203,15 @@ class ObservationWindowCalculator {
           azimuth: point.azimuth,
         );
         if (!feasibility.canObserve) {
-          if (feasibility.failedConditions.contains(
+          final hardFailures = feasibility.failedConditions
+              .where((reason) => !_isWeatherReason(reason))
+              .toList(growable: false);
+          if (hardFailures.contains(
             ObservationFeasibilityReason.lightPollution,
           )) {
             hadLightPollutionFailure = true;
           }
-          if (feasibility.failedConditions.any(_isWeatherReason)) {
-            hadWeatherFailure = true;
-          }
-          continue;
+          if (hardFailures.isNotEmpty) continue;
         }
       }
 
@@ -244,7 +252,7 @@ class ObservationWindowCalculator {
     performance?.slotScoring.stop();
 
     if (bestScore < 0) {
-      if (hadLightPollutionFailure && !hadWeatherFailure) {
+      if (hadLightPollutionFailure) {
         return ObservationWindowCalculation(
           window: null,
           exclusion: ObservationWindowExclusion.noWindow,
@@ -253,9 +261,7 @@ class ObservationWindowCalculator {
       }
       return ObservationWindowCalculation(
         window: null,
-        exclusion: hadWeatherFailure
-            ? ObservationWindowExclusion.noWindow
-            : ObservationWindowExclusion.insufficientDuration,
+        exclusion: ObservationWindowExclusion.insufficientDuration,
         moonSeparation: moonSeparation,
       );
     }
@@ -263,6 +269,9 @@ class ObservationWindowCalculator {
     performance?.continuity.start();
     final continuity = FeasibleSlotContinuity.analyzeSorted(
       slotScores.keys.toList(growable: false),
+      minMinutes: durationPolicy == ObservationWindowDurationPolicy.strict
+          ? ObservationFeasibilityConfig.minContinuousShootingMinutes
+          : _slotDuration.inMinutes,
     );
     if (!continuity.hasMinimumContinuousDuration) {
       performance?.continuity.stop();
@@ -277,7 +286,8 @@ class ObservationWindowCalculator {
       continuity.allowedSlots.map((slot) => MapEntry(slot, slotScores[slot]!)),
     );
 
-    if (continuity.longestMinutes < minimumExposure.inMinutes) {
+    if (durationPolicy == ObservationWindowDurationPolicy.strict &&
+        continuity.longestMinutes < minimumExposure.inMinutes) {
       performance?.continuity.stop();
       return ObservationWindowCalculation(
         window: null,
@@ -307,14 +317,12 @@ class ObservationWindowCalculator {
     final optimalPoint = bestPoint;
     final feasibleStarts = continuity.allowedSlots;
     final recommendStart = feasibleStarts.first;
-    final observationEnd = feasibleStarts.last;
+    final observationEnd = feasibleStarts.last.add(_slotDuration);
     final totalMinutes = feasibleStarts.length * _slotDuration.inMinutes;
     final remainingVisibleMinutes =
         feasibleStarts.where((slot) => !slot.isBefore(referenceTime)).length *
         _slotDuration.inMinutes;
-    var latestStart = observationEnd
-        .add(_slotDuration)
-        .subtract(recommendedExposure);
+    var latestStart = observationEnd.subtract(recommendedExposure);
     if (latestStart.isBefore(recommendStart)) latestStart = recommendStart;
     performance?.continuity.stop();
     performance?.moonSafety.start();
@@ -347,7 +355,7 @@ class ObservationWindowCalculator {
     final feasibleSummary = FeasibleWindowFormatter.buildSummary(
       feasibleRanges: feasibleRanges,
       fullWindowStart: recommendStart,
-      fullWindowEnd: observationEnd.add(_slotDuration),
+      fullWindowEnd: observationEnd,
     );
 
     final optimalSlotStart = _alignToSlot(optimalPoint.time);
@@ -377,6 +385,7 @@ class ObservationWindowCalculator {
         feasibleWindowSummary: feasibleSummary,
         optimalFeasibleCloudCoverage: optimalWeather?.cloudCover,
         optimalFeasibleWindSpeed: optimalWeather?.windSpeed,
+        optimalWeatherScore: optimalWeather?.weatherScore,
       ),
       exclusion: ObservationWindowExclusion.none,
       moonSeparation: moonSeparation,
@@ -433,6 +442,7 @@ class ObservationWindowCalculator {
   bool _isWeatherReason(ObservationFeasibilityReason reason) {
     return switch (reason) {
       ObservationFeasibilityReason.cloudTooHigh ||
+      ObservationFeasibilityReason.rainVolume ||
       ObservationFeasibilityReason.rainProbability ||
       ObservationFeasibilityReason.visibilityTooLow ||
       ObservationFeasibilityReason.windTooStrong => true,

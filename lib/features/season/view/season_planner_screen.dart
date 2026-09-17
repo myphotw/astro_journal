@@ -18,6 +18,7 @@ import '../../../services/exposure_policy.dart';
 import '../../../services/base_exposure_settings_service.dart';
 import '../../../services/metadata_service.dart';
 import '../../../services/object_imaging_profile_provider.dart';
+import '../../../services/observation_condition_service.dart';
 import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
 import '../../../services/season_planner_filter_service.dart';
@@ -399,6 +400,7 @@ class _SeasonObjectGrid extends StatelessWidget {
       captureProjection: context.read<CatalogCaptureProjectionService>(),
       observationSiteRepository: context.read<ObservationSiteRepository>(),
       availabilityService: context.read<TargetImagingAvailabilityService>(),
+      observationConditionService: context.read<ObservationConditionService>(),
     );
 
     final dataChanged = await Navigator.of(context)

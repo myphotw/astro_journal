@@ -552,7 +552,7 @@ class _InlineMatchResult extends StatelessWidget {
             children: [
               if (result.isAvailable) ...[
                 const Text(
-                  '오늘 같은 구도로 촬영할 수 있습니다.',
+                  '같은 구도로 촬영할 수 있습니다.',
                   key: Key('multi-night-availability-status'),
                   style: TextStyle(
                     color: Colors.lightGreenAccent,
@@ -560,27 +560,39 @@ class _InlineMatchResult extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Wrap(
-                  key: const Key('multi-night-result-summary'),
-                  spacing: 24,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.end,
-                  children: [
-                    _PrimaryResultValue(
-                      label: '오늘 같은 구도 촬영',
-                      value: _formatTime(result.recommendedAt!),
-                    ),
-                    if (result.rangeStart != null && result.rangeEnd != null)
-                      _ResultValue(
-                        label: '권장 시작',
-                        value:
-                            '${_formatTime(result.rangeStart!)}~${_formatTime(result.rangeEnd!)}',
-                      ),
-                    _ResultValue(
-                      label: '구도 차이',
-                      value: result.framingDifferenceLabel,
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 360;
+                    return Wrap(
+                      key: const Key('multi-night-result-summary'),
+                      alignment: isNarrow
+                          ? WrapAlignment.spaceBetween
+                          : WrapAlignment.start,
+                      spacing: isNarrow ? 0 : 24,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.end,
+                      children: [
+                        _PrimaryResultValue(
+                          label: '같은 구도 촬영',
+                          value: _formatRelativeDateTime(
+                            result.recommendedAt!,
+                          ),
+                        ),
+                        if (result.rangeStart != null && result.rangeEnd != null)
+                          _ResultValue(
+                            label: '권장 시작',
+                            value: _formatRelativeRange(
+                              result.rangeStart!,
+                              result.rangeEnd!,
+                            ),
+                          ),
+                        _ResultValue(
+                          label: '구도 차이',
+                          value: result.framingDifferenceLabel,
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 if (matchesOptimalWindow) ...[
                   const SizedBox(height: 6),
@@ -609,7 +621,7 @@ class _InlineMatchResult extends StatelessWidget {
                 if (result.darkStart != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    '${_formatTime(result.darkStart!)} 이후 촬영을 권장합니다.',
+                    '${_formatRelativeDateTime(result.darkStart!)} 이후 촬영을 권장합니다.',
                     key: const Key('multi-night-action-guidance'),
                     style: const TextStyle(
                       color: AppColors.messier,
@@ -633,12 +645,14 @@ class _InlineMatchResult extends StatelessWidget {
                         if (result.framingMatchAt != null)
                           _InlineValue(
                             label: '구도 일치 예상시간',
-                            value: _formatTime(result.framingMatchAt!),
+                            value: _formatRelativeDateTime(
+                              result.framingMatchAt!,
+                            ),
                           ),
                         if (result.darkStart != null)
                           _InlineValue(
                             label: '하늘이 충분히 어두워지는 시간',
-                            value: _formatTime(result.darkStart!),
+                            value: _formatRelativeDateTime(result.darkStart!),
                           ),
                         _InlineValue(
                           label: '기준 HA',
@@ -646,7 +660,7 @@ class _InlineMatchResult extends StatelessWidget {
                               '${result.reference.referenceHourAngleDeg.toStringAsFixed(2)}°',
                         ),
                         _InlineValue(
-                          label: '오늘 HA',
+                          label: '예상 HA',
                           value: '${result.hourAngleDeg.toStringAsFixed(2)}°',
                         ),
                         _InlineValue(
@@ -655,7 +669,7 @@ class _InlineMatchResult extends StatelessWidget {
                               '${result.reference.referenceParallacticAngleDeg.toStringAsFixed(2)}°',
                         ),
                         _InlineValue(
-                          label: '오늘 PA',
+                          label: '예상 PA',
                           value:
                               '${result.parallacticAngleDeg.toStringAsFixed(2)}°',
                         ),
@@ -680,6 +694,34 @@ class _InlineMatchResult extends StatelessWidget {
     final local = value.toLocal();
     return '${local.hour.toString().padLeft(2, '0')}:'
         '${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  static String _formatRelativeDateTime(DateTime value) {
+    final local = value.toLocal();
+    final now = DateTime.now().toLocal();
+    final today = DateTime(now.year, now.month, now.day);
+    final date = DateTime(local.year, local.month, local.day);
+    final dayDifference = date.difference(today).inDays;
+    final prefix = switch (dayDifference) {
+      0 => '오늘',
+      1 => '내일',
+      _ when local.year == now.year => '${local.month}/${local.day}',
+      _ => '${local.year}.${local.month}.${local.day}',
+    };
+    return '$prefix ${_formatTime(local)}';
+  }
+
+  static String _formatRelativeRange(DateTime start, DateTime end) {
+    final localStart = start.toLocal();
+    final localEnd = end.toLocal();
+    final sameDate = localStart.year == localEnd.year &&
+        localStart.month == localEnd.month &&
+        localStart.day == localEnd.day;
+    if (sameDate) {
+      return '${_formatRelativeDateTime(localStart)}~${_formatTime(localEnd)}';
+    }
+    return '${_formatRelativeDateTime(localStart)}~'
+        '${_formatRelativeDateTime(localEnd)}';
   }
 }
 

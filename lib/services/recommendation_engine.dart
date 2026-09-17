@@ -21,8 +21,6 @@ import 'equipment/alt_az_imaging_policy.dart';
 import 'imaging_suitability_service.dart';
 import 'object_imaging_profile_provider.dart';
 import 'recommendation/catalog_recommendation_eligibility_policy.dart';
-import 'recommendation/feasibility_exclusion_messages.dart';
-import 'recommendation/limited_recommendation_policy.dart';
 import 'recommendation/recommendation_candidate_sorter.dart';
 import 'recommendation/recommendation_exclusion_messages.dart';
 import 'recommendation/recommendation_reason_builder.dart';
@@ -72,6 +70,9 @@ class RecommendationEngine {
     TrackingMode trackingMode = TrackingMode.altAz,
     RecommendationCandidateScope candidateScope =
         RecommendationCandidateScope.all,
+    ObservationWindowDurationPolicy durationPolicy =
+        ObservationWindowDurationPolicy.strict,
+    bool enforceMeaningfulEquipmentResult = true,
     ImagingEquipmentFit? Function(
       CatalogObject object,
       ObjectObservationWindow window,
@@ -100,11 +101,9 @@ class RecommendationEngine {
     final now = referenceTime ?? context.currentTime;
     final refTime = _clampReferenceTime(now, session);
 
-    // 관측 불가여도 기상은 변할 수 있으므로, 천체·광해 기준으로 추천/스케줄은 계속 계산한다.
-    final evalContext =
-        context.observationStatus == ObservationStatus.unavailable
-        ? _planningContextIgnoringWeather(context)
-        : context;
+    // Weather remains part of scoring and guidance, but never removes an
+    // otherwise observable target or its astronomical window.
+    final evalContext = context;
 
     final month = session.start.month;
     final season = RecommendationReasonBuilder.seasonLabel(month);
@@ -114,7 +113,7 @@ class RecommendationEngine {
     var excludedNoWindow = 0;
     var excludedLightPollution = 0;
     var excludedInsufficientDuration = 0;
-    var excludedLimitedDifficulty = 0;
+    const excludedLimitedDifficulty = 0;
     var excludedEquipmentUnsuitable = 0;
 
     final isLimited =
@@ -147,11 +146,6 @@ class RecommendationEngine {
 
       final profile = _profileProvider.profileFor(object);
 
-      if (isLimited && !LimitedRecommendationPolicy.allowsTarget(profile)) {
-        excludedLimitedDifficulty++;
-        continue;
-      }
-
       final minimumExposure = _exposurePolicy.calculateMinimumExposure(
         bortle: evalContext.bortle,
         brightness: evalContext.brightness,
@@ -174,6 +168,7 @@ class RecommendationEngine {
         referenceTime: refTime,
         minimumExposure: minimumExposure,
         recommendedExposure: recommendedExposure,
+        durationPolicy: durationPolicy,
         performance: diagnostics?.windowDetails,
         sharedCache: windowSharedCache,
       );
@@ -239,7 +234,8 @@ class RecommendationEngine {
                 .toDouble(),
         fieldRotationSpanDegrees: altAzPlan.fieldRotationSpanDegrees,
       );
-      if (!assessment.hasMeaningfulImagingResult) {
+      if (enforceMeaningfulEquipmentResult &&
+          !assessment.hasMeaningfulImagingResult) {
         excludedEquipmentUnsuitable++;
         continue;
       }
@@ -265,6 +261,9 @@ class RecommendationEngine {
 
       if (isLimited && profile.imagingDifficulty == ImagingDifficulty.normal) {
         score *= ObservationStatusConfig.limitedNormalDifficultyScoreMultiplier;
+      }
+      if (evalContext.observationStatus == ObservationStatus.unavailable) {
+        score *= ObservationStatusConfig.unavailableRecommendationScoreMultiplier;
       }
 
       if (score <= 0) continue;
@@ -294,19 +293,6 @@ class RecommendationEngine {
     }
 
     if (candidates.isEmpty) {
-      final siteFeasibility = evalContext.siteSlotFeasibility.values;
-      if (siteFeasibility.isNotEmpty &&
-          siteFeasibility.every((result) => !result.canObserve)) {
-        return _emptyResult(
-          session: session,
-          context: context,
-          referenceTime: refTime,
-          exclusionReasons: FeasibilityExclusionMessages.build(
-            feasibilityResults: siteFeasibility,
-          ),
-        );
-      }
-
       return _emptyResult(
         session: session,
         context: context,
@@ -396,30 +382,6 @@ class RecommendationEngine {
       candidateCount: candidates.length,
     );
     return result;
-  }
-
-  /// 관측 불가 시에도 추천·스케줄을 보여주기 위한 기상 무시 컨텍스트.
-  /// 위치·달·Bortle 등 천체/광해 조건은 유지한다.
-  ObservationContext _planningContextIgnoringWeather(
-    ObservationContext context,
-  ) {
-    return ObservationContext(
-      latitude: context.latitude,
-      longitude: context.longitude,
-      brightness: context.brightness,
-      bortle: context.bortle,
-      moonIllumination: context.moonIllumination,
-      moonAltitude: context.moonAltitude,
-      moonAzimuth: context.moonAzimuth,
-      cloudCover: 0,
-      observationStart: context.observationStart,
-      observationEnd: context.observationEnd,
-      currentTime: context.currentTime,
-      observationStatus: ObservationStatus.good,
-      catalog: context.catalog,
-      shootingRecords: context.shootingRecords,
-      horizonProfile: context.horizonProfile,
-    );
   }
 
   _RecommendationPrefilter _prefilterCatalog(

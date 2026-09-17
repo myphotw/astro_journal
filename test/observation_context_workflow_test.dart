@@ -38,6 +38,7 @@ import 'package:astro_journal/services/object_imaging_profile_provider.dart';
 import 'package:astro_journal/services/observation_condition_service.dart';
 import 'package:astro_journal/services/observation_engine.dart';
 import 'package:astro_journal/services/recommendation/catalog_recommendation_eligibility_policy.dart';
+import 'package:astro_journal/services/recommendation/observation_window_calculator.dart';
 import 'package:astro_journal/services/recommendation_engine.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
 import 'package:astro_journal/services/scheduler_engine.dart';
@@ -333,6 +334,9 @@ class _RecommendationEngine extends RecommendationEngine {
     TrackingMode trackingMode = TrackingMode.altAz,
     RecommendationCandidateScope candidateScope =
         RecommendationCandidateScope.all,
+    ObservationWindowDurationPolicy durationPolicy =
+        ObservationWindowDurationPolicy.strict,
+    bool enforceMeaningfulEquipmentResult = true,
     ImagingEquipmentFit? Function(
       CatalogObject object,
       ObjectObservationWindow window,

@@ -37,6 +37,7 @@ import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/metadata_service.dart';
 
 import '../../../services/object_imaging_profile_provider.dart';
+import '../../../services/observation_condition_service.dart';
 
 import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
@@ -67,6 +68,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
     CatalogCaptureProjectionService? captureProjection,
     ObservationSiteRepository? observationSiteRepository,
     TargetImagingAvailabilityService? availabilityService,
+    ObservationConditionService? observationConditionService,
   }) => CatalogDetailViewModel._(
     shootingRecordRepository,
     catalogRepository,
@@ -81,6 +83,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
     captureProjection,
     observationSiteRepository,
     availabilityService,
+    observationConditionService,
     List<CatalogObject>.from(navigationObjects ?? [object]),
     _resolveInitialIndex(object, navigationObjects),
   );
@@ -99,6 +102,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
     this._captureProjection,
     this._observationSiteRepository,
     this._availabilityService,
+    this._observationConditionService,
     this._objects,
     this._currentIndex,
   );
@@ -127,6 +131,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
   final ObservationSiteRepository? _observationSiteRepository;
   final TargetImagingAvailabilityService? _availabilityService;
+  final ObservationConditionService? _observationConditionService;
 
   final List<CatalogObject> _objects;
 
@@ -158,9 +163,13 @@ class CatalogDetailViewModel extends ChangeNotifier {
   CatalogExposureGuidance? _exposureGuidance;
 
   List<ObservationSite> _observationSites = const [];
-  ObservationSite? _selectedObservationSite;
-  TargetImagingAvailability? _imagingAvailability;
-  bool _isAvailabilityLoading = false;
+  ObservationSite? _selectedRegisteredObservationSite;
+  TargetImagingAvailability? _registeredImagingAvailability;
+  bool _isRegisteredAvailabilityLoading = false;
+  ObservationSite? _currentLocationSite;
+  TargetImagingAvailability? _currentLocationAvailability;
+  bool _isCurrentLocationAvailabilityLoading = false;
+  String? _currentLocationAvailabilityError;
 
   List<CatalogObject> get objects => List.unmodifiable(_objects);
 
@@ -205,9 +214,19 @@ class CatalogDetailViewModel extends ChangeNotifier {
   CatalogExposureGuidance? get exposureGuidance => _exposureGuidance;
   List<ObservationSite> get observationSites =>
       List.unmodifiable(_observationSites);
-  ObservationSite? get selectedObservationSite => _selectedObservationSite;
-  TargetImagingAvailability? get imagingAvailability => _imagingAvailability;
-  bool get isAvailabilityLoading => _isAvailabilityLoading;
+  ObservationSite? get selectedRegisteredObservationSite =>
+      _selectedRegisteredObservationSite;
+  TargetImagingAvailability? get registeredImagingAvailability =>
+      _registeredImagingAvailability;
+  bool get isRegisteredAvailabilityLoading =>
+      _isRegisteredAvailabilityLoading;
+  ObservationSite? get currentLocationSite => _currentLocationSite;
+  TargetImagingAvailability? get currentLocationAvailability =>
+      _currentLocationAvailability;
+  bool get isCurrentLocationAvailabilityLoading =>
+      _isCurrentLocationAvailabilityLoading;
+  String? get currentLocationAvailabilityError =>
+      _currentLocationAvailabilityError;
 
   String? get exposureTimeLineLabel {
     final min = _minimumExposure;
@@ -269,7 +288,10 @@ class CatalogDetailViewModel extends ChangeNotifier {
     _recommendedExposure = null;
 
     _exposureGuidance = null;
-    _imagingAvailability = null;
+    _registeredImagingAvailability = null;
+    _currentLocationSite = null;
+    _currentLocationAvailability = null;
+    _currentLocationAvailabilityError = null;
   }
 
   Future<void> load() async {
@@ -310,7 +332,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
       await _loadEquipmentRecommendation();
 
       await _loadBaseExposureInfo();
-      unawaited(_loadImagingAvailability());
+      unawaited(refreshAvailability());
     } catch (error) {
       _errorMessage = error.toString();
     } finally {
@@ -322,23 +344,34 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
   Future<void> selectObservationSite(String siteId) async {
     final selected = _observationSites.where((site) => site.id == siteId);
-    if (selected.isEmpty || selected.first.id == _selectedObservationSite?.id) {
+    if (selected.isEmpty ||
+        selected.first.id == _selectedRegisteredObservationSite?.id) {
       return;
     }
-    _selectedObservationSite = selected.first;
-    await _loadBaseExposureInfo(referenceBortle: _selectedObservationSite?.bortle);
-    await _loadImagingAvailability();
+    _selectedRegisteredObservationSite = selected.first;
+    await _loadRegisteredImagingAvailability(refreshSites: false);
   }
 
-  Future<void> _loadImagingAvailability() async {
+  Future<void> refreshAvailability() async {
+    await Future.wait([
+      _loadCurrentLocationAvailability(),
+      _loadRegisteredImagingAvailability(),
+    ]);
+  }
+
+  Future<void> _loadRegisteredImagingAvailability({
+    bool refreshSites = true,
+  }) async {
     final repository = _observationSiteRepository;
     final service = _availabilityService;
     if (repository == null || service == null) return;
-    _isAvailabilityLoading = true;
+    _isRegisteredAvailabilityLoading = true;
     notifyListeners();
     try {
-      _observationSites = await repository.list();
-      final currentId = _selectedObservationSite?.id;
+      if (refreshSites) {
+        _observationSites = await repository.list();
+      }
+      final currentId = _selectedRegisteredObservationSite?.id;
       ObservationSite? matchingSite;
       for (final candidate in _observationSites) {
         if (candidate.id == currentId) {
@@ -346,19 +379,68 @@ class CatalogDetailViewModel extends ChangeNotifier {
           break;
         }
       }
-      _selectedObservationSite = matchingSite;
-      _selectedObservationSite ??=
+      _selectedRegisteredObservationSite = matchingSite;
+      _selectedRegisteredObservationSite ??=
           _observationSites.isEmpty ? null : _observationSites.first;
-      final site = _selectedObservationSite;
-      await _loadBaseExposureInfo(referenceBortle: site?.bortle);
-      _imagingAvailability = site == null
+      final site = _selectedRegisteredObservationSite;
+      _registeredImagingAvailability = site == null
           ? null
           : await service.evaluate(object: object, site: site);
     } catch (error, stackTrace) {
-      AppLogger.error('CatalogDetail.Availability', error, stackTrace);
-      _imagingAvailability = null;
+      AppLogger.error(
+        'CatalogDetail.RegisteredAvailability',
+        error,
+        stackTrace,
+      );
+      _registeredImagingAvailability = null;
     } finally {
-      _isAvailabilityLoading = false;
+      _isRegisteredAvailabilityLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadCurrentLocationAvailability() async {
+    final conditionService = _observationConditionService;
+    final service = _availabilityService;
+    if (conditionService == null || service == null) return;
+    _isCurrentLocationAvailabilityLoading = true;
+    _currentLocationAvailabilityError = null;
+    notifyListeners();
+    try {
+      final condition = await conditionService.getCurrentCondition();
+      final now = DateTime.now();
+      final site = ObservationSite(
+        id: 'catalog-current-location',
+        name: '현재 위치',
+        latitude: condition.latitude,
+        longitude: condition.longitude,
+        bortle: condition.bortle,
+        sqm: condition.sqm,
+        trackingMode: TrackingMode.altAz,
+        defaultMinAltitude: 0,
+        defaultMaxAltitude: 90,
+        createdAt: condition.createdAt,
+        updatedAt: condition.createdAt,
+      );
+      final availability = await service.evaluate(
+        object: object,
+        site: site,
+        referenceDate: now,
+      );
+      _currentLocationSite = site;
+      _currentLocationAvailability = availability;
+      await _loadBaseExposureInfo(referenceBortle: site.bortle);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'CatalogDetail.CurrentLocationAvailability',
+        error,
+        stackTrace,
+      );
+      _currentLocationSite = null;
+      _currentLocationAvailability = null;
+      _currentLocationAvailabilityError = '현재 위치를 확인할 수 없습니다.';
+    } finally {
+      _isCurrentLocationAvailabilityLoading = false;
       notifyListeners();
     }
   }

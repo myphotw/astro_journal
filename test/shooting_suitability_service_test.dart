@@ -14,6 +14,7 @@ import 'package:astro_journal/data/models/object_observation_window.dart';
 import 'package:astro_journal/data/models/observation_site.dart';
 import 'package:astro_journal/data/models/scored_observation_target.dart';
 import 'package:astro_journal/data/models/shooting_suitability.dart';
+import 'package:astro_journal/data/models/shooting_time_window.dart';
 import 'package:astro_journal/services/multi_night_framing_match_service.dart';
 import 'package:astro_journal/services/shooting_suitability_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,11 @@ void main() {
   ScoredObservationTarget target({
     bool extremelyTiny = false,
     Duration minimumExposure = const Duration(minutes: 20),
+    Duration recommendedExposure = const Duration(minutes: 60),
+    DateTime? observationStartTime,
+    DateTime? observationEndTime,
+    DateTime? optimalStartTime,
+    DateTime? optimalEndTime,
   }) => ScoredObservationTarget(
     object: const CatalogObject(
       id: 'ngc7009',
@@ -44,11 +50,13 @@ void main() {
       currentAltitude: 40,
       currentAzimuth: 180,
       isCurrentlyVisible: true,
-      recommendStartTime: observationStart,
-      observationEndTime: observationEnd,
-      optimalStartTime: optimalStart,
-      optimalEndTime: optimalEnd,
-      optimalTime: optimalStart.add(const Duration(minutes: 30)),
+      recommendStartTime: observationStartTime ?? observationStart,
+      observationEndTime: observationEndTime ?? observationEnd,
+      optimalStartTime: optimalStartTime ?? optimalStart,
+      optimalEndTime: optimalEndTime ?? optimalEnd,
+      optimalTime: (optimalStartTime ?? optimalStart).add(
+        const Duration(minutes: 30),
+      ),
       totalObservableMinutes: 240,
     ),
     profile: ObjectImagingProfile(
@@ -65,7 +73,7 @@ void main() {
     score: 70,
     moonSeparation: 90,
     minimumExposure: minimumExposure,
-    recommendedExposure: const Duration(minutes: 60),
+    recommendedExposure: recommendedExposure,
     imagingAssessment: ImagingSuitabilityAssessment(
       quality: ExpectedResultQuality.trace,
       filterMode: FilterMode.on,
@@ -79,7 +87,11 @@ void main() {
     ),
   );
 
-  MultiNightFramingMatchResult framingMatch({required bool available}) {
+  MultiNightFramingMatchResult framingMatch({
+    required bool available,
+    DateTime? rangeStart,
+    DateTime? rangeEnd,
+  }) {
     final now = DateTime(2026, 1, 1);
     final reference = MultiNightFramingReference(
       id: 'ref',
@@ -113,8 +125,9 @@ void main() {
       site: site,
       equipment: equipment,
       isAvailable: available,
-      rangeStart: available ? DateTime(2026, 9, 16, 22, 5) : null,
-      rangeEnd: available ? DateTime(2026, 9, 16, 23, 20) : null,
+      rangeStart:
+          available ? rangeStart ?? DateTime(2026, 9, 16, 22, 5) : null,
+      rangeEnd: available ? rangeEnd ?? DateTime(2026, 9, 16, 23, 20) : null,
       hourAngleDeg: 0,
       parallacticAngleDeg: 0,
       parallacticAngleDifferenceDeg: 0,
@@ -129,6 +142,16 @@ void main() {
 
     expect(result.eligible, isFalse);
     expect(result.rejection, ShootingSuitabilityRejection.equipmentTooSmall);
+  });
+
+  test('informational evaluation preserves extremely tiny target details', () {
+    final result = service.evaluate(
+      target: target(extremelyTiny: true),
+      enforceMeaningfulEquipmentResult: false,
+    );
+
+    expect(result.eligible, isTrue);
+    expect(result.hasUsableWindow, isTrue);
   });
 
   test('automatic window is observation intersect optimal window', () {
@@ -170,5 +193,94 @@ void main() {
     expect(result.eligible, isTrue);
     expect(result.automaticEligible, isFalse);
     expect(result.rejection, ShootingSuitabilityRejection.insufficientDuration);
+  });
+
+  test('manual search proposes a usable sub-window instead of full range', () {
+    final m2 = target(
+      minimumExposure: const Duration(minutes: 30),
+      observationStartTime: DateTime(2026, 9, 16, 23, 20),
+      observationEndTime: DateTime(2026, 9, 17, 1, 20),
+      optimalStartTime: DateTime(2026, 9, 16, 23, 20),
+      optimalEndTime: DateTime(2026, 9, 17, 1, 20),
+    );
+    final suitability = service.evaluate(target: m2);
+    final proposal = service.proposeManualWindow(
+      target: m2,
+      suitability: suitability,
+      searchWindow: ShootingTimeWindow(
+        start: DateTime(2026, 9, 16, 23, 30),
+        end: DateTime(2026, 9, 17, 5),
+      ),
+    );
+
+    expect(proposal, isNotNull);
+    final proposed = proposal!;
+    expect(proposed.searchWindow.duration, const Duration(minutes: 330));
+    expect(proposed.usableWindow.start, DateTime(2026, 9, 16, 23, 30));
+    expect(proposed.usableWindow.end, DateTime(2026, 9, 17, 1, 20));
+    expect(proposed.proposedDuration, const Duration(minutes: 60));
+    expect(proposed.proposedWindow.start, DateTime(2026, 9, 16, 23, 30));
+    expect(proposed.proposedWindow.end, DateTime(2026, 9, 17, 0, 30));
+  });
+
+  test('multi-night 17 minute same-framing window remains a manual candidate', () {
+    final multiNightTarget = target(
+      minimumExposure: const Duration(minutes: 30),
+      observationStartTime: DateTime(2026, 9, 17, 4, 20),
+      observationEndTime: DateTime(2026, 9, 17, 5),
+      optimalStartTime: DateTime(2026, 9, 17, 4, 30),
+      optimalEndTime: DateTime(2026, 9, 17, 5),
+    );
+    final suitability = service.evaluate(
+      target: multiNightTarget,
+      hasFramingReference: true,
+      framingMatch: framingMatch(
+        available: true,
+        rangeStart: DateTime(2026, 9, 17, 4, 35),
+        rangeEnd: DateTime(2026, 9, 17, 4, 52),
+      ),
+    );
+    final proposal = service.proposeManualWindow(
+      target: multiNightTarget,
+      suitability: suitability,
+      searchWindow: ShootingTimeWindow(
+        start: DateTime(2026, 9, 17, 4),
+        end: DateTime(2026, 9, 17, 5),
+      ),
+    );
+
+    expect(suitability.automaticEligible, isFalse);
+    expect(suitability.manualMultiNightEligible, isTrue);
+    expect(proposal, isNotNull);
+    final proposed = proposal!;
+    expect(proposed.proposedWindow.start, DateTime(2026, 9, 17, 4, 35));
+    expect(proposed.proposedWindow.end, DateTime(2026, 9, 17, 4, 52));
+    expect(proposed.proposedDuration, const Duration(minutes: 17));
+    expect(proposed.framingMatched, isTrue);
+    expect(proposed.isBelowMinimumDuration, isTrue);
+    expect(proposed.isMultiNightAccumulationOpportunity, isTrue);
+  });
+
+  test('general 17 minute window remains excluded from manual candidates', () {
+    final generalTarget = target(
+      minimumExposure: const Duration(minutes: 30),
+      observationStartTime: DateTime(2026, 9, 17, 4, 35),
+      observationEndTime: DateTime(2026, 9, 17, 4, 52),
+      optimalStartTime: DateTime(2026, 9, 17, 4, 35),
+      optimalEndTime: DateTime(2026, 9, 17, 4, 52),
+    );
+    final suitability = service.evaluate(target: generalTarget);
+    final proposal = service.proposeManualWindow(
+      target: generalTarget,
+      suitability: suitability,
+      searchWindow: ShootingTimeWindow(
+        start: DateTime(2026, 9, 17, 4),
+        end: DateTime(2026, 9, 17, 5),
+      ),
+    );
+
+    expect(suitability.automaticEligible, isFalse);
+    expect(suitability.manualMultiNightEligible, isFalse);
+    expect(proposal, isNull);
   });
 }

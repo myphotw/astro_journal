@@ -141,8 +141,14 @@ class MultiNightFramingMatchService {
   }) {
     final currentTime = now ?? DateTime.now();
     final date = today ?? currentTime;
-    final start = DateTime(date.year, date.month, date.day);
-    final end = start.add(const Duration(days: 1));
+    final dayStart = DateTime(date.year, date.month, date.day);
+    final shouldExcludePast = today == null || now != null;
+    final searchStart = shouldExcludePast
+        ? currentTime.add(const Duration(seconds: 1))
+        : dayStart;
+    final searchEnd = shouldExcludePast
+        ? dayStart.add(const Duration(days: 2))
+        : dayStart.add(const Duration(days: 1));
     final raHours = CelestialPositionService.parseRaHours(object.ra);
     final decDeg = CelestialPositionService.parseDecDeg(object.dec);
     if (raHours == null || decDeg == null) {
@@ -157,8 +163,8 @@ class MultiNightFramingMatchService {
     DateTime? best;
     var bestDistance = double.infinity;
     for (
-      var cursor = start;
-      !cursor.isAfter(end);
+      var cursor = searchStart;
+      !cursor.isAfter(searchEnd);
       cursor = cursor.add(const Duration(minutes: 1))
     ) {
       final ha = signedHourAngleDegrees(
@@ -193,7 +199,7 @@ class MultiNightFramingMatchService {
       !cursor.isAfter(coarse.add(const Duration(minutes: 1)));
       cursor = cursor.add(const Duration(seconds: 1))
     ) {
-      if (cursor.isBefore(start) || cursor.isAfter(end)) continue;
+      if (cursor.isBefore(searchStart) || cursor.isAfter(searchEnd)) continue;
       final ha = signedHourAngleDegrees(
         longitudeDeg: site.longitude,
         time: cursor,
@@ -237,8 +243,8 @@ class MultiNightFramingMatchService {
 
     final framingRange = _allowedFramingRange(
       center: bestTime,
-      dayStart: start,
-      dayEnd: end,
+      dayStart: searchStart,
+      dayEnd: searchEnd,
       raHours: raHours,
       decDeg: decDeg,
       site: site,
@@ -256,7 +262,7 @@ class MultiNightFramingMatchService {
       );
     }
 
-    final effectiveDarkWindows = darkWindows ?? _darkWindowsForDay(start);
+    final effectiveDarkWindows = darkWindows ?? _darkWindowsForDay(dayStart);
     final candidates = <({DateTime time, _FramingSample sample})>[];
     for (
       var cursor = framingRange.$1;
@@ -281,7 +287,6 @@ class MultiNightFramingMatchService {
     var availableCandidates = darkCandidates
         .where((candidate) => candidate.sample.visible)
         .toList();
-    final shouldExcludePast = today == null || now != null;
     if (shouldExcludePast) {
       availableCandidates = availableCandidates
           .where((candidate) => !candidate.time.isBefore(currentTime))
@@ -343,7 +348,7 @@ class MultiNightFramingMatchService {
             : MultiNightFramingUnavailableCause.obstructed,
         reason: altitudeUnavailable
             ? '대상이 아직 너무 낮거나 관측 고도 범위를 벗어납니다.'
-            : '현재 관측지에서 가려지는 방향입니다.',
+            : '선택한 관측지에서 가려지는 방향입니다.',
       );
     }
 
@@ -436,7 +441,8 @@ class MultiNightFramingMatchService {
         _darkWindowResolver ?? ObservationScoreService.estimatedNightWindow;
     final previous = resolver(dayStart.subtract(const Duration(days: 1)));
     final current = resolver(dayStart);
-    return [previous, current];
+    final next = resolver(dayStart.add(const Duration(days: 1)));
+    return [previous, current, next];
   }
 
   bool _isDark(DateTime time, List<MultiNightDarkWindow> windows) =>

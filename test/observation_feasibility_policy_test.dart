@@ -5,6 +5,7 @@ import 'package:astro_journal/core/constants/surface_brightness_class.dart';
 import 'package:astro_journal/data/models/object_imaging_profile.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/observation_feasibility_reason.dart';
+import 'package:astro_journal/data/models/observation_feasibility_result.dart';
 import 'package:astro_journal/data/models/weather_forecast_slot.dart';
 import 'package:astro_journal/services/observation_feasibility_policy.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
@@ -187,5 +188,44 @@ void main() {
         contains(ObservationFeasibilityReason.lightPollution),
       );
     });
+  });
+
+  test('missing forecast never fabricates zero-valued weather reasons', () {
+    const result = ObservationFeasibilityResult.infeasible(
+      reason: '구름량이 높음',
+      failedConditions: [ObservationFeasibilityReason.cloudTooHigh],
+    );
+
+    final reason = ObservationFeasibilityPolicy.aggregatePrimaryReason(
+      results: const [result],
+    );
+
+    expect(reason, '구름량이 높음');
+    expect(reason, isNot(contains('0%')));
+  });
+
+  test('weather advisory uses the representative nightly cloud value', () {
+    const result = ObservationFeasibilityResult.infeasible(
+      reason: '구름량이 높음',
+      failedConditions: [ObservationFeasibilityReason.cloudTooHigh],
+    );
+
+    final advisory = ObservationFeasibilityPolicy.buildWeatherAdvisory(
+      results: const [result],
+      representativeCloudCoverage: 94,
+    );
+
+    expect(
+      advisory,
+      '구름량 94% 예보가 있습니다. 실제 하늘 상태를 확인해 주세요.',
+    );
+    expect(advisory, isNot(contains('0%')));
+
+    expect(
+      ObservationFeasibilityPolicy.buildWeatherAdvisory(
+        results: const [result],
+      ),
+      '구름량이 높게 예보되었습니다. 실제 하늘 상태를 확인해 주세요.',
+    );
   });
 }

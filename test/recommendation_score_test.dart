@@ -39,7 +39,10 @@ void main() {
       );
     }
 
-    ObjectObservationWindow buildWindow({double bestObservationScore = 80}) {
+    ObjectObservationWindow buildWindow({
+      double bestObservationScore = 80,
+      double? optimalWeatherScore,
+    }) {
       return ObjectObservationWindow(
         currentAltitude: 40,
         currentAzimuth: 180,
@@ -52,6 +55,7 @@ void main() {
         observationEndTime: DateTime(2026, 7, 2, 1, 0),
         totalObservableMinutes: 120,
         bestObservationScore: bestObservationScore,
+        optimalWeatherScore: optimalWeatherScore,
       );
     }
 
@@ -138,6 +142,34 @@ void main() {
       );
 
       expect(poorScore, lessThan(goodScore));
+    });
+
+    test('lower target weather score lowers recommendation score', () {
+      final evaluationTime = DateTime(2026, 6, 15, 22, 18);
+      final clearWindow = buildWindow(optimalWeatherScore: 95);
+      final cloudyWindow = buildWindow(optimalWeatherScore: 5);
+      final context = buildContext(currentTime: DateTime(2026, 6, 15, 22));
+      final object = buildObject(id: 'm42', captured: false);
+      final profile = profileProvider.profileFor(object);
+
+      final clearScore = scorer.calculate(
+        object: object,
+        context: context,
+        profile: profile,
+        window: clearWindow,
+        evaluationTime: evaluationTime,
+        positionService: positionService,
+      );
+      final cloudyScore = scorer.calculate(
+        object: object,
+        context: context,
+        profile: profile,
+        window: cloudyWindow,
+        evaluationTime: evaluationTime,
+        positionService: positionService,
+      );
+
+      expect(cloudyScore, lessThan(clearScore));
     });
   });
 }

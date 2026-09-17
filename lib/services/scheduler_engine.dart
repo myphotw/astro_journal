@@ -3,8 +3,6 @@ import '../data/models/observation_status.dart';
 import '../data/models/scheduler_models.dart';
 import '../data/models/scored_observation_target.dart';
 import '../data/models/tonight_observation_session.dart';
-import 'recommendation/feasibility_exclusion_messages.dart';
-import 'recommendation/feasible_slot_continuity.dart';
 import 'scheduler/scheduler_assignment_planner.dart';
 import 'scheduler/scheduler_priority_calculator.dart';
 
@@ -17,6 +15,7 @@ class SchedulerEngine {
   static const slotDuration = Duration(minutes: 10);
   static const assignmentEmptyMessage =
       '최소 촬영시간을 만족하는 연속 촬영 구간을 배정할 수 없습니다.';
+  static const weatherLimitedMessage = '기상 예보상 자동 촬영 추천이 제한됩니다.';
 
   final SchedulerPriorityCalculator _priorityCalculator;
 
@@ -44,7 +43,7 @@ class SchedulerEngine {
       );
 
   ScheduleResult _buildSchedule(SchedulerInput input) {
-    // 관측 불가여도 기상 무시 슬롯으로 스케줄은 계속 계산한다.
+    // Weather affects target scores, but not the astronomical slot grid.
     final slots = PerformanceProbe.measure(
       'scheduler.visible_slots',
       () => _generateFeasibleSlots(input),
@@ -58,13 +57,23 @@ class SchedulerEngine {
     final hasTargets = input.targets.isNotEmpty;
     final isEmptyDueToFeasibility = hasTargets && slots.isEmpty;
 
+    if (!input.context.observationStatus.allowsScheduling) {
+      return ScheduleResult(
+        slots: slots,
+        targets: prioritizedTargets,
+        items: const [],
+        isEmptyDueToFeasibility: hasTargets,
+        emptyMessage: weatherLimitedMessage,
+      );
+    }
+
     if (isEmptyDueToFeasibility) {
       return ScheduleResult(
         slots: slots,
         targets: prioritizedTargets,
         items: const [],
         isEmptyDueToFeasibility: true,
-        emptyMessage: FeasibilityExclusionMessages.scheduleEmptyMessage,
+        emptyMessage: assignmentEmptyMessage,
       );
     }
 
@@ -95,26 +104,9 @@ class SchedulerEngine {
   }
 
   List<ScheduleSlot> _generateFeasibleSlots(SchedulerInput input) {
-    final slots = generateSlots(input.session)
+    return generateSlots(input.session)
         .where((slot) => !slot.start.isBefore(input.referenceTime))
         .toList();
-    // 관측 불가(기상) 시에는 전체 세션 슬롯을 사용해 촬영 순서를 제안한다.
-    if (input.context.observationStatus == ObservationStatus.unavailable) {
-      return slots;
-    }
-    final feasibility = input.context.siteSlotFeasibility;
-    if (feasibility.isEmpty) {
-      return slots;
-    }
-
-    final feasibleStarts = slots
-        .where((slot) => feasibility[slot.start]?.canObserve ?? false)
-        .map((slot) => slot.start);
-    final allowed = FeasibleSlotContinuity.slotsInRangesAtLeast(
-      feasibleStarts,
-    ).toSet();
-
-    return slots.where((slot) => allowed.contains(slot.start)).toList();
   }
 
   List<ScoredObservationTarget> _applySchedulerPriorities(

@@ -18,6 +18,9 @@ void main() {
   final reasonBuilder = File(
     'lib/services/recommendation/recommendation_reason_builder.dart',
   ).readAsStringSync();
+  final homeViewModel = File(
+    'lib/features/home/viewmodel/home_view_model.dart',
+  ).readAsStringSync();
 
   test('schedule card reads FilterMode from the existing result assessment', () {
     expect(home, contains('item.result.imagingAssessment?.filterMode'));
@@ -58,5 +61,38 @@ void main() {
     expect(window, contains('final int totalObservableMinutes;'));
     expect(assessment, contains('final Duration? recommendedDailyExposure;'));
     expect(scheduler, contains('Duration(minutes: 10)'));
+  });
+
+  test('manual registration stores the candidate proposed interval', () {
+    expect(home, contains('start: candidate.proposedWindow.start'));
+    expect(home, contains('end: candidate.proposedWindow.end'));
+  });
+
+  test('compact recommendation cards use one quality indicator', () {
+    final compactCard = home.substring(
+      home.indexOf('class _RecommendCompactCard'),
+      home.indexOf('class RecommendationImagingStatusChips'),
+    );
+
+    expect(compactCard, isNot(contains("'추천 \${'★' * recommended.starCount}'")));
+    expect(home, contains("'예상 촬영 결과'"));
+    expect(home, contains('child: IntrinsicHeight('));
+    expect(home, contains('crossAxisAlignment: CrossAxisAlignment.stretch'));
+  });
+
+  test('unavailable weather cannot repopulate an empty auto schedule', () {
+    expect(
+      homeViewModel,
+      contains(
+        '_lastSessionContext?.observationStatus.allowsScheduling == false',
+      ),
+    );
+    expect(homeViewModel, contains('SchedulerEngine.weatherLimitedMessage'));
+  });
+
+  test('home cloud labels use the nightly representative value', () {
+    expect(home, contains("label: '☁ \${condition.cloudCover}%'"));
+    expect(home, contains("value: '\${condition.cloudCover}%'"));
+    expect(home, contains("label: '밤 대표 구름량'"));
   });
 }

@@ -25,6 +25,7 @@ class ObjectObservationWindow {
     this.feasibleWindowSummary,
     this.optimalFeasibleCloudCoverage,
     this.optimalFeasibleWindSpeed,
+    this.optimalWeatherScore,
   });
 
   final double currentAltitude;
@@ -38,6 +39,7 @@ class ObjectObservationWindow {
   final double? peakAltitude;
   final DateTime? peakAltitudeTime;
   final DateTime? meridianPassTime;
+  /// Exclusive end of the observable interval (`[start, end)`).
   final DateTime? observationEndTime;
   final int totalObservableMinutes;
   final int remainingVisibleMinutes;
@@ -58,6 +60,10 @@ class ObjectObservationWindow {
   /// Slot weather at the optimal feasible shooting time (not nightly average).
   final int? optimalFeasibleCloudCoverage;
   final double? optimalFeasibleWindSpeed;
+
+  /// Weather-only score at [optimalTime]. This stays separate from the
+  /// composite target observation score used by visibility and ranking.
+  final double? optimalWeatherScore;
 
   String get totalObservableLabel {
     final h = totalObservableMinutes ~/ 60;
@@ -96,6 +102,7 @@ class ObjectObservationWindow {
       feasibleWindowSummary: feasibleWindowSummary,
       optimalFeasibleCloudCoverage: optimalFeasibleCloudCoverage,
       optimalFeasibleWindSpeed: optimalFeasibleWindSpeed,
+      optimalWeatherScore: optimalWeatherScore,
     );
   }
 }

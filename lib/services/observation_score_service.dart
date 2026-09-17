@@ -171,6 +171,9 @@ class TonightObservationSummary {
   final String? infeasibleUserMessage;
 
   TonightObservationSlot? get bestSlot => observationWindow?.peakSlot;
+
+  int get representativeCloudCoverage =>
+      averageCloudCoverage.round().clamp(0, 100).toInt();
 }
 
 class SiteSlotData {
@@ -798,18 +801,18 @@ class ObservationScoreService {
     final sr = sunrise.toLocal();
     final observationStart = observationStartTime(sunset);
     final today = DateTime(now.year, now.month, now.day);
+    final sunriseForToday = DateTime(
+      today.year,
+      today.month,
+      today.day,
+      sr.hour,
+      sr.minute,
+    );
 
-    if (now.isBefore(sr)) {
+    if (now.isBefore(sunriseForToday)) {
       final yday = today.subtract(const Duration(days: 1));
       final nightStart = observationStartTime(
         DateTime(yday.year, yday.month, yday.day, sunset.hour, sunset.minute),
-      );
-      final sunriseForToday = DateTime(
-        today.year,
-        today.month,
-        today.day,
-        sr.hour,
-        sr.minute,
       );
       final nightEnd = observationEndTime(sunriseForToday);
       return (nightStart: nightStart, nightEnd: nightEnd);
@@ -839,6 +842,21 @@ class ObservationScoreService {
       cursor = cursor.add(const Duration(hours: 1));
     }
     return targets;
+  }
+
+  /// Uses the same hourly interpolation policy as [buildTonightSummary] so
+  /// every caller presents one representative cloud value for the night.
+  static double? averageNightlyCloudCoverage({
+    required DateTime nightStart,
+    required DateTime nightEnd,
+    required List<WeatherForecastSlot> forecasts,
+  }) {
+    final values = hourlyTargets(nightStart: nightStart, nightEnd: nightEnd)
+        .map((time) => resolveForecastAt(time, forecasts)?.cloudCoverage)
+        .whereType<int>()
+        .map((value) => value.toDouble())
+        .toList(growable: false);
+    return values.isEmpty ? null : _average(values);
   }
 
   static WeatherForecastSlot? findClosestForecast(

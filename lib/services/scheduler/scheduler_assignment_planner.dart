@@ -64,7 +64,6 @@ abstract final class SchedulerAssignmentPlanner {
       final observationEnd =
           recommendedWindow?.end ?? window.observationEndTime;
       if (recommendStart == null || observationEnd == null) continue;
-      final exactWindowEnd = recommendedWindow != null;
 
       final minSlots = _slotCountFor(target.minimumExposure);
       final assessment = target.imagingAssessment;
@@ -85,7 +84,6 @@ abstract final class SchedulerAssignmentPlanner {
         context: context,
         target: target,
         targetSlotStarts: targetSlotStarts,
-        exactWindowEnd: exactWindowEnd,
       );
 
       List<ScheduleSlot>? selected;
@@ -101,7 +99,6 @@ abstract final class SchedulerAssignmentPlanner {
           minSlots: minSlots,
           maxSlots: recSlots,
           targetSlotStarts: targetSlotStarts,
-          exactWindowEnd: exactWindowEnd,
         );
         if (block.length >= minSlots) {
           selected = block;
@@ -175,16 +172,12 @@ abstract final class SchedulerAssignmentPlanner {
     required ObservationContext context,
     required ScoredObservationTarget target,
     required Set<DateTime> targetSlotStarts,
-    required bool exactWindowEnd,
   }) {
-    final windowEnd = observationEnd.add(SchedulerEngine.slotDuration);
     final candidates = <({DateTime time, double score})>[];
 
     for (final slot in slots) {
       if (slot.start.isBefore(recommendStart) ||
-          (exactWindowEnd
-              ? slot.end.isAfter(observationEnd)
-              : !slot.end.isBefore(windowEnd)) ||
+          slot.end.isAfter(observationEnd) ||
           occupied.contains(slot.start) ||
           (targetSlotStarts.isNotEmpty &&
               !targetSlotStarts.contains(slot.start))) {
@@ -219,16 +212,12 @@ abstract final class SchedulerAssignmentPlanner {
     required int minSlots,
     required int maxSlots,
     required Set<DateTime> targetSlotStarts,
-    required bool exactWindowEnd,
   }) {
-    final windowEnd = observationEnd.add(SchedulerEngine.slotDuration);
     final freeInWindow = slots
         .where(
           (slot) =>
               !slot.start.isBefore(recommendStart) &&
-              (exactWindowEnd
-                  ? !slot.end.isAfter(observationEnd)
-                  : slot.end.isBefore(windowEnd)) &&
+              !slot.end.isAfter(observationEnd) &&
               !occupied.contains(slot.start) &&
               (targetSlotStarts.isEmpty ||
                   targetSlotStarts.contains(slot.start)),

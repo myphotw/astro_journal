@@ -39,7 +39,7 @@ void main() {
       currentAzimuth: 180,
       isCurrentlyVisible: true,
       recommendStartTime: actual.first,
-      observationEndTime: actual.last,
+      observationEndTime: actual.last.add(const Duration(minutes: 10)),
       totalObservableMinutes: actual.length * 10,
       geometricSlotStarts: geometric,
       slotObservationScores: {for (final slot in actual) slot: 80},

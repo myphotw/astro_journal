@@ -4,11 +4,13 @@ import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/site_horizon_profile.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
+import 'package:astro_journal/data/models/weather_forecast_slot.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
 import 'package:astro_journal/services/recommendation/observation_window_calculator.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
+import 'package:astro_journal/services/session_weather_index.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -85,6 +87,19 @@ void main() {
       expect(result.window?.meridianPassTime, isNotNull);
       expect(result.window?.latestStartTime, isNotNull);
       expect(result.window?.slotObservationScores, isNotEmpty);
+      final window = result.window!;
+      expect(
+        window.observationEndTime!.difference(window.recommendStartTime!),
+        Duration(minutes: window.totalObservableMinutes),
+      );
+      expect(
+        !window.optimalStartTime!.isBefore(window.recommendStartTime!),
+        isTrue,
+      );
+      expect(
+        !window.optimalEndTime!.isAfter(window.observationEndTime!),
+        isTrue,
+      );
     });
 
     test(
@@ -126,6 +141,94 @@ void main() {
         );
       },
     );
+
+    test('informational policy preserves a short observable window', () {
+      final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
+      final profile = profileProvider.profileFor(object);
+      final session = TonightObservationSession(
+        start: DateTime(2026, 7, 20, 21),
+        end: DateTime(2026, 7, 20, 21, 20),
+      );
+      final context = ObservationContext(
+        latitude: 37.5,
+        longitude: 127,
+        bortle: 2,
+        moonIllumination: 0.1,
+        moonAltitude: -10,
+        moonAzimuth: 180,
+        cloudCover: 0,
+        observationStart: session.start,
+        observationEnd: session.end,
+        currentTime: session.start,
+      );
+
+      final result = calculator.calculate(
+        object: object,
+        profile: profile,
+        context: context,
+        settings: RecommendationSettings.defaults,
+        session: session,
+        referenceTime: session.start,
+        minimumExposure: const Duration(hours: 2),
+        recommendedExposure: const Duration(hours: 3),
+        durationPolicy: ObservationWindowDurationPolicy.informational,
+      );
+
+      expect(result.exclusion, ObservationWindowExclusion.none);
+      expect(result.window, isNotNull);
+    });
+
+    test('bad weather does not erase an astronomical observable window', () {
+      final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');
+      final profile = profileProvider.profileFor(object);
+      final session = TonightObservationSession(
+        start: DateTime(2026, 7, 20, 21),
+        end: DateTime(2026, 7, 21, 5),
+      );
+      final badWeather = WeatherForecastSlot(
+        time: session.start,
+        temperature: 20,
+        humidity: 95,
+        windSpeed: 18,
+        cloudCoverage: 100,
+        visibility: 1000,
+        pop: 90,
+        rainVolumeMm: 2,
+        description: '비',
+        icon: '10n',
+      );
+      final context = ObservationContext(
+        latitude: 37.5,
+        longitude: 127,
+        bortle: 2,
+        moonIllumination: 0.1,
+        moonAltitude: -10,
+        moonAzimuth: 180,
+        cloudCover: 100,
+        observationStart: session.start,
+        observationEnd: session.end,
+        currentTime: session.start,
+        sessionWeather: SessionWeatherIndex.build(
+          session: session,
+          forecasts: [badWeather],
+        ),
+      );
+
+      final result = calculator.calculate(
+        object: object,
+        profile: profile,
+        context: context,
+        settings: RecommendationSettings.defaults,
+        session: session,
+        referenceTime: session.start,
+        minimumExposure: const Duration(minutes: 10),
+        recommendedExposure: const Duration(minutes: 30),
+      );
+
+      expect(result.exclusion, ObservationWindowExclusion.none);
+      expect(result.window, isNotNull);
+      expect(result.window!.slotObservationScores, isNotEmpty);
+    });
 
     test('site horizon excludes a target below the physical skyline', () {
       final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');

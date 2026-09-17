@@ -879,7 +879,7 @@ class _ObservationIndexCard extends StatelessWidget {
                 ),
               ] else ...[
                 Text(
-                  '관측 불가',
+                  '기상 조건 주의',
                   style: TextStyle(
                     color: scoreCol,
                     fontSize: 24,
@@ -1049,7 +1049,7 @@ class _MetricsRow extends StatelessWidget {
           ),
           _MetricChip(
             icon: Icons.cloud_outlined,
-            label: '☁ ${condition.averageCloudCoverage.round()}%',
+            label: '☁ ${condition.cloudCover}%',
           ),
           _MetricChip(
             icon: Icons.air,
@@ -1151,7 +1151,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                 Text(
                   condition.isObservationFeasible
                       ? '${condition.score}점'
-                      : '관측 불가',
+                      : '기상 조건 주의',
                   style: TextStyle(
                     color: condition.isObservationFeasible
                         ? _scoreColor(condition.score)
@@ -1221,7 +1221,10 @@ class _ObservationDetailSheet extends StatelessWidget {
                       value: '${w.windDirectionLabel} (${w.windDegree}°)',
                     ),
                     _InfoRow(label: '기압', value: '${w.pressure} hPa'),
-                    _InfoRow(label: '구름량', value: '${w.cloudCoverage}%'),
+                    _InfoRow(
+                      label: '밤 대표 구름량',
+                      value: '${condition.cloudCover}%',
+                    ),
                     _InfoRow(
                       label: '가시거리',
                       value: '${(w.visibility / 1000).toStringAsFixed(1)} km',
@@ -1415,7 +1418,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                       ),
                       if (condition.infeasibleUserMessage != null)
                         _InfoRow(
-                          label: '관측 불가 사유',
+                          label: '기상 의견',
                           value: condition.infeasibleUserMessage!,
                         ),
                     ],
@@ -1452,7 +1455,7 @@ class _ObservationDetailSheet extends StatelessWidget {
                       Text(
                         condition.isObservationFeasible
                             ? '${condition.score} / 100'
-                            : '관측 불가',
+                            : '기상 조건 주의',
                         style: TextStyle(
                           color: condition.isObservationFeasible
                               ? _scoreColor(condition.score)
@@ -2141,35 +2144,37 @@ class _RecommendedObjectGrid extends StatelessWidget {
           padding: EdgeInsets.only(
             bottom: i + 2 < items.length ? AppTheme.spacingXs : 0,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _RecommendCompactCard(
-                  recommended: items[i],
-                  rank: i + 1,
-                  onTap: () => onTap(items[i]),
-                  isPlanned: isPlanned(items[i].object.id),
-                  equipmentChips: equipmentChipsFor(items[i].object.id),
-                  showPlanButton: canAddToPlan(items[i].object.id),
-                  onTogglePlan: () => onTogglePlan(items[i].object.id),
-                ),
-              ),
-              if (i + 1 < items.length) ...[
-                const SizedBox(width: AppTheme.spacingXs),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Expanded(
                   child: _RecommendCompactCard(
-                    recommended: items[i + 1],
-                    rank: i + 2,
-                    onTap: () => onTap(items[i + 1]),
-                    isPlanned: isPlanned(items[i + 1].object.id),
-                    equipmentChips: equipmentChipsFor(items[i + 1].object.id),
-                    showPlanButton: canAddToPlan(items[i + 1].object.id),
-                    onTogglePlan: () => onTogglePlan(items[i + 1].object.id),
+                    recommended: items[i],
+                    rank: i + 1,
+                    onTap: () => onTap(items[i]),
+                    isPlanned: isPlanned(items[i].object.id),
+                    equipmentChips: equipmentChipsFor(items[i].object.id),
+                    showPlanButton: canAddToPlan(items[i].object.id),
+                    onTogglePlan: () => onTogglePlan(items[i].object.id),
                   ),
                 ),
+                if (i + 1 < items.length) ...[
+                  const SizedBox(width: AppTheme.spacingXs),
+                  Expanded(
+                    child: _RecommendCompactCard(
+                      recommended: items[i + 1],
+                      rank: i + 2,
+                      onTap: () => onTap(items[i + 1]),
+                      isPlanned: isPlanned(items[i + 1].object.id),
+                      equipmentChips: equipmentChipsFor(items[i + 1].object.id),
+                      showPlanButton: canAddToPlan(items[i + 1].object.id),
+                      onTogglePlan: () => onTogglePlan(items[i + 1].object.id),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       );
@@ -2280,15 +2285,6 @@ class _RecommendCompactCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  const SizedBox(height: 3),
-                  Text(
-                    '추천 ${'★' * recommended.starCount}',
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                   if (!equipmentChips.isEmpty) ...[
                     const SizedBox(height: 3),
                     CatalogEquipmentChipsRow(chips: equipmentChips),
@@ -2411,30 +2407,24 @@ class RecommendationImagingStatusChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: 4,
+      runSpacing: 3,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Wrap(
-          spacing: 4,
-          runSpacing: 3,
-          children: [
-            _RecommendationStatusChip(
-              key: Key('recommendation-filter-${assessment.filterMode.name}'),
-              label: '필터 ${assessment.filterMode.label}',
-              color: assessment.filterMode == FilterMode.on
-                  ? AppColors.solar
-                  : AppColors.textSecondary,
-            ),
-            if (assessment.mosaicMode == MosaicMode.on)
-              const _RecommendationStatusChip(
-                key: Key('recommendation-mosaic-on'),
-                label: '모자이크',
-                color: AppColors.ic,
-              ),
-          ],
+        _RecommendationStatusChip(
+          key: Key('recommendation-filter-${assessment.filterMode.name}'),
+          label: '필터 ${assessment.filterMode.label}',
+          color: assessment.filterMode == FilterMode.on
+              ? AppColors.solar
+              : AppColors.textSecondary,
         ),
-        const SizedBox(height: 3),
+        if (assessment.mosaicMode == MosaicMode.on)
+          const _RecommendationStatusChip(
+            key: Key('recommendation-mosaic-on'),
+            label: '모자이크',
+            color: AppColors.ic,
+          ),
         _RecommendationQualitySummary(
           key: const Key('recommendation-quality'),
           quality: assessment.quality,
@@ -2451,47 +2441,38 @@ class _RecommendationQualitySummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.textSecondary.withAlpha(28),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.textSecondary.withAlpha(90)),
-      ),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 1,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          const Text(
-            '예상 결과',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
+    return Wrap(
+      spacing: 3,
+      runSpacing: 1,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        const Text(
+          '예상 촬영 결과',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
           ),
-          Text(
-            quality.starLabel,
-            style: const TextStyle(
-              color: AppColors.solar,
-              fontSize: 9,
-              height: 1.2,
-              fontWeight: FontWeight.w600,
-            ),
+        ),
+        Text(
+          quality.starLabel,
+          style: const TextStyle(
+            color: AppColors.solar,
+            fontSize: 9,
+            height: 1.2,
+            fontWeight: FontWeight.w600,
           ),
-          Text(
-            '· ${quality.label}',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 9,
-              height: 1.2,
-              fontWeight: FontWeight.w600,
-            ),
+        ),
+        Text(
+          '· ${quality.label}',
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 9,
+            height: 1.2,
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -3802,7 +3783,7 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
       planDate: widget.viewModel.planDate,
     );
     if (window == null || !mounted) return;
-    final objectId = await showModalBottomSheet<String>(
+    final candidate = await showModalBottomSheet<ManualShootingCandidate>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
@@ -3812,11 +3793,11 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
         end: window.end,
       ),
     );
-    if (objectId == null || !mounted) return;
+    if (candidate == null || !mounted) return;
     await widget.viewModel.addManualSchedule(
-      objectId: objectId,
-      start: window.start,
-      end: window.end,
+      objectId: candidate.target.object.id,
+      start: candidate.proposedWindow.start,
+      end: candidate.proposedWindow.end,
     );
     if (!mounted) return;
     setState(() {
@@ -4078,7 +4059,7 @@ class _ManualScheduleCandidateSheetState
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('기준 구도 있는 대상만'),
-                subtitle: const Text('선택한 시간 전체에서 같은 구도 재현이 가능한 대상'),
+                subtitle: const Text('선택한 시간 안에 같은 구도 촬영 구간이 있는 대상'),
                 value: _onlyFramingMatches,
                 onChanged: (value) =>
                     setState(() => _onlyFramingMatches = value),
@@ -4102,6 +4083,10 @@ class _ManualScheduleCandidateSheetState
                           final framing = suitability.framingWindow;
                           final detail = <String>[
                             '추천 ${candidate.recommendation.starCount}★',
+                            '제안 ${_formatTime(candidate.proposedWindow.start)}~'
+                                '${_formatTime(candidate.proposedWindow.end)} '
+                                '(${candidate.proposedDuration.inMinutes}분)',
+                            '권장 ${candidate.proposal.recommendedDuration.inMinutes}분',
                             '관측지 촬영 가능',
                             '장비 적합',
                             suitability.hasFramingReference
@@ -4109,17 +4094,21 @@ class _ManualScheduleCandidateSheetState
                                 : '기준 구도 없음',
                             if (suitability.hasFramingReference)
                               candidate.matchesFraming
-                                  ? '기준 구도 재현 가능'
+                                  ? '동일구도 ${candidate.proposedDuration.inMinutes}분 촬영 가능'
                                   : '기준 구도 재현 불가',
                             if (optimal != null)
                               '최적 ${_formatTime(optimal.start)}~${_formatTime(optimal.end)}',
                             if (framing != null)
                               '같은 구도 ${_formatTime(framing.start)}~${_formatTime(framing.end)}',
                             candidate.isOptimal
-                                ? '선택 시간이 최적 구간 안에 있음'
+                                ? '제안 시간이 최적 구간 안에 있음'
                                 : candidate.overlapsOptimal
-                                ? '선택 시간이 최적 구간과 일부 겹침'
-                                : '선택 시간이 최적 구간 밖',
+                                ? '제안 시간이 최적 구간과 일부 겹침'
+                                : '제안 시간이 최적 구간 밖',
+                            if (candidate.isMultiNightAccumulationOpportunity)
+                              '일반 최소 ${candidate.proposal.minimumDuration.inMinutes}분보다 짧음 · 데이터 누적 가능'
+                            else if (candidate.isBelowRecommendedDuration)
+                              '권장시간보다 짧음',
                           ];
                           return ListTile(
                             title: Text(
@@ -4130,9 +4119,7 @@ class _ManualScheduleCandidateSheetState
                             subtitle: Text(detail.join(' · ')),
                             isThreeLine: true,
                             trailing: const Icon(Icons.add_circle_outline),
-                            onTap: () => Navigator.of(
-                              context,
-                            ).pop(candidate.target.object.id),
+                            onTap: () => Navigator.of(context).pop(candidate),
                           );
                         },
                       ),

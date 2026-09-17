@@ -13,12 +13,14 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
     this.site,
     this.availability,
     this.isAvailabilityLoading = false,
+    this.availabilityError,
   });
 
   final CatalogExposureGuidance guidance;
   final ObservationSite? site;
   final TargetImagingAvailability? availability;
   final bool isAvailabilityLoading;
+  final String? availabilityError;
 
   Color _statusColor(CatalogExposureFeasibility feasibility) {
     return switch (feasibility) {
@@ -44,7 +46,7 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '현재 관측지',
+            '현재 위치 촬영 가능성',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 16,
@@ -56,9 +58,25 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
             _siteLabel,
             style: const TextStyle(color: AppColors.textSecondary),
           ),
+          const SizedBox(height: 2),
+          const Text(
+            '현재 위치 기준 · 등록 시야각 정보 미적용',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          ),
           if (isAvailabilityLoading) ...[
             const SizedBox(height: 10),
             const LinearProgressIndicator(),
+          ] else if (availabilityError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              availabilityError!,
+              key: const Key('catalog-current-location-error'),
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ] else if (availability != null) ...[
             const SizedBox(height: 10),
             _buildSummaryGrid(availability!),
@@ -100,7 +118,7 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             _GuidanceValueRow(
-              label: '예상 결과',
+              label: '예상 결과 (기상 미반영)',
               value:
                   '${guidance.imagingAssessment!.quality.starLabel} ${guidance.imagingAssessment!.quality.label}',
             ),
@@ -157,13 +175,21 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
       if (value.window != null) ...[
         _SummaryValue(
           key: const Key('catalog-available-window'),
-          label: '촬영 가능',
+          label: '천문학적 관측 가능',
           value: _timeRange(
             value.window!.recommendStartTime,
             value.window!.observationEndTime,
           ),
           valueColor: AppColors.messier,
         ),
+        if (value.usableWindow != null)
+          _SummaryValue(
+            key: const Key('catalog-usable-window'),
+            label: '실제 촬영 가능',
+            value:
+                '${_timeRange(value.usableWindow!.start, value.usableWindow!.end)} · ${value.usableMinutes ?? value.usableWindow!.duration.inMinutes}분',
+            valueColor: AppColors.messier,
+          ),
         _SummaryValue(
           key: const Key('catalog-optimal-window'),
           label: '최적 촬영구간',
@@ -208,10 +234,10 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
 
   String get _siteLabel {
     final value = site;
-    if (value == null) return '관측지 정보 없음 · Bortle ${guidance.referenceBortle}';
+    if (value == null) return '현재 위치';
     return value.bortle == null
-        ? value.name
-        : '${value.name} · Bortle ${value.bortle}';
+        ? '현재 위치'
+        : '현재 위치 · Bortle ${value.bortle}';
   }
 
   String _timeRange(DateTime? start, DateTime? end) {

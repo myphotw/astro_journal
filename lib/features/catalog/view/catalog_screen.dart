@@ -23,6 +23,7 @@ import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/exposure_policy.dart';
 import '../../../services/base_exposure_settings_service.dart';
 import '../../../services/object_imaging_profile_provider.dart';
+import '../../../services/observation_condition_service.dart';
 import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
@@ -206,6 +207,7 @@ class _CatalogScreenState extends State<CatalogScreen>
       captureProjection: context.read<CatalogCaptureProjectionService>(),
       observationSiteRepository: context.read<ObservationSiteRepository>(),
       availabilityService: context.read<TargetImagingAvailabilityService>(),
+      observationConditionService: context.read<ObservationConditionService>(),
     );
 
     final dataChanged = await Navigator.of(context)
@@ -712,6 +714,8 @@ class _AddCatalogEntryScreenState extends State<_AddCatalogEntryScreen> {
                   .read<ObservationSiteRepository>(),
               availabilityService: context
                   .read<TargetImagingAvailabilityService>(),
+              observationConditionService: context
+                  .read<ObservationConditionService>(),
             ),
             child: const CatalogDetailScreen(),
           ),

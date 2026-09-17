@@ -31,6 +31,8 @@ class _CountingWindowCalculator extends ObservationWindowCalculator {
     required DateTime referenceTime,
     required Duration minimumExposure,
     required Duration recommendedExposure,
+    ObservationWindowDurationPolicy durationPolicy =
+        ObservationWindowDurationPolicy.strict,
     ObservationWindowPerformance? performance,
     ObservationWindowSharedCache? sharedCache,
   }) {

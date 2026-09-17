@@ -8,11 +8,11 @@ enum ObservationStatus {
 extension ObservationStatusMessages on ObservationStatus {
   String get headline => switch (this) {
         ObservationStatus.good => '오늘은 관측하기 좋은 날입니다.',
-        ObservationStatus.limited => '조건이 좋지 않아 쉬운 대상 위주로 추천합니다.',
-        ObservationStatus.unavailable => '오늘 밤은 관측을 권장하지 않습니다.',
+        ObservationStatus.limited => '기상 조건을 반영해 추천 순서를 조정합니다.',
+        ObservationStatus.unavailable => '오늘 밤 기상 조건을 확인해 주세요.',
       };
 
-  String get limitedRecommendationNotice => '오늘은 관측 조건이 좋지 않습니다.';
+  String get limitedRecommendationNotice => '예보상 촬영 조건이 좋지 않을 수 있습니다.';
 
   int get homeStarCount => switch (this) {
         ObservationStatus.good => 5,
@@ -20,7 +20,7 @@ extension ObservationStatusMessages on ObservationStatus {
         ObservationStatus.unavailable => 0,
       };
 
-  bool get allowsRecommendations => this != ObservationStatus.unavailable;
+  bool get allowsRecommendations => true;
 
   bool get allowsScheduling => this != ObservationStatus.unavailable;
 }

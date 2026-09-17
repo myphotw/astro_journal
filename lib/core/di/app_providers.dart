@@ -399,6 +399,8 @@ class AppProviders {
       observationEngine,
       recommendationEngine,
       weatherService: weatherService,
+      multiNightRepository: multiNightFramingRepository,
+      multiNightMatchService: multiNightFramingMatchService,
     );
     final tilePreloadService = LightPollutionTilePreloadService(
       shootingRecordRepository,

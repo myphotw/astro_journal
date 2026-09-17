@@ -145,7 +145,10 @@ void main() {
       expect(info.observationStatus, ObservationStatus.limited);
       expect(info.observationScore, summary?.finalScore);
       expect(info.starCount, ObservationStatus.limited.homeStarCount);
-      expect(info.statusDisplayText, contains('관측 조건이 좋지 않습니다'));
+      expect(
+        info.statusDisplayText,
+        contains('예보상 촬영 조건이 좋지 않을 수 있습니다'),
+      );
       expect(info.shootingStatus, ShootingStatus.limited);
       expect(info.hourlySlots.length, lessThanOrEqualTo(slots.length));
       if (info.hourlySlots.isNotEmpty) {

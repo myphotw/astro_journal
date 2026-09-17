@@ -243,22 +243,26 @@ class _CatalogDetailPage extends StatelessWidget {
           const SizedBox(height: 10),
           CatalogExposureGuidanceSection(
             guidance: viewModel.exposureGuidance!,
-            site: viewModel.selectedObservationSite,
-            availability: viewModel.imagingAvailability,
-            isAvailabilityLoading: viewModel.isAvailabilityLoading,
+            site: viewModel.currentLocationSite,
+            availability: viewModel.currentLocationAvailability,
+            isAvailabilityLoading:
+                viewModel.isCurrentLocationAvailabilityLoading,
+            availabilityError: viewModel.currentLocationAvailabilityError,
           ),
         ],
         const SizedBox(height: 10),
         MultiNightFramingSection(
           object: object,
           optimalWindowStart:
-              viewModel.imagingAvailability?.window?.optimalStartTime,
+              viewModel.registeredImagingAvailability?.window?.optimalStartTime,
           optimalWindowEnd:
-              viewModel.imagingAvailability?.window?.optimalEndTime,
-          optimalWindowSiteId: viewModel.selectedObservationSite?.id,
-          darkWindowStart: viewModel.imagingAvailability?.nightStart,
-          darkWindowEnd: viewModel.imagingAvailability?.nightEnd,
-          darkWindowSiteId: viewModel.selectedObservationSite?.id,
+              viewModel.registeredImagingAvailability?.window?.optimalEndTime,
+          optimalWindowSiteId:
+              viewModel.selectedRegisteredObservationSite?.id,
+          darkWindowStart:
+              viewModel.registeredImagingAvailability?.nightStart,
+          darkWindowEnd: viewModel.registeredImagingAvailability?.nightEnd,
+          darkWindowSiteId: viewModel.selectedRegisteredObservationSite?.id,
         ),
         const SizedBox(height: 10),
         EquipmentRecommendationSection(
@@ -267,9 +271,9 @@ class _CatalogDetailPage extends StatelessWidget {
         const SizedBox(height: 10),
         CatalogImagingAvailabilitySection(
           sites: viewModel.observationSites,
-          selectedSite: viewModel.selectedObservationSite,
-          availability: viewModel.imagingAvailability,
-          isLoading: viewModel.isAvailabilityLoading,
+          selectedSite: viewModel.selectedRegisteredObservationSite,
+          availability: viewModel.registeredImagingAvailability,
+          isLoading: viewModel.isRegisteredAvailabilityLoading,
           onSelectSite: viewModel.selectObservationSite,
         ),
         const SizedBox(height: 10),

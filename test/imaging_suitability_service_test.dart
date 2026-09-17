@@ -152,6 +152,37 @@ void main() {
       );
     });
 
+    test('infeasible cloud cover caps expected result at trace', () {
+      final nebula = object(
+        id: 'NGC7000-CLOUD',
+        type: ObjectType.emissionNebula,
+        magnitude: '4.0',
+        angularSize: "120' × 100'",
+      );
+      final profile = profileProvider.profileFor(nebula);
+      final fit = fitFor(nebula);
+      final clear = suitabilityService.assess(
+        profile: profile,
+        bortle: 4,
+        trackingMode: TrackingMode.eq,
+        equipmentFit: fit,
+        targetAltitude: 60,
+        cloudCover: 0,
+      );
+      final overcast = suitabilityService.assess(
+        profile: profile,
+        bortle: 4,
+        trackingMode: TrackingMode.eq,
+        equipmentFit: fit,
+        targetAltitude: 60,
+        cloudCover: 95,
+      );
+
+      expect(overcast.quality, ExpectedResultQuality.trace);
+      expect(overcast.scoreMultiplier, lessThan(clear.scoreMultiplier));
+      expect(overcast.reason, contains('구름량이 높게 예보'));
+    });
+
     test('representative galaxy improves at dark site with S30 EQ', () {
       final galaxy = object(
         id: 'M31',

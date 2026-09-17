@@ -10,12 +10,14 @@ import 'package:astro_journal/data/models/observation_status.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/site_horizon_profile.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
+import 'package:astro_journal/data/models/weather_forecast_slot.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
 import 'package:astro_journal/services/recommendation_engine.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
 import 'package:astro_journal/services/scheduler_engine.dart';
+import 'package:astro_journal/services/session_weather_index.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -78,17 +80,26 @@ void main() {
 
     test('still recommends when observation status is unavailable', () async {
       final session = buildSession();
+      final catalog = [
+        buildObject(
+          id: 'm8',
+          number: 8,
+          ra: '18h 03m',
+          dec: '-24° 23m',
+          type: '발광성운',
+        ),
+      ];
+
+      final clearResult = await engine.build(
+        catalog: catalog,
+        settings: RecommendationSettings.defaults,
+        context: buildContext(),
+        session: session,
+        limit: 10,
+      );
 
       final result = await engine.build(
-        catalog: [
-          buildObject(
-            id: 'm8',
-            number: 8,
-            ra: '18h 03m',
-            dec: '-24° 23m',
-            type: '발광성운',
-          ),
-        ],
+        catalog: catalog,
         settings: RecommendationSettings.defaults,
         context: buildContext().copyWith(
           observationStatus: ObservationStatus.unavailable,
@@ -101,6 +112,10 @@ void main() {
       // 기상 관측 불가여도 천체 기준 추천은 계속 제공한다.
       expect(result.recommendations, isNotEmpty);
       expect(result.recommendations.first.object.id, 'm8');
+      expect(
+        result.recommendations.first.score,
+        lessThan(clearResult.recommendations.first.score),
+      );
     });
 
     test('ignores infeasible weather slots when unavailable', () async {
@@ -153,6 +168,52 @@ void main() {
       expect(result.recommendations, isNotEmpty);
       expect(result.recommendations.first.object.id, 'm8');
     });
+
+    test(
+      'bad weather remains scoring input without hard-removing a target',
+      () async {
+        final session = buildSession();
+        final forecast = WeatherForecastSlot(
+          time: session.start,
+          temperature: 20,
+          humidity: 95,
+          windSpeed: 18,
+          cloudCoverage: 100,
+          visibility: 1000,
+          pop: 90,
+          rainVolumeMm: 2,
+          description: '비',
+          icon: '10n',
+        );
+
+        final result = await engine.build(
+          catalog: [
+            buildObject(
+              id: 'm8',
+              number: 8,
+              ra: '18h 03m',
+              dec: '-24° 23m',
+              type: '발광성운',
+            ),
+          ],
+          settings: RecommendationSettings.defaults,
+          context: buildContext().copyWith(
+            cloudCover: 100,
+            observationStatus: ObservationStatus.limited,
+            sessionWeather: SessionWeatherIndex.build(
+              session: session,
+              forecasts: [forecast],
+            ),
+          ),
+          session: session,
+          limit: 10,
+        );
+
+        expect(result.recommendations, isNotEmpty);
+        expect(result.recommendations.first.object.id, 'm8');
+        expect(result.recommendations.first.observationWindow, isNotNull);
+      },
+    );
 
     test(
       'returns recommendations with observation windows for session',

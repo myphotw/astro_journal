@@ -112,18 +112,31 @@ class ObservationFeasibilityPolicy {
   static String formatReason(
     ObservationFeasibilityReason reason, {
     WeatherForecastSlot? forecast,
+    int? representativeCloudCoverage,
   }) {
     return switch (reason) {
       ObservationFeasibilityReason.rainVolume =>
-        '강수량 ${forecast?.rainVolumeMm?.toStringAsFixed(1) ?? '0'}mm',
+        forecast?.rainVolumeMm == null
+            ? '강수가 예보됨'
+            : '강수량 ${forecast!.rainVolumeMm!.toStringAsFixed(1)}mm',
       ObservationFeasibilityReason.cloudTooHigh =>
-        '구름량 ${forecast?.cloudCoverage ?? 0}%',
+        representativeCloudCoverage != null
+            ? '구름량 $representativeCloudCoverage%'
+            : forecast != null
+            ? '구름량 ${forecast.cloudCoverage}%'
+            : '구름량이 높음',
       ObservationFeasibilityReason.rainProbability =>
-        '강수 확률 ${(forecast?.pop ?? 0).round()}%',
+        forecast == null
+            ? '강수 확률이 높음'
+            : '강수 확률 ${forecast.pop.round()}%',
       ObservationFeasibilityReason.visibilityTooLow =>
-        '가시거리 ${((forecast?.visibility ?? 0) / 1000).toStringAsFixed(1)}km',
+        forecast == null
+            ? '가시거리가 낮음'
+            : '가시거리 ${(forecast.visibility / 1000).toStringAsFixed(1)}km',
       ObservationFeasibilityReason.windTooStrong =>
-        '풍속 ${(forecast?.windSpeed ?? 0).toStringAsFixed(1)}m/s',
+        forecast == null
+            ? '바람이 강함'
+            : '풍속 ${forecast.windSpeed.toStringAsFixed(1)}m/s',
       ObservationFeasibilityReason.belowMinAltitude => reason.label,
       ObservationFeasibilityReason.aboveMaxAltitude => reason.label,
       ObservationFeasibilityReason.outsideAzimuth => reason.label,
@@ -135,6 +148,7 @@ class ObservationFeasibilityPolicy {
   static String? aggregatePrimaryReason({
     required Iterable<ObservationFeasibilityResult> results,
     WeatherForecastSlot? sampleForecast,
+    int? representativeCloudCoverage,
   }) {
     final infeasible = results.where((r) => !r.canObserve).toList();
     if (infeasible.isEmpty) return null;
@@ -156,23 +170,33 @@ class ObservationFeasibilityPolicy {
 
     for (final reason in weatherPriority) {
       if ((counts[reason] ?? 0) > 0) {
-        return formatReason(reason, forecast: sampleForecast);
+        return formatReason(
+          reason,
+          forecast: sampleForecast,
+          representativeCloudCoverage: representativeCloudCoverage,
+        );
       }
     }
 
     final top = counts.entries.reduce(
       (a, b) => a.value >= b.value ? a : b,
     );
-    return formatReason(top.key, forecast: sampleForecast);
+    return formatReason(
+      top.key,
+      forecast: sampleForecast,
+      representativeCloudCoverage: representativeCloudCoverage,
+    );
   }
 
   static List<String> buildWeatherExclusionMessages({
     required Iterable<ObservationFeasibilityResult> results,
     WeatherForecastSlot? sampleForecast,
+    int? representativeCloudCoverage,
   }) {
     final primary = aggregatePrimaryReason(
       results: results,
       sampleForecast: sampleForecast,
+      representativeCloudCoverage: representativeCloudCoverage,
     );
     if (primary == null) {
       return const ['조건을 만족하는 추천 대상이 없습니다'];
@@ -181,6 +205,23 @@ class ObservationFeasibilityPolicy {
       '오늘 밤은 촬영 가능한 시간이 없습니다.',
       '대표 원인: $primary',
     ];
+  }
+
+  static String? buildWeatherAdvisory({
+    required Iterable<ObservationFeasibilityResult> results,
+    WeatherForecastSlot? sampleForecast,
+    int? representativeCloudCoverage,
+  }) {
+    final primary = aggregatePrimaryReason(
+      results: results,
+      sampleForecast: sampleForecast,
+      representativeCloudCoverage: representativeCloudCoverage,
+    );
+    if (primary == null) return null;
+    if (primary == '구름량이 높음') {
+      return '구름량이 높게 예보되었습니다. 실제 하늘 상태를 확인해 주세요.';
+    }
+    return '$primary 예보가 있습니다. 실제 하늘 상태를 확인해 주세요.';
   }
 
   static bool hasAnyFeasibleSiteSlot(

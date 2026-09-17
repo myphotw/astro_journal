@@ -17,4 +17,8 @@ abstract final class ObservationStatusConfig {
 
   /// Score multiplier for [ImagingDifficulty.normal] targets in LIMITED nights.
   static const limitedNormalDifficultyScoreMultiplier = 0.85;
+
+  /// Keeps astronomical targets visible while strongly lowering their Home
+  /// recommendation score when tonight's forecast is unavailable.
+  static const unavailableRecommendationScoreMultiplier = 0.40;
 }

@@ -26,7 +26,7 @@ class RainObservationPolicy {
   static const reasonRain = '비';
   static const reasonPop = '강수';
   static const rainUnavailableMessage =
-      '오늘 밤은 비 예보로 인해 관측을 권장하지 않습니다.';
+      '비가 예보되어 있습니다. 실제 하늘 상태를 확인해 주세요.';
 
   RainObservationResult evaluate({
     required DateTime observationStart,

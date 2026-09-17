@@ -30,7 +30,7 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '관측지별 촬영 가능성',
+              '등록 관측지 촬영 가능성',
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 16,
@@ -39,7 +39,7 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              '촬영 가능성을 확인하려면 관측지를 먼저 등록해주세요.',
+              '등록된 관측지가 없습니다.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ],
@@ -52,7 +52,7 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '관측지별 촬영 가능성',
+            '등록 관측지 촬영 가능성',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 16,
@@ -61,7 +61,7 @@ class CatalogImagingAvailabilitySection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            '관측지',
+            '등록 관측지',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
           DropdownButton<String>(
@@ -132,7 +132,7 @@ class _AvailabilityDetails extends StatelessWidget {
                 children: [
                   Expanded(child: today),
                   const SizedBox(width: 24),
-                  Expanded(child: tomorrow!),
+                  Expanded(child: tomorrow),
                 ],
               )
             : Column(
@@ -215,15 +215,68 @@ class _DayAvailabilitySection extends StatelessWidget {
           key: ValueKey('$keyPrefix-status'),
           label: '상태',
           value: availability.tonightStatusLabel,
-          color: availability.isAvailableTonight
-              ? (availability.isDifficultTonight
-                    ? Colors.orangeAccent
-                    : Colors.lightGreenAccent)
-              : Colors.orangeAccent,
+          color: switch (availability.effectiveState) {
+            TargetImagingAvailabilityState.sufficientWindow =>
+              availability.isDifficultTonight
+                  ? Colors.orangeAccent
+                  : Colors.lightGreenAccent,
+            TargetImagingAvailabilityState.multiNightAccumulation =>
+              AppColors.messier,
+            TargetImagingAvailabilityState.shortWindow => Colors.orangeAccent,
+            TargetImagingAvailabilityState.noObservableWindow =>
+              AppColors.textSecondary,
+          },
         ),
+        if (availability.usableMinutes != null)
+          _ValueRow(
+            key: ValueKey('$keyPrefix-usable-duration'),
+            label: '실제 촬영 가능',
+            value: _usableWindowLabel(),
+          ),
+        if (availability.minimumMinutes != null)
+          _ValueRow(
+            key: ValueKey('$keyPrefix-minimum-duration'),
+            label: '일반 최소 기준',
+            value: '${availability.minimumMinutes}분',
+            valueWeight: FontWeight.w500,
+          ),
+        if (availability.recommendedMinutes != null)
+          _ValueRow(
+            key: ValueKey('$keyPrefix-recommended-duration'),
+            label: '권장 촬영시간',
+            value: '${availability.recommendedMinutes}분',
+            valueWeight: FontWeight.w500,
+          ),
+        if (availability.hasFramingReference)
+          _ValueRow(
+            key: ValueKey('$keyPrefix-framing-status'),
+            label: '기준 구도',
+            value: availability.framingMatched
+                ? '동일구도 ${availability.sameFramingMinutes ?? availability.usableMinutes ?? 0}분 누적 가능'
+                : '오늘 동일구도 재현 구간 없음',
+            color: availability.framingMatched
+                ? AppColors.messier
+                : AppColors.textSecondary,
+          ),
+        if (availability.recommendation?.imagingAssessment?.isExtremelyTiny ??
+            false)
+          const _ValueRow(
+            label: '장비',
+            value: '선택 장비에서 대상이 매우 작게 표현됨',
+            color: Colors.orangeAccent,
+            valueWeight: FontWeight.w500,
+          ),
+        if (availability.weatherAdvisory != null)
+          _ValueRow(
+            key: ValueKey('$keyPrefix-weather-advisory'),
+            label: '기상 의견',
+            value: availability.weatherAdvisory!,
+            color: AppColors.textSecondary,
+            valueWeight: FontWeight.w500,
+          ),
         _ValueRow(
           key: ValueKey('$keyPrefix-shooting-window'),
-          label: '촬영 가능 시간',
+          label: '천문학적 관측 가능',
           value: window == null
               ? '-'
               : _timeRange(
@@ -277,6 +330,13 @@ class _DayAvailabilitySection extends StatelessWidget {
     String format(DateTime value) =>
         '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
     return '${format(start)} ~ ${format(end)}';
+  }
+
+  String _usableWindowLabel() {
+    final usableWindow = availability.usableWindow;
+    final minutes = availability.usableMinutes;
+    if (usableWindow == null) return '${minutes ?? 0}분';
+    return '${_timeRange(usableWindow.start, usableWindow.end)} · ${minutes ?? usableWindow.duration.inMinutes}분';
   }
 }
 

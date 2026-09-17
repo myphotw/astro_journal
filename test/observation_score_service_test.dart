@@ -187,6 +187,52 @@ void main() {
       expect(summary!.isObservationFeasible, isFalse);
       expect(summary.infeasibleUserMessage, contains('구름'));
     });
+
+    test('infeasible night keeps representative hourly cloud coverage', () {
+      final now = DateTime(2026, 6, 24, 15);
+      final sunrise = DateTime(2026, 6, 25, 5, 30);
+      final sunset = DateTime(2026, 6, 24, 19, 30);
+      const clouds = [97, 95, 92, 94, 99, 95, 91, 87];
+      final forecasts = List.generate(
+        clouds.length,
+        (i) => WeatherForecastSlot(
+          time: DateTime(2026, 6, 24, 20 + i),
+          temperature: 18,
+          humidity: 50,
+          windSpeed: 2,
+          cloudCoverage: clouds[i],
+          visibility: 10000,
+          pop: 0,
+          description: '흐림',
+          icon: '04n',
+        ),
+      );
+
+      final summary = ObservationScoreService.buildTonightSummary(
+        context: buildContext(),
+        forecasts: forecasts,
+        sunrise: sunrise,
+        sunset: sunset,
+        now: now,
+      );
+
+      expect(summary, isNotNull);
+      expect(summary!.isObservationFeasible, isFalse);
+      expect(summary.representativeCloudCoverage, 94);
+      final night = ObservationScoreService.observationNightWindow(
+        now: now,
+        sunrise: sunrise,
+        sunset: sunset,
+      );
+      expect(
+        ObservationScoreService.averageNightlyCloudCoverage(
+          nightStart: night.nightStart,
+          nightEnd: night.nightEnd,
+          forecasts: forecasts,
+        )?.round(),
+        summary.representativeCloudCoverage,
+      );
+    });
   });
 
   group('findObservationWindow', () {

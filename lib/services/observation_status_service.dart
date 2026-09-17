@@ -37,6 +37,14 @@ class ObservationStatusService {
     required ObservationContext context,
     TonightObservationSummary? summary,
   }) {
+    final nightlyAverageCloud =
+        summary?.averageCloudCoverage ??
+        ObservationScoreService.averageNightlyCloudCoverage(
+          nightStart: context.observationStart,
+          nightEnd: context.observationEnd,
+          forecasts: context.forecasts,
+        );
+    final averageCloud = nightlyAverageCloud ?? context.cloudCover.toDouble();
     final rainResult = _rainObservationPolicy.evaluate(
       observationStart: context.observationStart,
       observationEnd: context.observationEnd,
@@ -45,7 +53,7 @@ class ObservationStatusService {
     if (rainResult.isBlocked) {
       return _unavailable(
         oqi: 0,
-        averageCloudCoverage: context.cloudCover.toDouble(),
+        averageCloudCoverage: averageCloud,
         longestContinuousMinutes: 0,
         primaryReason: rainResult.primaryReason,
         userMessage: rainResult.userMessage,
@@ -60,16 +68,21 @@ class ObservationStatusService {
     if (feasibleStarts.isEmpty) {
       return _unavailable(
         oqi: 0,
-        averageCloudCoverage: _averageCloud(context, feasibleStarts),
+        averageCloudCoverage: averageCloud,
         longestContinuousMinutes: 0,
-        primaryReason: _feasibilityPrimaryReason(context),
-        userMessage: _feasibilityUserMessage(context),
+        primaryReason: _feasibilityPrimaryReason(
+          context,
+          representativeCloudCoverage: nightlyAverageCloud?.round(),
+        ),
+        userMessage: _feasibilityUserMessage(
+          context,
+          representativeCloudCoverage: nightlyAverageCloud?.round(),
+        ),
       );
     }
 
     final longestContinuous =
         FeasibleSlotContinuity.longestContiguousMinutes(feasibleStarts);
-    final averageCloud = _averageCloud(context, feasibleStarts);
     final oqi = _resolveOqi(context, feasibleStarts, summary);
 
     if (oqi <= ObservationStatusConfig.maxUnavailableOqi) {
@@ -78,7 +91,7 @@ class ObservationStatusService {
         averageCloudCoverage: averageCloud,
         longestContinuousMinutes: longestContinuous,
         primaryReason: '관측 지수 ${oqi.round()}점',
-        userMessage: '관측 조건이 매우 좋지 않습니다.',
+        userMessage: '예보상 촬영 조건이 좋지 않을 수 있습니다.',
       );
     }
 
@@ -88,7 +101,7 @@ class ObservationStatusService {
         averageCloudCoverage: averageCloud,
         longestContinuousMinutes: longestContinuous,
         primaryReason: '평균 구름 ${averageCloud.round()}%',
-        userMessage: '구름이 너무 많습니다.',
+        userMessage: '구름량이 높게 예보되어 있습니다.',
       );
     }
 
@@ -99,7 +112,7 @@ class ObservationStatusService {
         averageCloudCoverage: averageCloud,
         longestContinuousMinutes: longestContinuous,
         primaryReason: '연속 촬영 가능 $longestContinuous분',
-        userMessage: '촬영 가능한 연속 시간이 부족합니다.',
+        userMessage: '예보상 좋은 조건이 이어지는 시간이 짧습니다.',
       );
     }
 
@@ -144,42 +157,35 @@ class ObservationStatusService {
     return scores.reduce((a, b) => a + b) / scores.length;
   }
 
-  static double _averageCloud(
-    ObservationContext context,
-    Iterable<DateTime> feasibleStarts,
-  ) {
-    final starts = feasibleStarts.toList();
-    if (starts.isEmpty) {
-      return context.cloudCover.toDouble();
-    }
-
-    var sum = 0.0;
-    for (final start in starts) {
-      sum += context.sessionWeather?.weatherAt(start).cloudCover.toDouble() ??
-          context.cloudCover.toDouble();
-    }
-    return sum / starts.length;
-  }
-
-  static String? _feasibilityPrimaryReason(ObservationContext context) {
+  static String? _feasibilityPrimaryReason(
+    ObservationContext context, {
+    required int? representativeCloudCoverage,
+  }) {
     if (context.siteSlotFeasibility.isEmpty) return null;
     return ObservationFeasibilityPolicy.aggregatePrimaryReason(
       results: context.siteSlotFeasibility.values,
+      representativeCloudCoverage: representativeCloudCoverage,
     );
   }
 
-  static String? _feasibilityUserMessage(ObservationContext context) {
-    final reason = _feasibilityPrimaryReason(context);
+  static String? _feasibilityUserMessage(
+    ObservationContext context, {
+    required int? representativeCloudCoverage,
+  }) {
+    final reason = _feasibilityPrimaryReason(
+      context,
+      representativeCloudCoverage: representativeCloudCoverage,
+    );
     if (reason == null) {
       return '오늘 밤은 촬영 가능한 시간이 없습니다.';
     }
-    if (reason.contains('구름')) return '구름이 너무 많습니다.';
+    if (reason.contains('구름')) return '구름량이 높게 예보되어 있습니다.';
     if (reason.contains('강수량') || reason == RainObservationPolicy.reasonRain) {
       return RainObservationPolicy.rainUnavailableMessage;
     }
     if (reason.contains('강수')) return RainObservationPolicy.rainUnavailableMessage;
-    if (reason.contains('가시거리')) return '가시거리가 부족합니다.';
-    if (reason.contains('풍속')) return '바람이 너무 강합니다.';
+    if (reason.contains('가시거리')) return '가시거리가 낮게 예보되어 있습니다.';
+    if (reason.contains('풍속')) return '바람이 강하게 예보되어 있습니다.';
     return reason;
   }
 

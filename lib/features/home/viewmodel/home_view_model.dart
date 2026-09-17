@@ -40,6 +40,7 @@ import '../../../services/observation_engine.dart';
 import '../../../services/observation_quality_service.dart';
 import '../../../services/observation_score_service.dart';
 import '../../../services/recommendation/catalog_recommendation_eligibility_policy.dart';
+import '../../../services/recommendation/observation_window_calculator.dart';
 import '../../../services/recommendation_engine.dart';
 import '../../../services/recommendation_settings_service.dart';
 import '../../../services/scheduler_engine.dart';
@@ -219,21 +220,29 @@ class ManualShootingCandidate {
     required this.target,
     required this.recommendation,
     required this.suitability,
-    required this.selectedWindow,
+    required this.proposal,
   });
 
   final ScoredObservationTarget target;
   final RecommendationResult recommendation;
   final ShootingSuitability suitability;
-  final ShootingTimeWindow selectedWindow;
+  final ManualShootingWindowProposal proposal;
+
+  ShootingTimeWindow get searchWindow => proposal.searchWindow;
+  ShootingTimeWindow get usableWindow => proposal.usableWindow;
+  ShootingTimeWindow get proposedWindow => proposal.proposedWindow;
+  Duration get proposedDuration => proposal.proposedDuration;
+  bool get isBelowMinimumDuration => proposal.isBelowMinimumDuration;
+  bool get isBelowRecommendedDuration => proposal.isBelowRecommendedDuration;
+  bool get isMultiNightAccumulationOpportunity =>
+      proposal.isMultiNightAccumulationOpportunity;
 
   bool get isObservable =>
-      suitability.selectedWindowIsObservable(selectedWindow);
-  bool get matchesFraming =>
-      suitability.selectedWindowMatchesFraming(selectedWindow);
-  bool get isOptimal => suitability.selectedWindowIsOptimal(selectedWindow);
+      suitability.selectedWindowIsObservable(proposedWindow);
+  bool get matchesFraming => proposal.framingMatched;
+  bool get isOptimal => suitability.selectedWindowIsOptimal(proposedWindow);
   bool get overlapsOptimal =>
-      suitability.selectedWindowOverlapsOptimal(selectedWindow);
+      suitability.selectedWindowOverlapsOptimal(proposedWindow);
 }
 
 // ── ViewModel ────────────────────────────────────────────────────────────────
@@ -452,19 +461,22 @@ class HomeViewModel extends ChangeNotifier {
       final suitability = _shootingSuitabilityById[target.object.id];
       final recommendation = _resultsById[target.object.id];
       if (suitability == null || recommendation == null) continue;
-      if (!suitability.eligible ||
-          selected.duration < target.minimumExposure ||
-          !suitability.selectedWindowIsObservable(selected) ||
-          !suitability.selectedWindowMatchesFraming(selected)) {
+      final proposal = _shootingSuitabilityService.proposeManualWindow(
+        target: target,
+        suitability: suitability,
+        searchWindow: selected,
+      );
+      if (proposal == null) continue;
+      if (onlyFramingMatches &&
+          (!suitability.hasFramingReference || !proposal.framingMatched)) {
         continue;
       }
-      if (onlyFramingMatches && !suitability.hasFramingReference) continue;
       candidates.add(
         ManualShootingCandidate(
           target: target,
           recommendation: recommendation,
           suitability: suitability,
-          selectedWindow: selected,
+          proposal: proposal,
         ),
       );
     }
@@ -682,8 +694,7 @@ class HomeViewModel extends ChangeNotifier {
         averageMoonIllumination: summary.averageMoonIllumination,
         averagePrecipitationPop: summary.averagePrecipitationPop,
         averageVisibilityMeters: summary.averageVisibilityMeters,
-        cloudCover:
-            slotWeather?.cloudCover ?? summary.averageCloudCoverage.round(),
+        cloudCover: summary.representativeCloudCoverage,
         visibilityMeters:
             slotWeather?.visibility ?? summary.averageVisibilityMeters,
         humidity:
@@ -844,6 +855,7 @@ class HomeViewModel extends ChangeNotifier {
         referenceTime: now,
         trackingMode: sessionContext.trackingMode,
         candidateScope: RecommendationCandidateScope.representative,
+        durationPolicy: ObservationWindowDurationPolicy.informational,
         equipmentFitResolver: (object, window) => _equipmentFitFor(
           object: object,
           window: window,
@@ -886,19 +898,22 @@ class HomeViewModel extends ChangeNotifier {
       );
       return false;
     }
-    final eligibleTargets = result.scoredTargets
-        .where((target) => suitabilityById[target.object.id]?.eligible ?? false)
-        .toList();
-    final eligibleIds = eligibleTargets
-        .map((target) => target.object.id)
-        .toSet();
-    final eligibleRecommendations = result.allRecommendations
+    final automaticTargets = result.scoredTargets
         .where(
-          (recommendation) => eligibleIds.contains(recommendation.object.id),
+          (target) =>
+              suitabilityById[target.object.id]?.automaticEligible ?? false,
         )
         .toList();
-    final eligibleResultsById = {
-      for (final recommendation in eligibleRecommendations)
+    final automaticIds = automaticTargets
+        .map((target) => target.object.id)
+        .toSet();
+    final automaticRecommendations = result.allRecommendations
+        .where(
+          (recommendation) => automaticIds.contains(recommendation.object.id),
+        )
+        .toList();
+    final automaticResultsById = {
+      for (final recommendation in automaticRecommendations)
         recommendation.object.id: recommendation,
     };
     final needsFramingAwareReschedule =
@@ -910,8 +925,8 @@ class HomeViewModel extends ChangeNotifier {
                 SchedulerInput(
                   context: sessionContext,
                   session: session,
-                  targets: eligibleTargets,
-                  resultsById: eligibleResultsById,
+                  targets: automaticTargets,
+                  resultsById: automaticResultsById,
                   referenceTime: now,
                   suitabilityByObjectId: suitabilityById,
                 ),
@@ -922,12 +937,12 @@ class HomeViewModel extends ChangeNotifier {
         : result.scheduleItems
               .where(
                 (item) =>
-                    eligibleIds.contains(item.target.object.id) &&
+                    automaticIds.contains(item.target.object.id) &&
                     item.status != ScheduleItemStatus.excluded,
               )
               .toList();
 
-    final candidateIds = eligibleTargets
+    final candidateIds = automaticTargets
         .map((target) => target.object.id)
         .toList(growable: false);
     final scheduleIds = qualityScheduleItems
@@ -956,11 +971,14 @@ class HomeViewModel extends ChangeNotifier {
           .whereType<String>()
           .toSet(),
     ];
-    _allRecommendedObjects = eligibleRecommendations;
-    _recommendedObjects = eligibleRecommendations.take(mainLimit).toList();
-    _scoredTargets = eligibleTargets;
+    _allRecommendedObjects = automaticRecommendations;
+    _recommendedObjects = automaticRecommendations.take(mainLimit).toList();
+    _scoredTargets = result.scoredTargets;
     _recommendedScheduleItems = qualityScheduleItems;
-    _resultsById = eligibleResultsById;
+    _resultsById = {
+      for (final recommendation in result.allRecommendations)
+        recommendation.object.id: recommendation,
+    };
     _shootingSuitabilityById = suitabilityById;
     _lastSessionContext = sessionContext;
     _lastSession = session;
@@ -1062,6 +1080,10 @@ class HomeViewModel extends ChangeNotifier {
       return ids;
     }
 
+    if (_lastSessionContext?.observationStatus.allowsScheduling == false) {
+      return const [];
+    }
+
     return _recommendedObjects
         .map((result) => result.object.id)
         .where(canAddToShootingPlan)
@@ -1103,7 +1125,9 @@ class HomeViewModel extends ChangeNotifier {
 
       _scheduleItems = List<ScheduleItem>.from(_recommendedScheduleItems);
       _scheduleEmptyMessage = _scheduleItems.isEmpty
-          ? '오늘 밤 촬영 순서를 추천할 대상이 없습니다'
+          ? (_lastSessionContext?.observationStatus.allowsScheduling == false
+                ? SchedulerEngine.weatherLimitedMessage
+                : '오늘 밤 촬영 순서를 추천할 대상이 없습니다')
           : null;
       return;
     }
