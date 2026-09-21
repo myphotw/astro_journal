@@ -8,6 +8,7 @@ import 'package:astro_journal/core/services/observation_context_invalidator.dart
 import 'package:astro_journal/core/services/performance_probe.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
+import 'package:astro_journal/data/models/equipment_recommendation.dart';
 import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
 import 'package:astro_journal/data/models/object_observation_window.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
@@ -437,7 +438,10 @@ void main() {
       _Scheduler scheduler,
     })
   >
-  loadPlanWorkflow(TonightShootingPlanSnapshot snapshot) async {
+  loadPlanWorkflow(
+    TonightShootingPlanSnapshot snapshot, {
+    bool withEquipment = true,
+  }) async {
     final invalidator = ObservationContextInvalidator();
     final now = DateTime(2026, 9, 15);
     final initialSite = ObservationSite(
@@ -460,16 +464,18 @@ void main() {
     await active.selectSavedSite(initialSite);
 
     final equipment = _EquipmentRepository(invalidator);
-    equipment.items.add(
-      const Equipment(
-        id: 'scope-1',
-        name: 'Workflow scope',
-        kind: EquipmentKind.smartTelescope,
-        purpose: EquipmentPurpose.imaging,
-        fovWidthDegrees: 2,
-        fovHeightDegrees: 1,
-      ),
-    );
+    if (withEquipment) {
+      equipment.items.add(
+        const Equipment(
+          id: 'scope-1',
+          name: 'Workflow scope',
+          kind: EquipmentKind.smartTelescope,
+          purpose: EquipmentPurpose.imaging,
+          fovWidthDegrees: 2,
+          fovHeightDegrees: 1,
+        ),
+      );
+    }
     final positions = CelestialPositionService();
     final scheduler = _Scheduler(returnItems: true);
     final plan = _Plan(snapshot: snapshot);
@@ -550,6 +556,27 @@ void main() {
     );
     expect(workflow.plan.savedOrders, isEmpty);
   });
+
+  test(
+    'Home keeps equipment absence state for recommendation details',
+    () async {
+      final workflow = await loadPlanWorkflow(
+        const TonightShootingPlanSnapshot(orderedObjectIds: []),
+        withEquipment: false,
+      );
+      addTearDown(workflow.home.dispose);
+
+      final objectId = workflow.home.allRecommendedObjects.single.object.id;
+      final equipmentRecommendation = workflow.home
+          .todayEquipmentRecommendationFor(objectId);
+
+      expect(equipmentRecommendation, isNotNull);
+      expect(
+        equipmentRecommendation!.imagingAvailability,
+        EquipmentRecommendationAvailability.notRegistered,
+      );
+    },
+  );
 
   test(
     'equipment, tracking, site and camera Horizon changes rebuild Home',

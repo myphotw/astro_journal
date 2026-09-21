@@ -121,12 +121,25 @@ class WeatherService {
     );
   }
 
-  double _double(Object? value) => value is num
-      ? value.toDouble()
-      : double.tryParse(value?.toString() ?? '') ?? 0;
+  double _double(Object? value) {
+    if (value is num) return value.toDouble();
+    final parsed = double.tryParse(value?.toString() ?? '');
+    if (parsed != null) return parsed;
+    throw const TcBackendExternalApiException(
+      code: TcBackendExternalApiErrorCode.malformedResponse,
+      message: '날씨 응답의 숫자 필드가 올바르지 않습니다.',
+    );
+  }
 
-  int _int(Object? value) =>
-      value is num ? value.toInt() : int.tryParse(value?.toString() ?? '') ?? 0;
+  int _int(Object? value) {
+    if (value is num) return value.toInt();
+    final parsed = int.tryParse(value?.toString() ?? '');
+    if (parsed != null) return parsed;
+    throw const TcBackendExternalApiException(
+      code: TcBackendExternalApiErrorCode.malformedResponse,
+      message: '날씨 응답의 정수 필드가 올바르지 않습니다.',
+    );
+  }
 
   String _string(Object? value) => value?.toString() ?? '';
 

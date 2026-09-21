@@ -7,6 +7,7 @@ import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/observation_feasibility_reason.dart';
 import 'package:astro_journal/data/models/observation_feasibility_result.dart';
 import 'package:astro_journal/data/models/observation_status.dart';
+import 'package:astro_journal/data/models/recommendation_result.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/site_horizon_profile.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
@@ -212,6 +213,79 @@ void main() {
         expect(result.recommendations, isNotEmpty);
         expect(result.recommendations.first.object.id, 'm8');
         expect(result.recommendations.first.observationWindow, isNotNull);
+      },
+    );
+
+    test(
+      'shooting fit ignores weather while tonight recommendation keeps it',
+      () async {
+        final session = buildSession();
+        final object = buildObject(
+          id: 'm8-weather-separation',
+          number: 8,
+          ra: '18h 03m',
+          dec: '-24° 23m',
+          type: '발광성운',
+        );
+        List<WeatherForecastSlot> forecasts({required int cloud}) => [
+          for (var offset = 0; offset <= 6; offset += 3)
+            WeatherForecastSlot(
+              time: session.start.add(Duration(hours: offset)),
+              temperature: 20,
+              humidity: cloud == 0 ? 50 : 95,
+              windSpeed: cloud == 0 ? 1.5 : 18,
+              cloudCoverage: cloud,
+              visibility: cloud == 0 ? 10000 : 1000,
+              pop: cloud == 0 ? 0 : 90,
+              description: cloud == 0 ? '맑음' : '비',
+              icon: cloud == 0 ? '01n' : '10n',
+            ),
+        ];
+
+        Future<RecommendationResult> buildWith(
+          List<WeatherForecastSlot>? weather,
+        ) async {
+          final result = await engine.build(
+            catalog: [object],
+            settings: RecommendationSettings.defaults,
+            context: buildContext().copyWith(
+              sessionWeather: weather == null
+                  ? null
+                  : SessionWeatherIndex.build(
+                      session: session,
+                      forecasts: weather,
+                    ),
+            ),
+            session: session,
+            limit: 10,
+          );
+          return result.recommendations.single;
+        }
+
+        final clear = await buildWith(forecasts(cloud: 0));
+        final overcast = await buildWith(forecasts(cloud: 99));
+        final unknown = await buildWith(null);
+
+        for (final result in [overcast, unknown]) {
+          expect(
+            result.imagingAssessment?.quality,
+            clear.imagingAssessment?.quality,
+          );
+          expect(
+            result.imagingAssessment?.suitabilityScore,
+            clear.imagingAssessment?.suitabilityScore,
+          );
+          expect(
+            result.imagingAssessment?.scoreMultiplier,
+            clear.imagingAssessment?.scoreMultiplier,
+          );
+        }
+        expect(clear.score, greaterThan(overcast.score));
+        expect(unknown.observationWindow?.hasWeatherData, isFalse);
+        expect(
+          unknown.observationWindow?.optimalWeatherScore,
+          isNull,
+        );
       },
     );
 

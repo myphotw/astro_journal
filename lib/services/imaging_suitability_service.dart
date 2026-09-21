@@ -1,5 +1,4 @@
 import '../core/constants/object_type.dart';
-import '../core/constants/observation_feasibility_config.dart';
 import '../core/constants/surface_brightness_class.dart';
 import '../data/models/fov_box.dart';
 import '../data/models/imaging_suitability_assessment.dart';
@@ -23,9 +22,6 @@ class ImagingSuitabilityService {
     bool dailyDurationLimitedByFieldRotation = false,
     double dailyFieldRotationSpanDegrees = 0,
     double? targetAltitude,
-    double moonIllumination = 0,
-    double moonSeparation = 180,
-    double cloudCover = 0,
     double fieldRotationSpanDegrees = 0,
   }) {
     final resolvedFilterMode = filterMode ?? recommendedFilterMode(profile);
@@ -84,16 +80,6 @@ class ImagingSuitabilityService {
     if (targetAltitude != null && targetAltitude < 25) {
       qualityLevel -= 1;
     }
-    if (moonIllumination > 0.6 && moonSeparation < 45) {
-      qualityLevel -= 1;
-    }
-    if (cloudCover >=
-        ObservationFeasibilityConfig.minInfeasibleCloudCoveragePercent) {
-      qualityLevel = 1;
-    } else if (cloudCover > 50) {
-      qualityLevel -= 1;
-    }
-
     final longExposure = (recommendedExposure?.inMinutes ?? 0) >= 90;
     final highAltitude = (targetAltitude ?? 0) >= 65;
     final altAzRotationRisk =
@@ -186,7 +172,6 @@ class ImagingSuitabilityService {
         screenFillPercent: screenFillPercent,
         fitScore: fitScore,
         altAzRotationRisk: altAzRotationRisk,
-        cloudCover: cloudCover,
       ),
       hasReliableSurfaceBrightness: hasReliableSurfaceBrightness,
       targetLightPollutionSensitivity: lightPollutionSensitivity,
@@ -305,12 +290,7 @@ class ImagingSuitabilityService {
     required int? screenFillPercent,
     required double? fitScore,
     required bool altAzRotationRisk,
-    required double cloudCover,
   }) {
-    if (cloudCover >=
-        ObservationFeasibilityConfig.minInfeasibleCloudCoveragePercent) {
-      return '구름량이 높게 예보되어 실제 하늘 상태 확인이 필요합니다.';
-    }
     if (profile.metadataReliability == ImagingMetadataReliability.missing) {
       return '밝기와 크기 정보가 부족해 예상 품질을 보수적으로 제한했습니다.';
     }
@@ -344,6 +324,6 @@ class ImagingSuitabilityService {
     if (filterMode == FilterMode.on && bortle >= 7) {
       return '내장 필터 사용 시 도시 광해 환경에서 대비 확보에 유리합니다.';
     }
-    return '현재 광해와 장비 프레이밍을 기준으로 한 예상 결과입니다.';
+    return '현재 광해와 장비 프레이밍을 기준으로 한 촬영 궁합입니다.';
   }
 }

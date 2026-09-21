@@ -228,6 +228,9 @@ void main() {
       expect(result.exclusion, ObservationWindowExclusion.none);
       expect(result.window, isNotNull);
       expect(result.window!.slotObservationScores, isNotEmpty);
+      expect(result.window!.optimalFeasibleCloudCoverage, 100);
+      expect(result.window!.optimalFeasibleWindSpeed, 18);
+      expect(result.window!.hasWeatherData, isTrue);
     });
 
     test('site horizon excludes a target below the physical skyline', () {

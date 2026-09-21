@@ -61,7 +61,6 @@ class ObservationEngine {
         end: nightWindow.observationEnd,
       ),
       forecasts: forecasts,
-      fallbackWeather: weather,
     );
 
     var context = ObservationContext(

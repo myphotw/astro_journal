@@ -40,7 +40,7 @@ void main() {
     expect(find.byKey(const Key('recommendation-mosaic-on')), findsOneWidget);
     expect(find.text('모자이크'), findsOneWidget);
     expect(find.byKey(const Key('recommendation-quality')), findsOneWidget);
-    expect(find.text('예상 촬영 결과'), findsOneWidget);
+    expect(find.text('촬영 궁합'), findsOneWidget);
     expect(find.text('★★★☆☆'), findsOneWidget);
     expect(find.text('· 주요 구조 확인'), findsOneWidget);
     expect(
@@ -103,7 +103,7 @@ void main() {
           ),
         );
 
-        final label = find.text('예상 촬영 결과');
+        final label = find.text('촬영 궁합');
         final stars = find.text(quality.starLabel);
         final description = find.text('· ${quality.label}');
         expect(label, findsOneWidget);
@@ -118,4 +118,33 @@ void main() {
       },
     );
   }
+
+  testWidgets('shooting fit and tonight rating can intentionally differ', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecommendationEvaluationSummary(
+          assessment: assessment(
+            filterMode: FilterMode.off,
+            mosaicMode: MosaicMode.off,
+            quality: ExpectedResultQuality.excellent,
+          ),
+          tonightStarCount: 1,
+          color: Colors.amber,
+        ),
+      ),
+    );
+
+    final fit = find.byKey(const Key('recommendation-shooting-fit'));
+    final tonight = find.byKey(const Key('recommendation-tonight-rating'));
+    expect(find.descendant(of: fit, matching: find.text('촬영 궁합')), findsOneWidget);
+    expect(find.descendant(of: fit, matching: find.text('★★★★★')), findsOneWidget);
+    expect(
+      find.descendant(of: tonight, matching: find.text('오늘 밤 추천')),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: tonight, matching: find.text('★☆☆☆☆')), findsOneWidget);
+    expect(find.textContaining('%'), findsNothing);
+  });
 }

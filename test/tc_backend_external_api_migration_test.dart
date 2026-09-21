@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:astro_journal/services/api_key_service.dart';
+import 'package:astro_journal/services/base_api_service.dart';
 import 'package:astro_journal/data/models/api_test_result.dart';
 import 'package:astro_journal/data/models/plate_solve_result.dart';
 import 'package:astro_journal/data/models/plate_solve_queue.dart';
@@ -203,6 +204,39 @@ void main() {
     expect(forecast.single.pop, 20);
     expect(forecast.single.rainVolumeMm, 0.5);
   });
+
+  test(
+    'weather preserves numeric zero but rejects missing numeric fields',
+    () async {
+      final zeroService = WeatherService(
+        ApiKeyService(),
+        backendClient: client(
+          (_) async => utf8JsonResponse(
+            '{"items":[{"timestamp":"2026-08-19T00:00:00Z","temperature":0,"humidity":0,"clouds":0,"wind_speed":0,"visibility":0,"precipitation_probability":0,"description":"","icon":""}]}',
+            200,
+          ),
+        ),
+      );
+      final zero = (await zeroService.getForecast(37.5, 127)).single;
+      expect(zero.cloudCoverage, 0);
+      expect(zero.windSpeed, 0);
+
+      final malformedService = WeatherService(
+        ApiKeyService(),
+        backendClient: client(
+          (_) async => utf8JsonResponse(
+            '{"items":[{"timestamp":"2026-08-19T00:00:00Z","temperature":9,"humidity":75,"wind_speed":3,"visibility":9000,"precipitation_probability":0.2,"description":"구름","icon":"02n"}]}',
+            200,
+          ),
+        ),
+      );
+
+      await expectLater(
+        malformedService.getForecast(37.5, 127),
+        throwsA(isA<ApiException>()),
+      );
+    },
+  );
 
   test('weather cache round trip remains the offline fallback contract', () async {
     final service = WeatherService(

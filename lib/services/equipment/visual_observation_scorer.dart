@@ -19,23 +19,42 @@ class VisualObservationScorer {
   }) {
     if (visualEquipment.isEmpty) return const [];
 
-    final hardBlock = _evaluateHardBlock(context, visualEquipment);
+    final usableTelescopes = visualEquipment.where(_hasUsableOptics).toList();
+    if (usableTelescopes.isEmpty) return const [];
+
+    final hardBlock = _evaluateHardBlock(context, usableTelescopes);
     if (hardBlock != null) return [hardBlock];
 
     final results = <VisualEquipmentRecommendation>[];
-    for (final telescope in visualEquipment) {
-      final aperture = telescope.apertureMm;
-      final focalLength = telescope.focalLengthMm;
+    final theoreticalResults = <VisualEquipmentRecommendation>[];
+    for (final telescope in usableTelescopes) {
+      final aperture = telescope.apertureMm!;
+      final focalLength = telescope.focalLengthMm!;
       final fRatio = telescope.fRatio;
-      if (aperture == null ||
-          focalLength == null ||
-          aperture <= 0 ||
-          focalLength <= 0 ||
-          telescope.eyepieces.isEmpty) {
-        continue;
-      }
+      final recommendedFocalLength = _recommendedEyepieceFocalLength(
+        context: context,
+        telescope: telescope,
+      );
+      final referenceEyepiece = Eyepiece(
+        id: 'theoretical-${telescope.id}',
+        equipmentId: telescope.id,
+        name: '',
+        focalLengthMm: recommendedFocalLength,
+        afovDegrees: _referenceAfovDegrees,
+      );
+      theoreticalResults.add(
+        _scoreCombo(
+          context: context,
+          telescope: telescope,
+          eyepiece: referenceEyepiece,
+          apertureMm: aperture,
+          fRatio: fRatio,
+          recommendedEyepieceFocalLengthMm: recommendedFocalLength,
+        ),
+      );
 
       for (final eyepiece in telescope.eyepieces) {
+        if (eyepiece.focalLengthMm <= 0 || eyepiece.afovDegrees <= 0) continue;
         final magnification = focalLength / eyepiece.focalLengthMm;
         final trueFov = eyepiece.afovDegrees / magnification;
         final framing = context.scoringFramingSize;
@@ -56,22 +75,15 @@ class VisualObservationScorer {
             apertureMm: aperture,
             fRatio: fRatio,
             includeEyepiece: true,
+            recommendedEyepieceFocalLengthMm: recommendedFocalLength,
           ),
         );
       }
     }
 
     if (results.isEmpty) {
-      return [
-        VisualEquipmentRecommendation(
-          equipment: visualEquipment.first,
-          score: 10,
-          starCount: 1,
-          reason: '시야가 좁아 전체를 볼 수 없습니다.',
-          isRecommended: false,
-          screenFillPercent: 0,
-        ),
-      ];
+      theoreticalResults.sort((a, b) => b.score.compareTo(a.score));
+      return theoreticalResults;
     }
 
     results.sort((a, b) => b.score.compareTo(a.score));
@@ -110,26 +122,17 @@ class VisualObservationScorer {
 
     if (brightness.index >= SurfaceBrightnessClass.extremeDim.index &&
         maxAperture < VisualObservationWeights.minApertureExtremeDimMm) {
-      return _blocked(
-        visualEquipment.first,
-        reason: '표면 밝기가 매우 낮습니다.',
-      );
+      return _blocked(visualEquipment.first, reason: '표면 밝기가 매우 낮습니다.');
     }
 
     if (brightness.index >= SurfaceBrightnessClass.veryDim.index &&
         maxAperture < VisualObservationWeights.minApertureVeryDimMm) {
-      return _blocked(
-        visualEquipment.first,
-        reason: '현재 장비로는 안시가 어렵습니다.',
-      );
+      return _blocked(visualEquipment.first, reason: '현재 장비로는 안시가 어렵습니다.');
     }
 
     if (suitability.requiresWideField &&
         maxAperture < VisualObservationWeights.minApertureWideFieldMm) {
-      return _blocked(
-        visualEquipment.first,
-        reason: '필터 없이 관측이 어렵습니다.',
-      );
+      return _blocked(visualEquipment.first, reason: '필터 없이 관측이 어렵습니다.');
     }
 
     return null;
@@ -156,6 +159,7 @@ class VisualObservationScorer {
     required double apertureMm,
     required double? fRatio,
     bool includeEyepiece = false,
+    double? recommendedEyepieceFocalLengthMm,
   }) {
     final focalLength = telescope.focalLengthMm!;
     final magnification = focalLength / eyepiece.focalLengthMm;
@@ -178,7 +182,8 @@ class VisualObservationScorer {
     final sizeScore = _sizeFitScore(
       fillRatio,
       objectType,
-      idealRatioOverride: context.suitability.observationBasis ==
+      idealRatioOverride:
+          context.suitability.observationBasis ==
               VisualObservationBasis.centralOpenCluster
           ? 0.12
           : null,
@@ -189,7 +194,8 @@ class VisualObservationScorer {
       brightness: context.visualSurfaceBrightness,
     );
 
-    var total = surfaceScore * VisualObservationWeights.surfaceBrightnessWeight +
+    var total =
+        surfaceScore * VisualObservationWeights.surfaceBrightnessWeight +
         typeScore * VisualObservationWeights.objectTypeWeight +
         magnitudeScore * VisualObservationWeights.magnitudeWeight +
         sizeScore * VisualObservationWeights.sizeFitWeight +
@@ -211,7 +217,8 @@ class VisualObservationScorer {
       total = total.clamp(0, 52);
     }
 
-    final isRecommended = fillRatio <= ScreenFillScoring.idealMaxRatio &&
+    final isRecommended =
+        fillRatio <= ScreenFillScoring.idealMaxRatio &&
         total >= VisualObservationWeights.recommendThreshold;
     final reason = _reason(
       context: context,
@@ -226,14 +233,54 @@ class VisualObservationScorer {
 
     return VisualEquipmentRecommendation(
       equipment: telescope,
-      eyepiece: includeEyepiece || isRecommended ? eyepiece : null,
+      eyepiece: includeEyepiece ? eyepiece : null,
       score: score,
       starCount: ObservationScoreService.recommendationStarCount(score.round()),
       reason: reason,
       isRecommended: isRecommended,
       screenFillPercent: ScreenFillScoring.fillPercent(fillRatio),
       screenFillNote: screenFillNote,
+      recommendedEyepieceFocalLengthMm: recommendedEyepieceFocalLengthMm,
     );
+  }
+
+  /// 이론값은 특정 보유 아이피스에 종속되지 않도록 표준 60° 겉보기 시야를 사용한다.
+  static const double _referenceAfovDegrees = 60;
+
+  bool _hasUsableOptics(Equipment equipment) {
+    final aperture = equipment.apertureMm;
+    final focalLength = equipment.focalLengthMm;
+    return aperture != null &&
+        focalLength != null &&
+        aperture > 0 &&
+        focalLength > 0;
+  }
+
+  double _recommendedEyepieceFocalLength({
+    required VisualTargetContext context,
+    required Equipment telescope,
+  }) {
+    final framing = context.scoringFramingSize;
+    final targetSize = framing.widthDegrees > framing.heightDegrees
+        ? framing.widthDegrees
+        : framing.heightDegrees;
+    final desiredFill =
+        context.suitability.observationBasis ==
+            VisualObservationBasis.centralOpenCluster
+        ? 0.12
+        : (ScreenFillScoring.idealMinRatio + ScreenFillScoring.idealMaxRatio) /
+              2;
+    final desiredTrueFov = targetSize / desiredFill;
+    final desiredMagnification = _referenceAfovDegrees / desiredTrueFov;
+    final aperture = telescope.apertureMm!;
+    // 기존 화면 점유율 목표를 망원경의 일반적인 유효 배율 범위 안에서 맞춘다.
+    final minimumUsefulMagnification = aperture / 7;
+    final maximumUsefulMagnification = aperture * 2;
+    final boundedMagnification = desiredMagnification.clamp(
+      minimumUsefulMagnification,
+      maximumUsefulMagnification,
+    );
+    return telescope.focalLengthMm! / boundedMagnification;
   }
 
   double _sizeFitScore(

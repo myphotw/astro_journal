@@ -75,7 +75,7 @@ void main() {
     );
 
     expect(compactCard, isNot(contains("'추천 \${'★' * recommended.starCount}'")));
-    expect(home, contains("'예상 촬영 결과'"));
+    expect(home, contains("'촬영 궁합'"));
     expect(home, contains('child: IntrinsicHeight('));
     expect(home, contains('crossAxisAlignment: CrossAxisAlignment.stretch'));
   });

@@ -118,7 +118,7 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             _GuidanceValueRow(
-              label: '예상 결과 (기상 미반영)',
+              label: '촬영 궁합',
               value:
                   '${guidance.imagingAssessment!.quality.starLabel} ${guidance.imagingAssessment!.quality.label}',
             ),

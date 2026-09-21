@@ -144,7 +144,7 @@ void main() {
     expect(find.text('OFF'), findsOneWidget);
     expect(find.text('모자이크'), findsOneWidget);
     expect(find.text('ON'), findsOneWidget);
-    expect(find.text('예상 결과 (기상 미반영)'), findsOneWidget);
+    expect(find.text('촬영 궁합'), findsOneWidget);
 
     final section = tester.widget<CatalogExposureGuidanceSection>(
       find.byType(CatalogExposureGuidanceSection),

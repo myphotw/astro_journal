@@ -19,6 +19,7 @@ import 'scoring/moon_score.dart';
 import 'observation_feasibility_policy.dart';
 import 'observation_quality_service.dart';
 import 'scheduler_engine.dart';
+import 'weather_slot_policy.dart';
 
 enum CondensationRisk {
   low('낮음'),
@@ -318,24 +319,13 @@ class ObservationScoreService {
             : resolveForecastAt(time, context.forecasts));
     if (resolved == null) {
       final moon = computeMoonInfo(time);
-      return _qualityService
-              .computeSlotQuality(
-                forecast: WeatherForecastSlot(
-                  time: time,
-                  temperature: context.weather?.temperature ?? 10,
-                  humidity: context.weather?.humidity ?? 50,
-                  windSpeed: context.weather?.windSpeed ?? 0,
-                  cloudCoverage: context.cloudCover,
-                  visibility: context.weather?.visibility ?? 10000,
-                  pop: 0,
-                  description: '',
-                  icon: '',
-                ),
-                moon: moon,
-                feasibility: feasibility,
-              )
-              .oqi ??
-          0;
+      return weightedSiteScore(
+        SlotScoreComponents(
+          moon: siteMoonScore(moon.illumination),
+          lightPollution: siteLightPollutionScore(context),
+          weather: 0,
+        ),
+      );
     }
 
     final moon = computeMoonInfo(time);
@@ -408,19 +398,8 @@ class ObservationScoreService {
     required DateTime evaluationTime,
     ObservationWeather? weather,
   }) {
-    final forecast =
-        weather?.toForecastSlot() ??
-        WeatherForecastSlot(
-          time: evaluationTime,
-          temperature: context.weather?.temperature ?? 10,
-          humidity: context.weather?.humidity ?? 50,
-          windSpeed: context.weather?.windSpeed ?? 0,
-          cloudCoverage: context.cloudCover,
-          visibility: context.weather?.visibility ?? 10000,
-          pop: 0,
-          description: '',
-          icon: '',
-        );
+    if (weather == null) return 0;
+    final forecast = weather.toForecastSlot();
     return _qualityService
             .computeSlotQuality(
               forecast: forecast,
@@ -489,15 +468,7 @@ class ObservationScoreService {
   }
 
   static DateTime _alignToTenMinuteSlot(DateTime time) {
-    const slotMinutes = 10;
-    final remainder = time.minute % slotMinutes;
-    if (remainder == 0 && time.second == 0 && time.millisecond == 0) {
-      return time;
-    }
-    final addMinutes = remainder == 0 ? slotMinutes : slotMinutes - remainder;
-    return time
-        .add(Duration(minutes: addMinutes))
-        .copyWith(second: 0, millisecond: 0, microsecond: 0);
+    return WeatherSlotPolicy.normalizeStart(time);
   }
 
   static int componentStarCount(double score) {
@@ -890,11 +861,20 @@ class ObservationScoreService {
     if (forecasts.isEmpty) return null;
 
     final sorted = [...forecasts]..sort((a, b) => a.time.compareTo(b.time));
-    if (sorted.length == 1) return sorted.first;
+    final edgeTolerance = _forecastEdgeTolerance(sorted);
+    if (sorted.length == 1) {
+      return target.difference(sorted.first.time).abs() <= edgeTolerance
+          ? sorted.first
+          : null;
+    }
 
     if (target.isBefore(sorted.first.time) ||
         target.isAfter(sorted.last.time)) {
-      return findClosestForecast(forecasts, target);
+      final closest = findClosestForecast(sorted, target);
+      return closest != null &&
+              target.difference(closest.time).abs() <= edgeTolerance
+          ? closest
+          : null;
     }
 
     WeatherForecastSlot? before;
@@ -932,6 +912,18 @@ class ObservationScoreService {
       description: closer.description,
       icon: closer.icon,
     );
+  }
+
+  static Duration _forecastEdgeTolerance(List<WeatherForecastSlot> sorted) {
+    if (sorted.length < 2) return const Duration(hours: 3);
+    var cadence = sorted[1].time.difference(sorted[0].time).abs();
+    for (var i = 2; i < sorted.length; i++) {
+      final difference = sorted[i].time.difference(sorted[i - 1].time).abs();
+      if (difference > Duration.zero && difference < cadence) {
+        cadence = difference;
+      }
+    }
+    return cadence > Duration.zero ? cadence : const Duration(hours: 3);
   }
 
   static TonightObservationSlot? buildSlot({

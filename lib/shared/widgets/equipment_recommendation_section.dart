@@ -19,7 +19,9 @@ class EquipmentRecommendationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!recommendation.hasRegisteredEquipment) {
+    if (!recommendation.hasRegisteredEquipment &&
+        !recommendation.showImaging &&
+        !recommendation.showVisual) {
       return _EmptyCard(onManageTap: onManageTap);
     }
 
@@ -39,34 +41,63 @@ class EquipmentRecommendationSection extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            if (recommendation.imaging.isNotEmpty) ...[
+            if (recommendation.showImaging) ...[
               _SectionHeader(icon: '📷', label: isToday ? '오늘 추천' : '촬영'),
               const SizedBox(height: 6),
-              ...recommendation.imaging.map(
-                (item) => _buildImagingRow(context, item),
-              ),
-            ] else ...[
-              const _SectionHeader(icon: '📷', label: '촬영'),
-              const SizedBox(height: 4),
-              const Text(
-                '등록된 촬영 장비가 없습니다',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
+              if (recommendation.imaging.isNotEmpty)
+                ...recommendation.imaging.map(
+                  (item) => _buildImagingRow(context, item),
+                )
+              else
+                Text(
+                  _availabilityMessage(
+                    recommendation.imagingAvailability,
+                    visual: false,
+                  ),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
             ],
-            const SizedBox(height: 12),
-            _SectionHeader(icon: '👁', label: '안시'),
-            const SizedBox(height: 6),
-            if (recommendation.visual.isNotEmpty)
-              _buildVisualSection(recommendation.visual)
-            else
-              const Text(
-                '등록된 안시 장비가 없습니다',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
+            if (recommendation.showImaging && recommendation.showVisual)
+              const SizedBox(height: 12),
+            if (recommendation.showVisual) ...[
+              const _SectionHeader(icon: '👁', label: '안시'),
+              const SizedBox(height: 6),
+              if (recommendation.visual.isNotEmpty)
+                _buildVisualSection(recommendation.visual)
+              else
+                Text(
+                  _availabilityMessage(
+                    recommendation.visualAvailability,
+                    visual: true,
+                  ),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  String _availabilityMessage(
+    EquipmentRecommendationAvailability availability, {
+    required bool visual,
+  }) {
+    return switch (availability) {
+      EquipmentRecommendationAvailability.notRegistered =>
+        visual ? '등록된 안시 장비가 없습니다.' : '등록된 촬영 장비가 없습니다.',
+      EquipmentRecommendationAvailability.insufficientData =>
+        visual ? '등록된 안시 장비의 광학 정보가 부족합니다.' : '등록된 촬영 장비의 촬영 정보가 부족합니다.',
+      EquipmentRecommendationAvailability.noSuitableMatch ||
+      EquipmentRecommendationAvailability.available =>
+        visual ? '이 대상에 적합한 안시 장비를 찾지 못했습니다.' : '이 대상에 적합한 촬영 장비를 찾지 못했습니다.',
+    };
   }
 
   Widget _buildImagingRow(
@@ -79,7 +110,6 @@ class EquipmentRecommendationSection extends StatelessWidget {
       3 => '🥉 ',
       _ => '',
     };
-    final stars = '${'★' * item.starCount}${'☆' * (5 - item.starCount)}';
     final description = item.screenFillNote;
     final statusColor =
         item.framingRecommendation == FramingRecommendation.good ||
@@ -120,14 +150,6 @@ class EquipmentRecommendationSection extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                     ),
-                  ),
-                ),
-                Text(
-                  stars,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    height: 1.3,
                   ),
                 ),
               ],
@@ -181,9 +203,7 @@ class EquipmentRecommendationSection extends StatelessWidget {
 
   Widget _buildVisualSection(List<VisualEquipmentRecommendation> items) {
     final displayItems = isToday
-        ? items
-              .where((item) => item.isFeasibleToday && item.eyepiece != null)
-              .toList()
+        ? items.where((item) => item.isFeasibleToday).toList()
         : items;
 
     if (isToday && displayItems.isEmpty) {
@@ -231,13 +251,40 @@ class EquipmentRecommendationSection extends StatelessWidget {
         blocks.add(
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              '${fallback.equipment.name} · ${fallback.reason}',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                height: 1.4,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fallback.equipment.name,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (fallback.recommendedEyepieceFocalLabel.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '권장 아이피스 ${fallback.recommendedEyepieceFocalLabel}',
+                    key: ValueKey(
+                      'equipment-visual-ideal-eyepiece-${fallback.equipment.id}',
+                    ),
+                    style: const TextStyle(
+                      color: AppColors.messier,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  fallback.reason,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -366,10 +413,12 @@ class _VisualEyepieceTable extends StatelessWidget {
                     ),
                     TableRow(
                       children: [
-                        const _TableLabelCell('평가'),
+                        const _TableLabelCell('화면'),
                         for (final item in items)
                           _TableValueCell(
-                            '${'★' * item.starCount}${'☆' * (5 - item.starCount)}',
+                            item.screenFillPercent > 0
+                                ? '${item.screenFillPercent}%'
+                                : '-',
                             muted: !item.isRecommended,
                             feasibleToday: !isToday || item.isFeasibleToday,
                           ),
@@ -377,12 +426,12 @@ class _VisualEyepieceTable extends StatelessWidget {
                     ),
                     TableRow(
                       children: [
-                        const _TableLabelCell('화면'),
+                        const _TableLabelCell('배율'),
                         for (final item in items)
                           _TableValueCell(
-                            item.screenFillPercent > 0
-                                ? '${item.screenFillPercent}%'
-                                : '-',
+                            item.magnification == null
+                                ? '-'
+                                : '약 ${item.magnification}배',
                             muted: !item.isRecommended,
                             feasibleToday: !isToday || item.isFeasibleToday,
                           ),
@@ -406,6 +455,16 @@ class _VisualEyepieceTable extends StatelessWidget {
             );
           },
         ),
+        if (items.first.recommendedEyepieceFocalLabel.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            '권장 아이피스 ${items.first.recommendedEyepieceFocalLabel}',
+            key: ValueKey(
+              'equipment-visual-ideal-eyepiece-${items.first.equipment.id}',
+            ),
+            style: const TextStyle(color: AppColors.messier, fontSize: 12),
+          ),
+        ],
       ],
     );
   }
@@ -517,19 +576,16 @@ class TodayEquipmentRecommendationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!recommendation.hasRegisteredEquipment) {
-      return EquipmentRecommendationSection(
-        recommendation: ObjectEquipmentRecommendation.empty,
-        onManageTap: onManageTap,
-      );
-    }
-
     final objectRec = ObjectEquipmentRecommendation(
       imaging: recommendation.imaging != null
           ? [recommendation.imaging!]
           : const [],
       visual: recommendation.visual,
-      hasRegisteredEquipment: true,
+      hasRegisteredEquipment: recommendation.hasRegisteredEquipment,
+      showImaging: recommendation.showImaging,
+      showVisual: recommendation.showVisual,
+      imagingAvailability: recommendation.imagingAvailability,
+      visualAvailability: recommendation.visualAvailability,
     );
 
     return EquipmentRecommendationSection(

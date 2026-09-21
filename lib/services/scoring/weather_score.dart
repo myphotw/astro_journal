@@ -6,6 +6,7 @@ class WeatherScore {
 
   double calculate({ObjectObservationWindow? window}) {
     if (window == null) return 0;
+    if (!window.hasWeatherData) return 0;
     return (window.optimalWeatherScore ?? window.bestObservationScore).clamp(
       0.0,
       100.0,

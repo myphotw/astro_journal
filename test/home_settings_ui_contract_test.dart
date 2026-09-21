@@ -52,13 +52,13 @@ void main() {
     expect(home, isNot(contains('카테고리별 진행 현황')));
   });
 
-  test(
-    'recommendation wording describes suitability rather than probability',
-    () {
-      expect(home, contains('촬영 적합도'));
-      expect(home, isNot(contains("'성공률'")));
-    },
-  );
+  test('recommendation wording separates shooting fit and tonight rating', () {
+    expect(home, contains('촬영 궁합'));
+    expect(home, contains('오늘 밤 추천'));
+    expect(home, isNot(contains('촬영 적합도')));
+    expect(home, isNot(contains("'성공률'")));
+    expect(home, isNot(contains('successRate')));
+  });
 
   test('recommendations keep the existing two-column text card structure', () {
     expect(home, contains('for (var i = 0; i < items.length; i += 2)'));

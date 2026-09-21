@@ -17,6 +17,7 @@ import '../recommendation_settings_service.dart';
 import '../scoring/moon_score.dart';
 import '../scoring/light_pollution_score.dart';
 import '../scheduler_engine.dart';
+import '../weather_slot_policy.dart';
 
 enum ObservationWindowExclusion {
   none,
@@ -386,6 +387,7 @@ class ObservationWindowCalculator {
         optimalFeasibleCloudCoverage: optimalWeather?.cloudCover,
         optimalFeasibleWindSpeed: optimalWeather?.windSpeed,
         optimalWeatherScore: optimalWeather?.weatherScore,
+        hasWeatherData: optimalWeather != null,
       ),
       exclusion: ObservationWindowExclusion.none,
       moonSeparation: moonSeparation,
@@ -427,14 +429,7 @@ class ObservationWindowCalculator {
   }
 
   DateTime _alignToSlot(DateTime time) {
-    final remainder = time.minute % SchedulerEngine.slotDuration.inMinutes;
-    return DateTime(
-      time.year,
-      time.month,
-      time.day,
-      time.hour,
-      time.minute - remainder,
-    );
+    return WeatherSlotPolicy.normalizeStart(time);
   }
 
   static const _slotDuration = SchedulerEngine.slotDuration;

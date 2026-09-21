@@ -152,7 +152,7 @@ void main() {
       );
     });
 
-    test('infeasible cloud cover caps expected result at trace', () {
+    test('stable target equipment and site inputs keep the same shooting fit', () {
       final nebula = object(
         id: 'NGC7000-CLOUD',
         type: ObjectType.emissionNebula,
@@ -161,26 +161,25 @@ void main() {
       );
       final profile = profileProvider.profileFor(nebula);
       final fit = fitFor(nebula);
-      final clear = suitabilityService.assess(
+      final first = suitabilityService.assess(
         profile: profile,
         bortle: 4,
         trackingMode: TrackingMode.eq,
         equipmentFit: fit,
         targetAltitude: 60,
-        cloudCover: 0,
       );
-      final overcast = suitabilityService.assess(
+      final second = suitabilityService.assess(
         profile: profile,
         bortle: 4,
         trackingMode: TrackingMode.eq,
         equipmentFit: fit,
         targetAltitude: 60,
-        cloudCover: 95,
       );
 
-      expect(overcast.quality, ExpectedResultQuality.trace);
-      expect(overcast.scoreMultiplier, lessThan(clear.scoreMultiplier));
-      expect(overcast.reason, contains('구름량이 높게 예보'));
+      expect(second.quality, first.quality);
+      expect(second.suitabilityScore, first.suitabilityScore);
+      expect(second.scoreMultiplier, first.scoreMultiplier);
+      expect(second.reason, first.reason);
     });
 
     test('representative galaxy improves at dark site with S30 EQ', () {

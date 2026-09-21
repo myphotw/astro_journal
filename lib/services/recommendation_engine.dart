@@ -227,11 +227,6 @@ class RecommendationEngine {
             altAzPlan.dailyDurationLimitedByFieldRotation,
         dailyFieldRotationSpanDegrees: altAzPlan.fieldRotationSpanDegrees,
         targetAltitude: window.peakAltitude ?? window.currentAltitude,
-        moonIllumination: evalContext.moonIllumination,
-        moonSeparation: windowResult.moonSeparation,
-        cloudCover:
-            (window.optimalFeasibleCloudCoverage ?? evalContext.cloudCover)
-                .toDouble(),
         fieldRotationSpanDegrees: altAzPlan.fieldRotationSpanDegrees,
       );
       if (enforceMeaningfulEquipmentResult &&

@@ -3,6 +3,7 @@ import 'package:astro_journal/core/constants/equipment_kind.dart';
 import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
+import 'package:astro_journal/data/models/equipment_recommendation.dart';
 import 'package:astro_journal/data/models/eyepiece.dart';
 import 'package:astro_journal/data/models/recommendation_result.dart';
 import 'package:astro_journal/features/home/viewmodel/home_view_model.dart';
@@ -82,6 +83,17 @@ void main() {
     );
   }
 
+  Equipment bcto90WithoutEyepieces() {
+    return const Equipment(
+      id: 'bcto-empty',
+      name: 'BCTO90 Empty',
+      kind: EquipmentKind.reflector,
+      purpose: EquipmentPurpose.visual,
+      apertureMm: 90,
+      focalLengthMm: 500,
+    );
+  }
+
   group('EquipmentRecommendationService', () {
     test('ranks imaging equipment by fit and excludes 확대 촬영 추천', () {
       final result = service.recommendForObject(
@@ -90,7 +102,10 @@ void main() {
       );
 
       expect(result.imaging.length, 2);
-      expect(result.imaging.first.score, greaterThanOrEqualTo(result.imaging.last.score));
+      expect(
+        result.imaging.first.score,
+        greaterThanOrEqualTo(result.imaging.last.score),
+      );
       for (final item in result.imaging) {
         expect(item.reason, isNot('확대 촬영 추천'));
       }
@@ -104,8 +119,7 @@ void main() {
 
       expect(
         result.imaging.any(
-          (item) =>
-              item.reason == '프레임 적합' || item.reason == '촬영 가능',
+          (item) => item.reason == '프레임 적합' || item.reason == '촬영 가능',
         ),
         isTrue,
       );
@@ -124,7 +138,107 @@ void main() {
       expect(best.eyepieceFocalLabel, isNotEmpty);
       expect(best.equipment.name, 'BCTO90');
       expect(best.screenFillPercent, greaterThan(0));
+      expect(best.recommendedEyepieceFocalLengthMm, isNotNull);
     });
+
+    test(
+      'filters imaging and visual recommendations by registered purpose',
+      () {
+        final result = service.recommendForObject(
+          object: object(id: 'm13'),
+          equipment: [seestarS30(), bcto90()],
+        );
+
+        expect(result.imaging, isNotEmpty);
+        expect(
+          result.imaging.every((item) => item.equipment.isImaging),
+          isTrue,
+        );
+        expect(result.visual, isNotEmpty);
+        expect(result.visual.every((item) => item.equipment.isVisual), isTrue);
+      },
+    );
+
+    test('hides visual recommendation for an imaging-only target policy', () {
+      final result = service.recommendForObject(
+        object: object(id: 'm17', type: '발광성운'),
+        equipment: [seestarS30(), bcto90()],
+      );
+
+      expect(result.showImaging, isTrue);
+      expect(result.showVisual, isFalse);
+      expect(result.visual, isEmpty);
+    });
+
+    test(
+      'keeps visual telescope and ideal eyepiece when none are registered',
+      () {
+        final result = service.recommendForObject(
+          object: object(id: 'm13'),
+          equipment: [bcto90WithoutEyepieces()],
+        );
+
+        expect(result.visual, hasLength(1));
+        expect(result.visual.single.equipment.name, 'BCTO90 Empty');
+        expect(result.visual.single.eyepiece, isNull);
+        expect(
+          result.visual.single.recommendedEyepieceFocalLengthMm,
+          isNotNull,
+        );
+        expect(
+          result.visualAvailability,
+          EquipmentRecommendationAvailability.available,
+        );
+      },
+    );
+
+    test(
+      'selects the best owned eyepiece separately from the ideal focal length',
+      () {
+        final result = service.recommendForObject(
+          object: object(id: 'm8', type: '발광성운', angularSize: "60' × 60'"),
+          equipment: [bcto90()],
+        );
+
+        final best = result.visual.first;
+        expect(best.eyepiece?.focalLengthMm, 25);
+        expect(best.recommendedEyepieceFocalLengthMm, closeTo(15.6, 0.6));
+        expect(
+          best.recommendedEyepieceFocalLengthMm,
+          isNot(best.eyepiece?.focalLengthMm),
+        );
+      },
+    );
+
+    test(
+      'distinguishes missing imaging equipment from missing FOV metadata',
+      () {
+        final noImaging = service.recommendForObject(
+          object: object(id: 'm13'),
+          equipment: [bcto90()],
+        );
+        final missingFov = service.recommendForObject(
+          object: object(id: 'm13'),
+          equipment: [
+            const Equipment(
+              id: 'camera-no-fov',
+              name: 'Camera without FOV',
+              kind: EquipmentKind.smartTelescope,
+              purpose: EquipmentPurpose.imaging,
+            ),
+          ],
+        );
+
+        expect(
+          noImaging.imagingAvailability,
+          EquipmentRecommendationAvailability.notRegistered,
+        );
+        expect(
+          missingFov.imagingAvailability,
+          EquipmentRecommendationAvailability.insufficientData,
+        );
+      },
+    );
 
     test('includes screen fill percent for imaging equipment', () {
       final result = service.recommendForObject(
@@ -153,11 +267,7 @@ void main() {
 
     test('M31 on S30 Pro fits in one frame with orientation-aware fill', () {
       final result = service.recommendForObject(
-        object: object(
-          id: 'm31',
-          type: '은하',
-          angularSize: "190' × 60'",
-        ),
+        object: object(id: 'm31', type: '은하', angularSize: "190' × 60'"),
         equipment: [seestarS30()],
       );
 
@@ -170,11 +280,7 @@ void main() {
 
     test('excludes narrow eyepiece when target fills over 100% of FOV', () {
       final result = service.recommendForObject(
-        object: object(
-          id: 'm31',
-          type: '은하',
-          angularSize: "190' × 60'",
-        ),
+        object: object(id: 'm31', type: '은하', angularSize: "190' × 60'"),
         equipment: [bcto90()],
       );
 
@@ -189,26 +295,27 @@ void main() {
       );
     });
 
-    test('downrates veil nebula for visual without eyepiece', () {
-      final result = service.recommendForObject(
-        object: object(id: 'ngc6960', type: '초신성잔해'),
-        equipment: [bcto90()],
-      );
+    test(
+      'hides veil nebula visual section under existing suitability policy',
+      () {
+        final result = service.recommendForObject(
+          object: object(id: 'ngc6960', type: '초신성잔해'),
+          equipment: [bcto90()],
+        );
 
-      expect(result.visual, isNotEmpty);
-      expect(result.visual.first.isRecommended, isFalse);
-      expect(result.visual.first.eyepiece, isNull);
-    });
+        expect(result.showVisual, isFalse);
+        expect(result.visual, isEmpty);
+      },
+    );
 
-    test('downrates NGC6334 for visual on 90mm', () {
+    test('hides NGC6334 visual section under existing suitability policy', () {
       final result = service.recommendForObject(
         object: object(id: 'ngc6334', type: '발광성운'),
         equipment: [bcto90()],
       );
 
-      expect(result.visual, isNotEmpty);
-      expect(result.visual.first.isRecommended, isFalse);
-      expect(result.visual.first.eyepiece, isNull);
+      expect(result.showVisual, isFalse);
+      expect(result.visual, isEmpty);
     });
 
     test('recommends M8 visual without no-filter block', () {
@@ -287,6 +394,27 @@ void main() {
       );
 
       expect(today.visual, isEmpty);
+    });
+
+    test('recommendForToday keeps only the best owned visual combination', () {
+      final target = object(id: 'm8', type: '발광성운', angularSize: "60' × 60'");
+      final rec = RecommendationResult(
+        object: target,
+        reasons: const [],
+        season: '여름',
+        score: 85,
+        moonSeparation: 60,
+      );
+
+      final today = service.recommendForToday(
+        object: target,
+        equipment: [bcto90()],
+        recommendation: rec,
+      );
+
+      expect(today.visual, hasLength(1));
+      expect(today.visual.single.eyepiece?.focalLengthMm, 25);
+      expect(today.visual.single.recommendedEyepieceFocalLengthMm, isNotNull);
     });
 
     test('returns empty when no equipment registered', () {

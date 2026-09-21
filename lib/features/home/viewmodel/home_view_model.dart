@@ -1423,7 +1423,7 @@ class HomeViewModel extends ChangeNotifier {
 
     final availableEquipment =
         equipment ?? await _equipmentRepository.getAll(activeOnly: true);
-    if (availableEquipment.isEmpty || _allRecommendedObjects.isEmpty) return;
+    if (_allRecommendedObjects.isEmpty) return;
 
     final sortedEquipment = [...availableEquipment]
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));

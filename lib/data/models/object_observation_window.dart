@@ -26,6 +26,7 @@ class ObjectObservationWindow {
     this.optimalFeasibleCloudCoverage,
     this.optimalFeasibleWindSpeed,
     this.optimalWeatherScore,
+    this.hasWeatherData = true,
   });
 
   final double currentAltitude;
@@ -65,6 +66,9 @@ class ObjectObservationWindow {
   /// composite target observation score used by visibility and ranking.
   final double? optimalWeatherScore;
 
+  /// Whether target-slot weather was resolved from forecast provenance.
+  final bool hasWeatherData;
+
   String get totalObservableLabel {
     final h = totalObservableMinutes ~/ 60;
     final m = totalObservableMinutes % 60;
@@ -103,6 +107,7 @@ class ObjectObservationWindow {
       optimalFeasibleCloudCoverage: optimalFeasibleCloudCoverage,
       optimalFeasibleWindSpeed: optimalFeasibleWindSpeed,
       optimalWeatherScore: optimalWeatherScore,
+      hasWeatherData: hasWeatherData,
     );
   }
 }

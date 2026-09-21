@@ -2447,7 +2447,7 @@ class _RecommendationQualitySummary extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         const Text(
-          '예상 촬영 결과',
+          '촬영 궁합',
           style: TextStyle(
             color: AppColors.textSecondary,
             fontSize: 9,
@@ -2509,6 +2509,84 @@ class _RecommendationStatusChip extends StatelessWidget {
   }
 }
 
+class RecommendationEvaluationSummary extends StatelessWidget {
+  const RecommendationEvaluationSummary({
+    super.key,
+    required this.assessment,
+    required this.tonightStarCount,
+    required this.color,
+  });
+
+  final ImagingSuitabilityAssessment? assessment;
+  final int tonightStarCount;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final tonightStars =
+        '${'★' * tonightStarCount}${'☆' * (5 - tonightStarCount)}';
+    return Wrap(
+      spacing: AppTheme.spacingXl,
+      runSpacing: AppTheme.spacingSm,
+      children: [
+        if (assessment != null)
+          _RecommendationEvaluationValue(
+            key: const Key('recommendation-shooting-fit'),
+            label: '촬영 궁합',
+            stars: assessment!.quality.starLabel,
+            color: AppColors.ic,
+          ),
+        _RecommendationEvaluationValue(
+          key: const Key('recommendation-tonight-rating'),
+          label: '오늘 밤 추천',
+          stars: tonightStars,
+          color: color,
+        ),
+      ],
+    );
+  }
+}
+
+class _RecommendationEvaluationValue extends StatelessWidget {
+  const _RecommendationEvaluationValue({
+    super.key,
+    required this.label,
+    required this.stars,
+    required this.color,
+  });
+
+  final String label;
+  final String stars;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          stars,
+          style: TextStyle(
+            color: color,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── 추천 상세 시트 ───────────────────────────────────────────────────────────
 
 class _TodayEquipmentRecommendationBlock extends StatelessWidget {
@@ -2538,7 +2616,6 @@ class _RecommendDetailSheet extends StatelessWidget {
     final homeVm = context.watch<HomeViewModel>();
     final color = recommended.object.catalog.accentColor;
     final captured = recommended.object.captured;
-    final successRate = recommended.successRate.round();
     final equipmentChips = homeVm.todayEquipmentChipsFor(recommended.object.id);
     final isPlanned = homeVm.isPlanned(recommended.object.id);
     final assessment = recommended.imagingAssessment;
@@ -2607,48 +2684,10 @@ class _RecommendDetailSheet extends StatelessWidget {
               ),
             ],
             const SizedBox(height: AppTheme.spacingSm),
-            Row(
-              children: [
-                Text(
-                  '추천 ${'★' * recommended.starCount}',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withAlpha(40),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        '$successRate%',
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '촬영 적합도',
-                        style: TextStyle(
-                          color: color.withAlpha(180),
-                          fontSize: 9,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            RecommendationEvaluationSummary(
+              assessment: assessment,
+              tonightStarCount: recommended.starCount,
+              color: color,
             ),
             if (!equipmentChips.isEmpty) ...[
               const SizedBox(height: AppTheme.spacingSm),
@@ -2715,7 +2754,7 @@ class _RecommendDetailSheet extends StatelessWidget {
                       ),
                     ),
                     _InfoRow(
-                      label: '예상 결과',
+                      label: '촬영 궁합',
                       value:
                           '${assessment.quality.starLabel} ${assessment.quality.label}',
                     ),
@@ -3102,7 +3141,7 @@ class _RecommendListTile extends StatelessWidget {
                     ),
                   const SizedBox(height: 3),
                   Text(
-                    '추천 ${'★' * recommended.starCount}',
+                    '오늘 밤 추천 ${'★' * recommended.starCount}',
                     style: TextStyle(
                       color: color,
                       fontSize: 10,
@@ -4082,7 +4121,7 @@ class _ManualScheduleCandidateSheetState
                           final optimal = suitability.optimalWindow;
                           final framing = suitability.framingWindow;
                           final detail = <String>[
-                            '추천 ${candidate.recommendation.starCount}★',
+                            '오늘 밤 추천 ${candidate.recommendation.starCount}★',
                             '제안 ${_formatTime(candidate.proposedWindow.start)}~'
                                 '${_formatTime(candidate.proposedWindow.end)} '
                                 '(${candidate.proposedDuration.inMinutes}분)',

@@ -42,31 +42,46 @@ class EquipmentRecommendationService {
     ImagingOrientationContext? orientation,
   }) {
     final active = equipment.where((e) => e.isActive).toList();
-    if (active.isEmpty) {
-      return ObjectEquipmentRecommendation.empty;
-    }
-
     final framing = _framingResolver.resolve(object);
     final profile = _profileProvider.profileFor(object);
+    final visualContext = VisualTargetContext.from(
+      object: object,
+      profile: profile,
+      framingSize: framing,
+    );
+    final showVisual = !visualContext.suitability.forceNotRecommended;
+    final imagingEquipment = active.where((e) => e.isImaging).toList();
+    final visualEquipment = active.where((e) => e.isVisual).toList();
 
     final imaging = _rankImagingEquipment(
-      active.where((e) => e.isImaging).toList(),
+      imagingEquipment,
       framing: framing,
       profile: profile,
       orientation: orientation,
     );
 
-    final visual = _rankVisualEquipment(
-      active.where((e) => e.isVisual).toList(),
-      object: object,
-      framing: framing,
-      profile: profile,
-    );
+    final visual = showVisual
+        ? _rankVisualEquipment(
+            visualEquipment,
+            object: object,
+            framing: framing,
+            profile: profile,
+          )
+        : const <VisualEquipmentRecommendation>[];
 
     return ObjectEquipmentRecommendation(
       imaging: imaging,
       visual: visual,
-      hasRegisteredEquipment: true,
+      hasRegisteredEquipment: active.isNotEmpty,
+      showVisual: showVisual,
+      imagingAvailability: _imagingAvailability(
+        equipment: imagingEquipment,
+        recommendations: imaging,
+      ),
+      visualAvailability: _visualAvailability(
+        equipment: visualEquipment,
+        recommendations: visual,
+      ),
     );
   }
 
@@ -94,7 +109,13 @@ class EquipmentRecommendationService {
       orientation: orientation,
     );
     if (!base.hasRegisteredEquipment) {
-      return TodayEquipmentRecommendation.empty;
+      return TodayEquipmentRecommendation(
+        hasRegisteredEquipment: false,
+        showImaging: base.showImaging,
+        showVisual: base.showVisual,
+        imagingAvailability: base.imagingAvailability,
+        visualAvailability: base.visualAvailability,
+      );
     }
 
     final contextFactor = _todayContextFactor(
@@ -153,50 +174,97 @@ class EquipmentRecommendationService {
             screenFillPercent: visual.screenFillPercent,
             screenFillNote: visual.screenFillNote,
             isFeasibleToday: false,
+            recommendedEyepieceFocalLengthMm:
+                visual.recommendedEyepieceFocalLengthMm,
           ),
         ];
       } else {
-        todayVisual =
-            base.visual
-                .map((visual) {
-                  final todayScore =
-                      (visual.score * contextFactor.visualMultiplier)
-                          .clamp(0, 100)
-                          .toDouble();
-                  final feasible =
-                      contextFactor.visualFeasible && visual.isRecommended;
-                  return VisualEquipmentRecommendation(
-                    equipment: visual.equipment,
-                    eyepiece: feasible ? visual.eyepiece : null,
-                    score: todayScore,
-                    starCount: ObservationScoreService.recommendationStarCount(
-                      todayScore.round(),
-                    ),
-                    reason: feasible
-                        ? _prioritizeEquipmentReason(
-                            equipmentReason: visual.reason,
-                            conditionReason: contextFactor.visualReason,
-                          )
-                        : (contextFactor.visualBlockReason ?? visual.reason),
-                    isRecommended: visual.isRecommended && feasible,
-                    screenFillPercent: visual.screenFillPercent,
-                    screenFillNote: visual.screenFillNote,
-                    isFeasibleToday: feasible,
-                  );
-                })
-                .where(
-                  (visual) => visual.isFeasibleToday && visual.eyepiece != null,
-                )
-                .toList()
-              ..sort((a, b) => b.score.compareTo(a.score));
+        final evaluated = base.visual.map((visual) {
+          final todayScore = (visual.score * contextFactor.visualMultiplier)
+              .clamp(0, 100)
+              .toDouble();
+          final feasible = contextFactor.visualFeasible && visual.isRecommended;
+          return VisualEquipmentRecommendation(
+            equipment: visual.equipment,
+            eyepiece: feasible ? visual.eyepiece : null,
+            score: todayScore,
+            starCount: ObservationScoreService.recommendationStarCount(
+              todayScore.round(),
+            ),
+            reason: feasible
+                ? _prioritizeEquipmentReason(
+                    equipmentReason: visual.reason,
+                    conditionReason: contextFactor.visualReason,
+                  )
+                : (contextFactor.visualBlockReason ?? visual.reason),
+            isRecommended: visual.isRecommended && feasible,
+            screenFillPercent: visual.screenFillPercent,
+            screenFillNote: visual.screenFillNote,
+            isFeasibleToday: feasible,
+            recommendedEyepieceFocalLengthMm:
+                visual.recommendedEyepieceFocalLengthMm,
+          );
+        }).toList()..sort((a, b) => b.score.compareTo(a.score));
+        final feasible = evaluated
+            .where(
+              (visual) =>
+                  visual.isFeasibleToday &&
+                  (visual.eyepiece != null ||
+                      visual.recommendedEyepieceFocalLengthMm != null),
+            )
+            .toList();
+        todayVisual = feasible.isNotEmpty ? [feasible.first] : const [];
       }
     }
 
     return TodayEquipmentRecommendation(
       imaging: bestImaging,
       visual: todayVisual,
-      hasRegisteredEquipment: true,
+      hasRegisteredEquipment: base.hasRegisteredEquipment,
+      showImaging: base.showImaging,
+      showVisual: base.showVisual,
+      imagingAvailability: base.imagingAvailability,
+      visualAvailability: base.visualAvailability,
     );
+  }
+
+  EquipmentRecommendationAvailability _imagingAvailability({
+    required List<Equipment> equipment,
+    required List<ImagingEquipmentRecommendation> recommendations,
+  }) {
+    if (equipment.isEmpty) {
+      return EquipmentRecommendationAvailability.notRegistered;
+    }
+    if (!equipment.any((item) => item.hasFov)) {
+      return EquipmentRecommendationAvailability.insufficientData;
+    }
+    if (recommendations.isEmpty) {
+      return EquipmentRecommendationAvailability.noSuitableMatch;
+    }
+    return EquipmentRecommendationAvailability.available;
+  }
+
+  EquipmentRecommendationAvailability _visualAvailability({
+    required List<Equipment> equipment,
+    required List<VisualEquipmentRecommendation> recommendations,
+  }) {
+    if (equipment.isEmpty) {
+      return EquipmentRecommendationAvailability.notRegistered;
+    }
+    final hasUsableOptics = equipment.any(
+      (item) =>
+          item.apertureMm != null &&
+          item.apertureMm! > 0 &&
+          item.focalLengthMm != null &&
+          item.focalLengthMm! > 0,
+    );
+    if (!hasUsableOptics) {
+      return EquipmentRecommendationAvailability.insufficientData;
+    }
+    if (recommendations.isEmpty) {
+      return EquipmentRecommendationAvailability.noSuitableMatch;
+    }
+    return EquipmentRecommendationAvailability.available;
   }
 
   List<ImagingEquipmentRecommendation> _rankImagingEquipment(
