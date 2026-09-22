@@ -138,9 +138,7 @@ class TargetImagingAvailabilityService {
     final cacheKey =
         '${object.id}:${site.id}:${site.updatedAt.toIso8601String()}:'
         '${date.year}-${date.month}-${date.day}:'
-        '${liveNow == null
-            ? 'date-estimate'
-            : 'live-${liveNow.hour}-${liveNow.minute}'}:'
+        '${liveNow == null ? 'date-estimate' : 'live-${liveNow.hour}-${liveNow.minute}'}:'
         '${_weatherCacheKey(weather, forecasts)}:'
         '${equipment?.id ?? 'no-equipment'}:'
         '$referenceCacheKey';
@@ -167,12 +165,18 @@ class TargetImagingAvailabilityService {
       forecasts: forecasts,
     );
     final context = _siteContext(baseContext, site, session);
+    final hasPhysicalHorizon = context.horizonProfile.hasRestrictions;
     final settings = RecommendationSettings.defaults.copyWith(
       // Explicit detail queries must not be hidden by the user's home filters.
       enabledCatalogs: {object.catalog},
       enabledObjectTypes: {object.resolvedObjectType},
-      minAltitude: site.defaultMinAltitude.round(),
-      maxAltitude: site.defaultMaxAltitude?.round() ?? 90,
+      // Direction-based Horizon data is the canonical physical visibility
+      // source. Legacy site-wide bounds remain a fallback for old sites that
+      // do not have a Horizon profile yet.
+      minAltitude: hasPhysicalHorizon ? 0 : site.defaultMinAltitude.round(),
+      maxAltitude: hasPhysicalHorizon
+          ? 90
+          : site.defaultMaxAltitude?.round() ?? 90,
     );
     final build = await _recommendationEngine.build(
       catalog: [object],
@@ -185,7 +189,9 @@ class TargetImagingAvailabilityService {
       candidateScope: RecommendationCandidateScope.directTarget,
       durationPolicy: ObservationWindowDurationPolicy.informational,
       enforceMeaningfulEquipmentResult: false,
-      equipmentFitResolver: equipmentFit == null ? null : (_, _) => equipmentFit,
+      equipmentFitResolver: equipmentFit == null
+          ? null
+          : (_, _) => equipmentFit,
     );
     // The engine only receives one object; avoiding a second identity policy
     // keeps this adapter aligned with its candidate construction contract.
@@ -210,7 +216,8 @@ class TargetImagingAvailabilityService {
         enforceMeaningfulEquipmentResult: false,
       );
       usableWindow =
-          baseSuitability.recommendedWindow ?? baseSuitability.observationWindow;
+          baseSuitability.recommendedWindow ??
+          baseSuitability.observationWindow;
       final matchService = _multiNightMatchService;
       if (matchService != null && equipment != null) {
         final reference = framingReference;
@@ -291,7 +298,7 @@ class TargetImagingAvailabilityService {
   );
 
   String? _weatherAdvisory(ObservationContext context, WeatherData? weather) {
-    if (weather == null) return null;
+    if (weather == null) return '기상 예보를 확인할 수 없습니다.';
     final representativeCloudCoverage =
         ObservationScoreService.averageNightlyCloudCoverage(
           nightStart: context.observationStart,
@@ -302,7 +309,7 @@ class TargetImagingAvailabilityService {
       results: context.siteSlotFeasibility.values,
       representativeCloudCoverage: representativeCloudCoverage,
     );
-    return advisory ?? '현재 예보상 촬영 조건이 양호합니다.';
+    return advisory ?? '오늘 밤은 대체로 맑아 관측하기 좋은 날씨가 예상됩니다.';
   }
 
   String _weatherCacheKey(
@@ -322,14 +329,7 @@ class TargetImagingAvailabilityService {
         ),
       ),
     );
-    return 'weather-${Object.hash(
-      weather.cloudCoverage,
-      weather.visibility,
-      weather.windSpeed,
-      weather.sunrise.millisecondsSinceEpoch,
-      weather.sunset.millisecondsSinceEpoch,
-      forecastSignature,
-    )}';
+    return 'weather-${Object.hash(weather.cloudCoverage, weather.visibility, weather.windSpeed, weather.sunrise.millisecondsSinceEpoch, weather.sunset.millisecondsSinceEpoch, forecastSignature)}';
   }
 
   Future<(WeatherData, List<WeatherForecastSlot>)?> _loadWeather(

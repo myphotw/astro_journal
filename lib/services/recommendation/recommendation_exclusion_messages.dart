@@ -9,22 +9,22 @@ abstract final class RecommendationExclusionMessages {
   }) {
     final reasons = <String>[];
     if (altitudeExcluded > 0) {
-      reasons.add('고도 조건 불만족 ($altitudeExcluded개)');
+      reasons.add('오늘은 대상의 고도가 촬영 조건을 만족하지 않습니다.');
     }
     if (azimuthExcluded > 0) {
-      reasons.add('방위각 조건 불만족 ($azimuthExcluded개)');
+      reasons.add('오늘은 대상이 관측 가능한 시야 범위를 벗어납니다.');
     }
     if (lightPollutionExcluded > 0) {
-      reasons.add('광해 조건 불만족 ($lightPollutionExcluded개)');
+      reasons.add('현재 광해 환경에서는 추천하기 어려운 대상입니다.');
     }
     if (insufficientDuration > 0) {
-      reasons.add('관측 가능 시간 부족 ($insufficientDuration개)');
+      reasons.add('연속 촬영시간을 충분히 확보하기 어렵습니다.');
     }
     if (limitedDifficultyExcluded > 0) {
-      reasons.add('오늘 조건상 어려운 대상 제외 ($limitedDifficultyExcluded개)');
+      reasons.add('오늘 조건에서 실용적인 결과를 기대하기 어려운 대상입니다.');
     }
     if (noWindow > 0) {
-      reasons.add('오늘 밤 관측 가능한 대상 없음');
+      reasons.add('오늘은 고도·방위·시야 조건을 만족하는 시간대가 없습니다.');
     }
     if (reasons.isEmpty) {
       reasons.add('조건을 만족하는 추천 대상이 없습니다');

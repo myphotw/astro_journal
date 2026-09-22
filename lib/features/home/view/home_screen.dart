@@ -11,7 +11,6 @@ import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/object_imaging_profile.dart';
 import '../../../data/models/object_observation_window.dart';
 import '../../../data/models/observation_score_contribution.dart';
-import '../../../data/models/observation_status.dart';
 import '../../../data/models/recommendation_result.dart';
 import '../../../data/models/scheduler_models.dart';
 import '../../../data/models/shooting_time_window.dart';
@@ -340,8 +339,6 @@ class _HomeBodyState extends State<_HomeBody> {
     PerformanceProbe.event('widget.home_body.build');
     final now = DateTime.now();
     final condition = viewModel.observationCondition;
-    final isUnavailable =
-        condition?.observationStatus == ObservationStatus.unavailable;
     final activeSite = viewModel.activeObservationSiteViewModel.active;
     final activeEquipmentId = activeSite.effectiveEquipmentId;
     String? activeEquipmentName;
@@ -444,32 +441,6 @@ class _HomeBodyState extends State<_HomeBody> {
             ),
           ),
           const SizedBox(height: AppTheme.spacingSm),
-          if (isUnavailable && condition != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingLg,
-              ),
-              child: _ObservationUnavailableNotice(condition: condition),
-            ),
-          if (isUnavailable && condition != null)
-            const SizedBox(height: AppTheme.spacingSm),
-          if (viewModel.observationCondition?.observationStatus ==
-              ObservationStatus.limited)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingLg,
-              ),
-              child: _LimitedRecommendationNotice(
-                message:
-                    viewModel
-                        .observationCondition
-                        ?.limitedRecommendationNotice ??
-                    ObservationStatus.limited.limitedRecommendationNotice,
-              ),
-            ),
-          if (viewModel.observationCondition?.observationStatus ==
-              ObservationStatus.limited)
-            const SizedBox(height: AppTheme.spacingSm),
           if (viewModel.recommendationState !=
               RecommendationComputationState.current)
             Padding(
@@ -789,7 +760,7 @@ class _ObservationIndexCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '오늘의 관측 조건',
+            '기상 참고',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.bold,
@@ -806,7 +777,7 @@ class _ObservationIndexCard extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '현재 관측 환경',
+                  '기상 예보는 참고 정보 · 추천 순위 미반영',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,
@@ -894,7 +865,7 @@ class _ObservationIndexCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    '관측지수',
+                    '참고 지수',
                     style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 9,
@@ -1418,16 +1389,14 @@ class _ObservationDetailSheet extends StatelessWidget {
                       ),
                       if (condition.infeasibleUserMessage != null)
                         _InfoRow(
-                          label: '기상 의견',
+                          label: '기상 참고',
                           value: condition.infeasibleUserMessage!,
                         ),
                     ],
                     Padding(
                       padding: const EdgeInsets.only(top: 4, bottom: 4),
                       child: Text(
-                        condition.isObservationFeasible
-                            ? '※ 오늘 밤 관측 가능 시간대 평균 기준 (OQI)'
-                            : '※ OpenWeather 예보 기준',
+                        '※ 오늘 밤 예보 시간대 평균 참고값',
                         style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 11,
@@ -1924,119 +1893,6 @@ class _QualityRow extends StatelessWidget {
 
 // ── 관측 불가 통합 안내 ───────────────────────────────────────────────────────
 
-class _ObservationUnavailableNotice extends StatelessWidget {
-  const _ObservationUnavailableNotice({required this.condition});
-
-  final ObservationCondition condition;
-
-  @override
-  Widget build(BuildContext context) {
-    final message = condition.statusUserMessage ?? condition.summaryText;
-    final reason = condition.statusPrimaryReason;
-    final isRain = condition.isRainUnavailable;
-    final borderColor = isRain
-        ? const Color(0xFFEF4444).withValues(alpha: 0.35)
-        : AppColors.textSecondary.withValues(alpha: 0.25);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                isRain ? Icons.water_drop_outlined : Icons.cloud_off_outlined,
-                size: 18,
-                color: isRain
-                    ? const Color(0xFFEF4444)
-                    : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (reason != null && !message.contains(reason)) ...[
-            const SizedBox(height: 6),
-            Text(
-              '대표 사유: $reason',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-          const Text(
-            '기상은 변할 수 있어 추천 대상과 촬영 순서는 참고용으로 계속 표시합니다.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LimitedRecommendationNotice extends StatelessWidget {
-  const _LimitedRecommendationNotice({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: AppTheme.spacingSm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(
-          color: AppColors.textSecondary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.info_outline,
-            size: 16,
-            color: AppColors.textSecondary,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── 추천 없음 위젯 ───────────────────────────────────────────────────────────
 
 class _NoRecommendationWidget extends StatelessWidget {
@@ -2045,12 +1901,8 @@ class _NoRecommendationWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = reasons.isNotEmpty && reasons.first.contains('기상 조건')
-        ? reasons.first
-        : '추천 가능한 대상이 없습니다.';
-    final detailReasons = reasons.isNotEmpty && reasons.first.contains('기상 조건')
-        ? reasons.skip(1).toList()
-        : reasons;
+    const title = '추천 가능한 대상이 없습니다.';
+    final detailReasons = reasons;
 
     return Container(
       width: double.infinity,

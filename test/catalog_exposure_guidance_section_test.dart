@@ -91,7 +91,7 @@ void main() {
     final todaySummary = find.byKey(const Key('catalog-today-status'));
     expect(todaySummary, findsOneWidget);
     expect(
-      find.descendant(of: todaySummary, matching: find.text('오늘')),
+      find.descendant(of: todaySummary, matching: find.text('오늘 촬영')),
       findsOneWidget,
     );
     expect(
@@ -99,7 +99,7 @@ void main() {
       findsNothing,
     );
     expect(
-      find.descendant(of: todaySummary, matching: find.text('최소 촬영시간 충족')),
+      find.descendant(of: todaySummary, matching: find.text('가능')),
       findsOneWidget,
     );
     final availableWindowSummary = find.byKey(
@@ -109,7 +109,7 @@ void main() {
     expect(
       find.descendant(
         of: availableWindowSummary,
-        matching: find.text('천문학적 관측 가능'),
+        matching: find.text('관측 가능 시간 (고도·시야 기준)'),
       ),
       findsOneWidget,
     );

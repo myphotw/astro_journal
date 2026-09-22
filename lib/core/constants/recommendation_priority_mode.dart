@@ -1,12 +1,15 @@
-/// Admin-configurable recommendation list sort strategy.
+/// Legacy persisted recommendation sort values.
+///
+/// Capture history no longer changes recommendation ordering. These values
+/// remain readable so existing preferences do not break deserialization.
 enum RecommendationPriorityMode {
-  /// Uncaptured targets always rank above captured ones.
+  /// Legacy uncaptured-first preference.
   uncapturedFirst('uncaptured_first', '미촬영 우선'),
 
   /// Highest recommendation score first.
   scoreFirst('score_first', '점수 우선'),
 
-  /// Score plus a bonus for uncaptured targets.
+  /// Legacy mixed preference.
   mixed('mixed', '혼합');
 
   const RecommendationPriorityMode(this.storageValue, this.label);
@@ -17,7 +20,7 @@ enum RecommendationPriorityMode {
   static RecommendationPriorityMode fromStorageValue(String? value) {
     return RecommendationPriorityMode.values.firstWhere(
       (mode) => mode.storageValue == value,
-      orElse: () => RecommendationPriorityMode.uncapturedFirst,
+      orElse: () => RecommendationPriorityMode.scoreFirst,
     );
   }
 }

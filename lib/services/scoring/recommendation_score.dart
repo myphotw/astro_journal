@@ -9,7 +9,6 @@ import 'mission_score.dart';
 import 'moon_score.dart';
 import 'season_score.dart';
 import 'visibility_score.dart';
-import 'weather_score.dart';
 
 /// Aggregates modular score components into a final recommendation score.
 class RecommendationScore {
@@ -19,7 +18,6 @@ class RecommendationScore {
     this.moonScore = const MoonScore(),
     this.lightPollutionScore = const LightPollutionScore(),
     this.seasonScore = const SeasonScore(),
-    this.weatherScore = const WeatherScore(),
   });
 
   final MissionScore missionScore;
@@ -27,7 +25,6 @@ class RecommendationScore {
   final MoonScore moonScore;
   final LightPollutionScore lightPollutionScore;
   final SeasonScore seasonScore;
-  final WeatherScore weatherScore;
 
   double calculate({
     required CatalogObject object,
@@ -58,20 +55,25 @@ class RecommendationScore {
       object: object,
       context: scoringContext,
     );
-    final weather = weatherScore.calculate(window: window);
-
-    final weighted = mission * RecommendationScoreWeights.mission +
-        visibility * RecommendationScoreWeights.visibility +
-        moon * RecommendationScoreWeights.moon +
-        lightPollution * RecommendationScoreWeights.lightPollution +
-        season * RecommendationScoreWeights.season +
-        weather * RecommendationScoreWeights.weather;
+    const astronomicalWeight =
+        RecommendationScoreWeights.mission +
+        RecommendationScoreWeights.visibility +
+        RecommendationScoreWeights.moon +
+        RecommendationScoreWeights.lightPollution +
+        RecommendationScoreWeights.season;
+    final weighted =
+        (mission * RecommendationScoreWeights.mission +
+            visibility * RecommendationScoreWeights.visibility +
+            moon * RecommendationScoreWeights.moon +
+            lightPollution * RecommendationScoreWeights.lightPollution +
+            season * RecommendationScoreWeights.season) /
+        astronomicalWeight;
 
     return weighted.clamp(0.0, 100.0);
   }
 
-  /// Condition-only score derived from the existing visibility, Moon, and
-  /// weather components. Horizon, obstruction, twilight, and continuous
+  /// Condition-only score derived from the existing visibility and Moon
+  /// components. Horizon, obstruction, twilight, and continuous
   /// visibility remain prerequisite gates represented by [window].
   ///
   /// This score is descriptive in the current release and does not add a new
@@ -91,14 +93,11 @@ class RecommendationScore {
       positionService: positionService,
       evaluationTime: evaluationTime,
     );
-    final weather = weatherScore.calculate(window: window);
-    const totalWeight = RecommendationScoreWeights.visibility +
-        RecommendationScoreWeights.moon +
-        RecommendationScoreWeights.weather;
+    const totalWeight =
+        RecommendationScoreWeights.visibility + RecommendationScoreWeights.moon;
     final weighted =
         visibility * RecommendationScoreWeights.visibility +
-        moon * RecommendationScoreWeights.moon +
-        weather * RecommendationScoreWeights.weather;
+        moon * RecommendationScoreWeights.moon;
     return (weighted / totalWeight).clamp(0.0, 100.0);
   }
 }

@@ -225,7 +225,7 @@ void main() {
       ObservationFeasibilityPolicy.buildWeatherAdvisory(
         results: const [result],
       ),
-      '구름량이 높게 예보되었습니다. 실제 하늘 상태를 확인해 주세요.',
+      '오늘은 구름이 많아 관측을 추천드리지 않습니다. 실제 하늘 상태를 확인해 주세요.',
     );
   });
 }

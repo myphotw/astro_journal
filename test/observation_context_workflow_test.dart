@@ -46,6 +46,7 @@ import 'package:astro_journal/services/scheduler_engine.dart';
 import 'package:astro_journal/services/tonight_shooting_plan_service.dart';
 import 'package:astro_journal/services/weather_cache_service.dart';
 import 'package:astro_journal/services/weather_service.dart';
+import 'package:astro_journal/services/weather_slot_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _CatalogRepository implements CatalogRepository {
@@ -305,13 +306,12 @@ class _RecommendationEngine extends RecommendationEngine {
     this.scheduler,
     CelestialPositionService positions, {
     this.exposeRecommendations = false,
-  })
-    : super(
-        positions,
-        ExposurePolicy(),
-        const ObjectImagingProfileProvider(),
-        scheduler,
-      );
+  }) : super(
+         positions,
+         ExposurePolicy(),
+         const ObjectImagingProfileProvider(),
+         scheduler,
+       );
 
   final _Scheduler scheduler;
   final bool exposeRecommendations;
@@ -330,7 +330,6 @@ class _RecommendationEngine extends RecommendationEngine {
     required ObservationContext context,
     required TonightObservationSession session,
     int limit = 20,
-    double windSpeed = 0,
     DateTime? referenceTime,
     TrackingMode trackingMode = TrackingMode.altAz,
     RecommendationCandidateScope candidateScope =
@@ -384,6 +383,14 @@ class _RecommendationEngine extends RecommendationEngine {
       observationEndTime: session.end,
       totalObservableMinutes: session.end.difference(session.start).inMinutes,
       remainingVisibleMinutes: session.end.difference(session.start).inMinutes,
+      geometricSlotStarts: [
+        for (
+          var slot = WeatherSlotPolicy.normalizeStart(session.start);
+          slot.isBefore(session.end);
+          slot = slot.add(SchedulerEngine.slotDuration)
+        )
+          slot,
+      ],
     );
     final target = ScoredObservationTarget(
       object: object,
@@ -512,30 +519,31 @@ void main() {
     );
   }
 
-  test('stale automatic plan is replaced by current schedulable targets', () async {
-    final workflow = await loadPlanWorkflow(
-      const TonightShootingPlanSnapshot(
-        orderedObjectIds: ['stale-id'],
-      ),
-    );
-    addTearDown(workflow.home.dispose);
+  test(
+    'stale automatic plan is replaced by current schedulable targets',
+    () async {
+      final workflow = await loadPlanWorkflow(
+        const TonightShootingPlanSnapshot(orderedObjectIds: ['stale-id']),
+      );
+      addTearDown(workflow.home.dispose);
 
-    final currentId = workflow.home.recommendedObjects.single.object.id;
-    expect(workflow.home.plannedObjectIds, {currentId});
-    expect(workflow.home.lastScheduleCandidateIds, [currentId]);
-    expect(workflow.home.scheduleItems, hasLength(1));
-    expect(workflow.home.scheduleItems.single.target.object.id, currentId);
-    expect(workflow.home.scheduleEmptyMessage, isNull);
-    expect(workflow.recommendation.candidateScopes, isNotEmpty);
-    expect(
-      workflow.recommendation.candidateScopes,
-      everyElement(RecommendationCandidateScope.representative),
-    );
-    expect(workflow.plan.savedOrders, [
-      [currentId],
-    ]);
-    expect(workflow.plan.savedUserEdited, [false]);
-  });
+      final currentId = workflow.home.recommendedObjects.single.object.id;
+      expect(workflow.home.plannedObjectIds, {currentId});
+      expect(workflow.home.lastScheduleCandidateIds, [currentId]);
+      expect(workflow.home.scheduleItems, hasLength(1));
+      expect(workflow.home.scheduleItems.single.target.object.id, currentId);
+      expect(workflow.home.scheduleEmptyMessage, isNull);
+      expect(workflow.recommendation.candidateScopes, isNotEmpty);
+      expect(
+        workflow.recommendation.candidateScopes,
+        everyElement(RecommendationCandidateScope.representative),
+      );
+      expect(workflow.plan.savedOrders, [
+        [currentId],
+      ]);
+      expect(workflow.plan.savedUserEdited, [false]);
+    },
+  );
 
   test('user-edited plan is not overwritten by automatic refresh', () async {
     final workflow = await loadPlanWorkflow(
@@ -550,11 +558,45 @@ void main() {
     expect(workflow.home.plannedObjectIds, {'user-selected-id'});
     expect(workflow.home.userEditedTonightPlan, isTrue);
     expect(workflow.home.scheduleItems, isEmpty);
-    expect(
-      workflow.home.scheduleEmptyMessage,
-      '현재 조건에서 촬영 가능한 계획 대상이 없습니다',
-    );
+    expect(workflow.home.scheduleEmptyMessage, '현재 조건에서 촬영 가능한 계획 대상이 없습니다');
     expect(workflow.plan.savedOrders, isEmpty);
+  });
+
+  test('manual time override stays inside geometric Horizon slots', () async {
+    final workflow = await loadPlanWorkflow(
+      const TonightShootingPlanSnapshot(orderedObjectIds: []),
+    );
+    addTearDown(workflow.home.dispose);
+
+    final objectId = workflow.home.recommendedObjects.single.object.id;
+    final visibleStart = workflow
+        .home
+        .allRecommendedObjects
+        .single
+        .observationWindow!
+        .geometricSlotStarts
+        .first;
+    final visibleEnd = visibleStart.add(const Duration(minutes: 20));
+    await workflow.home.addManualSchedule(
+      objectId: objectId,
+      start: visibleStart,
+      end: visibleEnd,
+    );
+
+    expect(workflow.home.planEntryFor(objectId)?.startTime, visibleStart);
+    expect(workflow.home.scheduleItems.single.startTime, visibleStart);
+
+    final outsideStart = workflow.home.lastSessionContext!.observationEnd.add(
+      const Duration(minutes: 10),
+    );
+    await workflow.home.updateScheduleTime(
+      objectId: objectId,
+      start: outsideStart,
+      end: outsideStart.add(const Duration(minutes: 20)),
+    );
+
+    expect(workflow.home.planEntryFor(objectId)?.startTime, visibleStart);
+    expect(workflow.home.scheduleItems.single.startTime, visibleStart);
   });
 
   test(

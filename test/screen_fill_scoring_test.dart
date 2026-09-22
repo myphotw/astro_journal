@@ -11,8 +11,14 @@ void main() {
     });
 
     test('penalizes too small and too large fill', () {
-      expect(ScreenFillScoring.score(0.20), lessThan(ScreenFillScoring.score(0.70)));
-      expect(ScreenFillScoring.score(3.2), lessThan(ScreenFillScoring.score(0.80)));
+      expect(
+        ScreenFillScoring.score(0.20),
+        lessThan(ScreenFillScoring.score(0.70)),
+      );
+      expect(
+        ScreenFillScoring.score(3.2),
+        lessThan(ScreenFillScoring.score(0.80)),
+      );
     });
 
     test('formats fill percent label', () {
@@ -57,14 +63,16 @@ void main() {
 
     test('returns fill notes for imaging and visual', () {
       expect(
-        ScreenFillScoring.imagingFillNote(
-          FramingRecommendation.mosaicRequired,
-        ),
+        ScreenFillScoring.imagingFillNote(FramingRecommendation.mosaicRequired),
         '모자이크 권장',
       );
+      expect(ScreenFillScoring.visualFillNote(3.2), '전체 모습 확인 어려움');
+    });
+
+    test('good framing uses equipment-fit wording', () {
       expect(
-        ScreenFillScoring.visualFillNote(3.2),
-        '전체 모습 확인 어려움',
+        ScreenFillScoring.reasonFromRecommendation(FramingRecommendation.good),
+        '화각에 여유 있게 들어옴',
       );
     });
   });

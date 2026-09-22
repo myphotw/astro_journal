@@ -1,5 +1,4 @@
 import '../core/services/performance_probe.dart';
-import '../data/models/observation_status.dart';
 import '../data/models/scheduler_models.dart';
 import '../data/models/scored_observation_target.dart';
 import '../data/models/tonight_observation_session.dart';
@@ -13,9 +12,7 @@ class SchedulerEngine {
           priorityCalculator ?? const SchedulerPriorityCalculator();
 
   static const slotDuration = Duration(minutes: 10);
-  static const assignmentEmptyMessage =
-      '최소 촬영시간을 만족하는 연속 촬영 구간을 배정할 수 없습니다.';
-  static const weatherLimitedMessage = '기상 예보상 자동 촬영 추천이 제한됩니다.';
+  static const assignmentEmptyMessage = '최소 촬영시간을 만족하는 연속 촬영 구간을 배정할 수 없습니다.';
 
   final SchedulerPriorityCalculator _priorityCalculator;
 
@@ -43,7 +40,6 @@ class SchedulerEngine {
       );
 
   ScheduleResult _buildSchedule(SchedulerInput input) {
-    // Weather affects target scores, but not the astronomical slot grid.
     final slots = PerformanceProbe.measure(
       'scheduler.visible_slots',
       () => _generateFeasibleSlots(input),
@@ -56,16 +52,6 @@ class SchedulerEngine {
     );
     final hasTargets = input.targets.isNotEmpty;
     final isEmptyDueToFeasibility = hasTargets && slots.isEmpty;
-
-    if (!input.context.observationStatus.allowsScheduling) {
-      return ScheduleResult(
-        slots: slots,
-        targets: prioritizedTargets,
-        items: const [],
-        isEmptyDueToFeasibility: hasTargets,
-        emptyMessage: weatherLimitedMessage,
-      );
-    }
 
     if (isEmptyDueToFeasibility) {
       return ScheduleResult(
@@ -104,9 +90,9 @@ class SchedulerEngine {
   }
 
   List<ScheduleSlot> _generateFeasibleSlots(SchedulerInput input) {
-    return generateSlots(input.session)
-        .where((slot) => !slot.start.isBefore(input.referenceTime))
-        .toList();
+    return generateSlots(
+      input.session,
+    ).where((slot) => !slot.start.isBefore(input.referenceTime)).toList();
   }
 
   List<ScoredObservationTarget> _applySchedulerPriorities(

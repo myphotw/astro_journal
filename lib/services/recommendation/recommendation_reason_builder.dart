@@ -15,19 +15,8 @@ abstract final class RecommendationReasonBuilder {
     required double moonIllumination,
     required String season,
     required int month,
-    int cloudCoverage = 0,
-    double windSpeed = 0,
   }) {
     final reasons = <RecommendationReason>[];
-
-    if (!object.captured) {
-      reasons.add(
-        const RecommendationReason(
-          type: RecommendationReasonType.uncaptured,
-          label: '✓ 미촬영 대상',
-        ),
-      );
-    }
 
     if (window.isCurrentlyVisible) {
       reasons.add(
@@ -55,27 +44,6 @@ abstract final class RecommendationReasonBuilder {
       ),
     );
 
-    if (cloudCoverage >= 0) {
-      reasons.add(
-        RecommendationReason(
-          type: RecommendationReasonType.cloud,
-          label: '✓ 구름 ${cloudCoverage.round()}%',
-        ),
-      );
-    }
-
-    if (windSpeed >= 0) {
-      final windLabel = windSpeed == windSpeed.roundToDouble()
-          ? '${windSpeed.round()}'
-          : windSpeed.toStringAsFixed(1);
-      reasons.add(
-        RecommendationReason(
-          type: RecommendationReasonType.wind,
-          label: '✓ 풍속 ${windLabel}m/s',
-        ),
-      );
-    }
-
     if (_seasonScore(month, object.ra) >= 20) {
       reasons.add(
         RecommendationReason(
@@ -91,13 +59,6 @@ abstract final class RecommendationReasonBuilder {
         ),
       );
     }
-
-    reasons.add(
-      const RecommendationReason(
-        type: RecommendationReasonType.settings,
-        label: '✓ 관리자 설정 조건 만족',
-      ),
-    );
 
     if (window.totalObservableMinutes >= 60) {
       reasons.add(

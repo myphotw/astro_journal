@@ -111,7 +111,7 @@ void main() {
       }
     });
 
-    test('uses 프레임 적합 or 촬영 가능 for small targets', () {
+    test('uses framing-specific wording for small targets', () {
       final result = service.recommendForObject(
         object: object(id: 'm57', type: '행성상성운'),
         equipment: [seestarS30(), seestarS50()],
@@ -119,7 +119,7 @@ void main() {
 
       expect(
         result.imaging.any(
-          (item) => item.reason == '프레임 적합' || item.reason == '촬영 가능',
+          (item) => item.reason == '프레임 적합' || item.reason == '화각에 여유 있게 들어옴',
         ),
         isTrue,
       );
@@ -364,7 +364,7 @@ void main() {
       expect(today.imaging!.reason, isNot('현재 조건 최적'));
     });
 
-    test('recommendForToday applies condition weighting', () {
+    test('recommendForToday does not block visual equipment for weather', () {
       final rec = RecommendationResult(
         object: object(id: 'm42', type: '발광성운'),
         reasons: const [],
@@ -393,7 +393,7 @@ void main() {
         condition: condition,
       );
 
-      expect(today.visual, isEmpty);
+      expect(today.visual, isNotEmpty);
     });
 
     test('recommendForToday keeps only the best owned visual combination', () {

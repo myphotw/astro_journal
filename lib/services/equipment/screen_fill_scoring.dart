@@ -152,7 +152,7 @@ abstract final class ScreenFillScoring {
       FramingRecommendation.mosaicRequired => '모자이크 권장',
       FramingRecommendation.tight => '프레임 꽉 참',
       FramingRecommendation.optimal => '프레임 적합',
-      FramingRecommendation.good => '촬영 가능',
+      FramingRecommendation.good => '화각에 여유 있게 들어옴',
     };
   }
 }

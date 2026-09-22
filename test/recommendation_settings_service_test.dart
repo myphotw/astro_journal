@@ -1,4 +1,5 @@
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/core/constants/recommendation_priority_mode.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,4 +46,14 @@ void main() {
       expect(settings.azimuthEnd, 359);
     },
   );
+
+  test('legacy capture-history priority preference is ignored', () async {
+    SharedPreferences.setMockInitialValues({
+      'rec_priority_mode_v1': 'uncaptured_first',
+    });
+
+    final settings = await RecommendationSettingsService().load();
+
+    expect(settings.priorityMode, RecommendationPriorityMode.scoreFirst);
+  });
 }

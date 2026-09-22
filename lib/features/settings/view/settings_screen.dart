@@ -199,7 +199,7 @@ class _RecommendationSection extends StatelessWidget {
           style: TextStyle(color: AppColors.textPrimary),
         ),
         subtitle: const Text(
-          '카탈로그 · 추천 우선순위',
+          '카탈로그 · 천체 종류',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
         trailing: const Icon(

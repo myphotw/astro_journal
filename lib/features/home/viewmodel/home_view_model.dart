@@ -176,22 +176,9 @@ class ObservationCondition {
 
   String get commentText {
     if (observationStatus == ObservationStatus.unavailable) {
-      final reason = statusPrimaryReason ?? observationStatus.headline;
-      return '☁ $reason';
+      return '☁ ${statusUserMessage ?? observationStatus.headline}';
     }
-    if (observationStatus == ObservationStatus.limited) {
-      return '☁ ${observationStatus.limitedRecommendationNotice}';
-    }
-    final moonIllum = moon.illumination;
-    if (score >= 80) {
-      if (moonIllum < 0.2) return '🌌 오늘은 딥스카이 촬영 최적의 조건입니다.';
-      return '🌟 ${observationStatus.headline}';
-    }
-    if (score >= 60) {
-      if (moonIllum < 0.3) return '🌙 달빛 영향이 적어 성운 촬영을 추천합니다.';
-      return '⭐ ${observationStatus.headline}';
-    }
-    return '🌟 ${observationStatus.headline}';
+    return '☁ ${observationStatus.headline}';
   }
 
   bool get isRainUnavailable =>
@@ -497,7 +484,13 @@ class HomeViewModel extends ChangeNotifier {
     required DateTime start,
     required DateTime end,
   }) async {
-    if (!end.isAfter(start) || !_resultsById.containsKey(objectId)) return;
+    final target = _scoredTargetFor(objectId);
+    if (!end.isAfter(start) ||
+        !_resultsById.containsKey(objectId) ||
+        target == null ||
+        !_isManualWindowGeometricallyVisible(target, start, end)) {
+      return;
+    }
     if (!_plannedObjectOrder.contains(objectId)) {
       _plannedObjectOrder = [..._plannedObjectOrder, objectId];
     }
@@ -520,7 +513,13 @@ class HomeViewModel extends ChangeNotifier {
     required DateTime start,
     required DateTime end,
   }) async {
-    if (!end.isAfter(start) || !_plannedObjectOrder.contains(objectId)) return;
+    final target = _scoredTargetFor(objectId);
+    if (!end.isAfter(start) ||
+        !_plannedObjectOrder.contains(objectId) ||
+        target == null ||
+        !_isManualWindowGeometricallyVisible(target, start, end)) {
+      return;
+    }
     final current =
         _planEntriesById[objectId] ??
         TonightShootingPlanEntry(objectId: objectId);
@@ -783,8 +782,6 @@ class HomeViewModel extends ChangeNotifier {
   Future<bool> _applyRecommendations({
     required List<CatalogObject> allObjects,
     required DateTime now,
-    int cloudCoverage = 0,
-    double windSpeed = 0,
     double? moonIllumination,
     int mainLimit = 4,
     int allLimit = 20,
@@ -851,7 +848,6 @@ class HomeViewModel extends ChangeNotifier {
         context: sessionContext,
         session: session,
         limit: allLimit,
-        windSpeed: windSpeed,
         referenceTime: now,
         trackingMode: sessionContext.trackingMode,
         candidateScope: RecommendationCandidateScope.representative,
@@ -1080,10 +1076,6 @@ class HomeViewModel extends ChangeNotifier {
       return ids;
     }
 
-    if (_lastSessionContext?.observationStatus.allowsScheduling == false) {
-      return const [];
-    }
-
     return _recommendedObjects
         .map((result) => result.object.id)
         .where(canAddToShootingPlan)
@@ -1125,9 +1117,7 @@ class HomeViewModel extends ChangeNotifier {
 
       _scheduleItems = List<ScheduleItem>.from(_recommendedScheduleItems);
       _scheduleEmptyMessage = _scheduleItems.isEmpty
-          ? (_lastSessionContext?.observationStatus.allowsScheduling == false
-                ? SchedulerEngine.weatherLimitedMessage
-                : '오늘 밤 촬영 순서를 추천할 대상이 없습니다')
+          ? '오늘 밤 촬영 순서를 추천할 대상이 없습니다'
           : null;
       return;
     }
@@ -1177,7 +1167,12 @@ class HomeViewModel extends ChangeNotifier {
       if (entry != null &&
           entry.hasTimeOverride &&
           entry.hasValidTime &&
-          recommendation != null) {
+          recommendation != null &&
+          _isManualWindowGeometricallyVisible(
+            target,
+            entry.startTime!,
+            entry.endTime!,
+          )) {
         final fixed = _manualScheduleItem(
           target: target,
           recommendation: recommendation,
@@ -1218,6 +1213,37 @@ class HomeViewModel extends ChangeNotifier {
     _scheduleEmptyMessage = _scheduleItems.isEmpty
         ? (scheduleResult.emptyMessage ?? '촬영 계획 대상의 촬영 순서를 계산할 수 없습니다')
         : null;
+  }
+
+  bool _isManualWindowGeometricallyVisible(
+    ScoredObservationTarget target,
+    DateTime start,
+    DateTime end,
+  ) {
+    if (!end.isAfter(start)) return false;
+
+    final visibleSlots = target.window.geometricSlotStarts.toSet();
+    if (visibleSlots.isEmpty) return false;
+
+    final slotMinutes = SchedulerEngine.slotDuration.inMinutes;
+    var cursor = start.copyWith(
+      minute: start.minute - (start.minute % slotMinutes),
+      second: 0,
+      millisecond: 0,
+      microsecond: 0,
+    );
+    while (cursor.isBefore(end)) {
+      if (!visibleSlots.contains(cursor)) return false;
+      cursor = cursor.add(SchedulerEngine.slotDuration);
+    }
+    return true;
+  }
+
+  ScoredObservationTarget? _scoredTargetFor(String objectId) {
+    for (final target in _scoredTargets) {
+      if (target.object.id == objectId) return target;
+    }
+    return null;
   }
 
   ScheduleItem _manualScheduleItem({
@@ -1270,7 +1296,8 @@ class HomeViewModel extends ChangeNotifier {
     final repository = _multiNightFramingRepository;
     final matchService = _multiNightFramingMatchService;
     final activeSite = _activeObservationSiteViewModel.active;
-    final site = activeSite.site ??
+    final site =
+        activeSite.site ??
         ObservationSite(
           id: 'current-location',
           name: activeSite.displayName,
@@ -1701,8 +1728,6 @@ class HomeViewModel extends ChangeNotifier {
         final applied = await _applyRecommendations(
           allObjects: _cachedAllObjects,
           now: DateTime.now(),
-          cloudCoverage: _observationCondition?.cloudCover ?? 0,
-          windSpeed: _observationCondition?.windSpeed ?? 0,
           moonIllumination: _observationCondition?.moon.illumination,
           expectedRevision: revision,
         );
@@ -1725,8 +1750,6 @@ class HomeViewModel extends ChangeNotifier {
       final applied = await _applyRecommendations(
         allObjects: _cachedAllObjects,
         now: DateTime.now(),
-        cloudCoverage: _observationCondition?.cloudCover ?? 0,
-        windSpeed: _observationCondition?.windSpeed ?? 0,
         moonIllumination: _observationCondition?.moon.illumination,
       );
       if (applied) _markRecommendationCurrent();
@@ -1963,8 +1986,6 @@ class HomeViewModel extends ChangeNotifier {
         allObjects: _cachedAllObjects,
         now: now,
         moonIllumination: summary?.averageMoonIllumination ?? moon.illumination,
-        cloudCoverage: summary?.averageCloudCoverage.round() ?? 0,
-        windSpeed: summary?.averageWindSpeed ?? 0,
         expectedRevision: _contextInvalidator?.revision,
       );
     }

@@ -168,14 +168,14 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
     final items = <Widget>[
       _SummaryValue(
         key: const Key('catalog-today-status'),
-        label: '오늘',
+        label: '오늘 촬영',
         value: value.tonightStatusLabel,
         valueColor: statusColor,
       ),
       if (value.window != null) ...[
         _SummaryValue(
           key: const Key('catalog-available-window'),
-          label: '천문학적 관측 가능',
+          label: '관측 가능 시간 (고도·시야 기준)',
           value: _timeRange(
             value.window!.recommendStartTime,
             value.window!.observationEndTime,
@@ -185,7 +185,7 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
         if (value.usableWindow != null)
           _SummaryValue(
             key: const Key('catalog-usable-window'),
-            label: '실제 촬영 가능',
+            label: '권장 촬영 구간',
             value:
                 '${_timeRange(value.usableWindow!.start, value.usableWindow!.end)} · ${value.usableMinutes ?? value.usableWindow!.duration.inMinutes}분',
             valueColor: AppColors.messier,
@@ -200,8 +200,14 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
           valueColor: AppColors.messier,
         ),
       ],
-      if (!value.isAvailableTonight && value.primaryReason != null)
-        _SummaryValue(label: '사유', value: value.primaryReason!),
+      if (value.statusReason != null)
+        _SummaryValue(label: '사유', value: value.statusReason!),
+      if (value.displayWeatherAdvisory != null)
+        _SummaryValue(
+          key: const Key('catalog-weather-advisory'),
+          label: '기상 참고',
+          value: value.displayWeatherAdvisory!,
+        ),
       if (guidance.currentRecommendedMinutes != null)
         _SummaryValue(
           key: const Key('catalog-recommended-duration'),
@@ -235,9 +241,7 @@ class CatalogExposureGuidanceSection extends StatelessWidget {
   String get _siteLabel {
     final value = site;
     if (value == null) return '현재 위치';
-    return value.bortle == null
-        ? '현재 위치'
-        : '현재 위치 · Bortle ${value.bortle}';
+    return value.bortle == null ? '현재 위치' : '현재 위치 · Bortle ${value.bortle}';
   }
 
   String _timeRange(DateTime? start, DateTime? end) {

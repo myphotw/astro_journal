@@ -1,5 +1,4 @@
 import '../../core/constants/recommendation_catalog_priority.dart';
-import '../../core/constants/recommendation_mixed_priority.dart';
 import '../../core/constants/recommendation_priority_mode.dart';
 import '../../data/models/object_observation_window.dart';
 import '../../data/models/scored_observation_target.dart';
@@ -17,25 +16,13 @@ abstract final class RecommendationCandidateSorter {
     ScoredObservationTarget b,
     RecommendationPriorityMode mode,
   ) {
+    // Legacy stored modes are kept readable for settings compatibility, but
+    // capture history no longer changes recommendation order.
     return switch (mode) {
-      RecommendationPriorityMode.uncapturedFirst =>
-        _compareUncapturedFirst(a, b),
+      RecommendationPriorityMode.uncapturedFirst => _compareScoreFirst(a, b),
       RecommendationPriorityMode.scoreFirst => _compareScoreFirst(a, b),
-      RecommendationPriorityMode.mixed => _compareMixed(a, b),
+      RecommendationPriorityMode.mixed => _compareScoreFirst(a, b),
     };
-  }
-
-  static int _compareUncapturedFirst(
-    ScoredObservationTarget a,
-    ScoredObservationTarget b,
-  ) {
-    final uncaptured = _compareUncaptured(a, b);
-    if (uncaptured != 0) return uncaptured;
-
-    final score = b.score.compareTo(a.score);
-    if (score != 0) return score;
-
-    return _compareSharedTail(a, b);
   }
 
   static int _compareScoreFirst(
@@ -45,35 +32,7 @@ abstract final class RecommendationCandidateSorter {
     final score = b.score.compareTo(a.score);
     if (score != 0) return score;
 
-    final uncaptured = _compareUncaptured(a, b);
-    if (uncaptured != 0) return uncaptured;
-
     return _compareSharedTail(a, b);
-  }
-
-  static int _compareMixed(ScoredObservationTarget a, ScoredObservationTarget b) {
-    final effective = _effectiveScore(b).compareTo(_effectiveScore(a));
-    if (effective != 0) return effective;
-
-    final score = b.score.compareTo(a.score);
-    if (score != 0) return score;
-
-    return _compareSharedTail(a, b);
-  }
-
-  static double _effectiveScore(ScoredObservationTarget candidate) {
-    final bonus = candidate.object.captured
-        ? 0.0
-        : RecommendationMixedPriority.uncapturedBonus;
-    return candidate.score + bonus;
-  }
-
-  static int _compareUncaptured(
-    ScoredObservationTarget a,
-    ScoredObservationTarget b,
-  ) {
-    if (a.object.captured == b.object.captured) return 0;
-    return a.object.captured ? 1 : -1;
   }
 
   static int _compareSharedTail(
@@ -99,8 +58,9 @@ abstract final class RecommendationCandidateSorter {
     final altCmp = bAlt.compareTo(aAlt);
     if (altCmp != 0) return altCmp;
 
-    final catalogCmp = RecommendationCatalogPriority.rank(a.object.catalog)
-        .compareTo(RecommendationCatalogPriority.rank(b.object.catalog));
+    final catalogCmp = RecommendationCatalogPriority.rank(
+      a.object.catalog,
+    ).compareTo(RecommendationCatalogPriority.rank(b.object.catalog));
     if (catalogCmp != 0) return catalogCmp;
 
     return a.object.displayName.compareTo(b.object.displayName);

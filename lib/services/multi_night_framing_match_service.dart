@@ -516,18 +516,20 @@ class MultiNightFramingMatchService {
       lonDeg: site.longitude,
       time: time,
     );
+    final horizonProfile = SiteHorizonProfile(
+      points: site.horizonPoints,
+      blockedRanges: site.blockedAzimuthRanges,
+    );
     final profileVisible = _horizonVisibility.isVisible(
-      profile: SiteHorizonProfile(
-        points: site.horizonPoints,
-        blockedRanges: site.blockedAzimuthRanges,
-      ),
+      profile: horizonProfile,
       azimuth: altAz.azimuth,
       altitude: altAz.altitude,
     );
-    final altitudeVisible =
-        altAz.altitude >= site.defaultMinAltitude &&
-        (site.defaultMaxAltitude == null ||
-            altAz.altitude <= site.defaultMaxAltitude!);
+    final altitudeVisible = horizonProfile.hasRestrictions
+        ? true
+        : altAz.altitude >= site.defaultMinAltitude &&
+              (site.defaultMaxAltitude == null ||
+                  altAz.altitude <= site.defaultMaxAltitude!);
     return _FramingSample(
       hourAngleDeg: ha,
       parallacticAngleDeg: pa,

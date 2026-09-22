@@ -118,7 +118,6 @@ class _AvailabilityDetails extends StatelessWidget {
             key: const Key('availability-tomorrow-card'),
             dayLabel: '내일',
             availability: availability.tomorrow!,
-            weatherExcluded: true,
             observableSeasonLabel: availability.observableSeasonLabel,
             optimalSeasonLabel: availability.optimalSeasonLabel,
           );
@@ -160,14 +159,12 @@ class _DayAvailabilitySection extends StatelessWidget {
     super.key,
     required this.dayLabel,
     required this.availability,
-    this.weatherExcluded = false,
     this.observableSeasonLabel,
     this.optimalSeasonLabel,
   });
 
   final String dayLabel;
   final TargetImagingAvailability availability;
-  final bool weatherExcluded;
   final String? observableSeasonLabel;
   final String? optimalSeasonLabel;
 
@@ -175,8 +172,7 @@ class _DayAvailabilitySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = availability.referenceDate;
     final window = availability.window;
-    final hasReason =
-        !availability.isAvailableTonight && availability.primaryReason != null;
+    final statusReason = availability.statusReason;
     final keyPrefix = dayLabel == '오늘'
         ? 'availability-today'
         : 'availability-tomorrow';
@@ -194,26 +190,12 @@ class _DayAvailabilitySection extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              if (weatherExcluded) ...[
-                const SizedBox(width: 5),
-                const Flexible(
-                  child: Text(
-                    '· 기상정보 미반영',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
         _ValueRow(
           key: ValueKey('$keyPrefix-status'),
-          label: '상태',
+          label: '$dayLabel 촬영',
           value: availability.tonightStatusLabel,
           color: switch (availability.effectiveState) {
             TargetImagingAvailabilityState.sufficientWindow =>
@@ -230,7 +212,7 @@ class _DayAvailabilitySection extends StatelessWidget {
         if (availability.usableMinutes != null)
           _ValueRow(
             key: ValueKey('$keyPrefix-usable-duration'),
-            label: '실제 촬영 가능',
+            label: '권장 촬영 구간',
             value: _usableWindowLabel(),
           ),
         if (availability.minimumMinutes != null)
@@ -266,22 +248,23 @@ class _DayAvailabilitySection extends StatelessWidget {
             color: Colors.orangeAccent,
             valueWeight: FontWeight.w500,
           ),
-        if (availability.weatherAdvisory != null)
+        if (availability.displayWeatherAdvisory != null)
           _ValueRow(
             key: ValueKey('$keyPrefix-weather-advisory'),
-            label: '기상 의견',
-            value: availability.weatherAdvisory!,
+            label: '기상 참고',
+            value: availability.displayWeatherAdvisory!,
             color: AppColors.textSecondary,
             valueWeight: FontWeight.w500,
           ),
         _ValueRow(
           key: ValueKey('$keyPrefix-shooting-window'),
-          label: '천문학적 관측 가능',
+          label: '관측 가능 시간 (고도·시야 기준)',
           value: window == null
               ? '-'
               : _timeRange(
                   window.recommendStartTime,
                   window.observationEndTime,
+                  referenceDate: availability.referenceDate,
                 ),
           color: window == null ? AppColors.textSecondary : AppColors.messier,
         ),
@@ -290,19 +273,19 @@ class _DayAvailabilitySection extends StatelessWidget {
           label: '최적 촬영 구간',
           value: window == null
               ? '-'
-              : _timeRange(window.optimalStartTime, window.optimalEndTime),
+              : _timeRange(
+                  window.optimalStartTime,
+                  window.optimalEndTime,
+                  referenceDate: availability.referenceDate,
+                ),
           color: window == null ? AppColors.textSecondary : AppColors.messier,
         ),
         Visibility(
-          visible: hasReason,
+          visible: statusReason != null,
           maintainState: true,
           maintainAnimation: true,
           maintainSize: true,
-          child: _ValueRow(
-            label: '사유',
-            value: availability.primaryReason ?? '',
-            maxLines: 1,
-          ),
+          child: _ValueRow(label: '사유', value: statusReason ?? '', maxLines: 1),
         ),
         if (observableSeasonLabel != null)
           _ValueRow(
@@ -325,18 +308,49 @@ class _DayAvailabilitySection extends StatelessWidget {
     );
   }
 
-  String _timeRange(DateTime? start, DateTime? end) {
+  String _timeRange(
+    DateTime? start,
+    DateTime? end, {
+    required DateTime referenceDate,
+  }) {
     if (start == null || end == null) return '-';
     String format(DateTime value) =>
         '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
-    return '${format(start)} ~ ${format(end)}';
+
+    int dayOffset(DateTime value) {
+      final referenceDay = DateTime.utc(
+        referenceDate.year,
+        referenceDate.month,
+        referenceDate.day,
+      );
+      final valueDay = DateTime.utc(value.year, value.month, value.day);
+      return valueDay.difference(referenceDay).inDays;
+    }
+
+    String prefix(DateTime value) => switch (dayOffset(value)) {
+      0 => '',
+      1 => '다음 날 ',
+      _ => '${value.month}/${value.day} ',
+    };
+
+    final startOffset = dayOffset(start);
+    final endOffset = dayOffset(end);
+    if (startOffset == endOffset) {
+      return '${prefix(start)}${format(start)} ~ ${format(end)}';
+    }
+    return '${prefix(start)}${format(start)} ~ ${prefix(end)}${format(end)}';
   }
 
   String _usableWindowLabel() {
     final usableWindow = availability.usableWindow;
     final minutes = availability.usableMinutes;
     if (usableWindow == null) return '${minutes ?? 0}분';
-    return '${_timeRange(usableWindow.start, usableWindow.end)} · ${minutes ?? usableWindow.duration.inMinutes}분';
+    final range = _timeRange(
+      usableWindow.start,
+      usableWindow.end,
+      referenceDate: availability.referenceDate,
+    );
+    return '$range · ${minutes ?? usableWindow.duration.inMinutes}분';
   }
 }
 

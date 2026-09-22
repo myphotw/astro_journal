@@ -45,6 +45,7 @@ void main() {
       ra: '21h 04m',
       dec: '-11° 22m',
       magnitude: '8.0',
+      captured: true,
     ),
     window: ObjectObservationWindow(
       currentAltitude: 40,

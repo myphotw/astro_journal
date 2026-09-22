@@ -6,15 +6,19 @@ import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/observation_feasibility_reason.dart';
 import 'package:astro_journal/data/models/observation_feasibility_result.dart';
+import 'package:astro_journal/data/models/observation_quality_index.dart';
 import 'package:astro_journal/data/models/observation_status.dart';
+import 'package:astro_journal/data/models/recommendation_build_result.dart';
 import 'package:astro_journal/data/models/recommendation_result.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
 import 'package:astro_journal/data/models/site_horizon_profile.dart';
+import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
 import 'package:astro_journal/data/models/weather_forecast_slot.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
+import 'package:astro_journal/services/observation_score_service.dart';
 import 'package:astro_journal/services/recommendation_engine.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
 import 'package:astro_journal/services/scheduler_engine.dart';
@@ -55,6 +59,29 @@ void main() {
         start: DateTime(2026, 7, 20, 21, 0),
         end: DateTime(2026, 7, 21, 5, 0),
       );
+    }
+
+    ObservationWindow buildSiteWeatherWindow(DateTime time) {
+      final forecast = WeatherForecastSlot(
+        time: time,
+        temperature: 20,
+        humidity: 50,
+        windSpeed: 1,
+        cloudCoverage: 0,
+        visibility: 10000,
+        pop: 0,
+        description: '맑음',
+        icon: '01n',
+      );
+      final slot = TonightObservationSlot(
+        label: ObservationScoreService.formatHourLabel(time),
+        targetTime: time,
+        forecast: forecast,
+        moon: ObservationScoreService.computeMoonInfo(time),
+        feasibility: const ObservationFeasibilityResult.observable(),
+        qualityIndex: const ObservationQualityIndex(oqi: 90, components: []),
+      );
+      return ObservationScoreService.findObservationWindow([slot])!;
     }
 
     CatalogObject buildObject({
@@ -115,7 +142,7 @@ void main() {
       expect(result.recommendations.first.object.id, 'm8');
       expect(
         result.recommendations.first.score,
-        lessThan(clearResult.recommendations.first.score),
+        clearResult.recommendations.first.score,
       );
     });
 
@@ -171,7 +198,7 @@ void main() {
     });
 
     test(
-      'bad weather remains scoring input without hard-removing a target',
+      'bad weather remains reference data without removing a target',
       () async {
         final session = buildSession();
         final forecast = WeatherForecastSlot(
@@ -217,7 +244,56 @@ void main() {
     );
 
     test(
-      'shooting fit ignores weather while tonight recommendation keeps it',
+      'site weather window does not remove evening or post-midnight targets',
+      () async {
+        final session = buildSession();
+        final catalog = [
+          buildObject(
+            id: 'evening-target',
+            number: 8,
+            ra: '18h 03m',
+            dec: '-24° 23m',
+            type: '발광성운',
+          ),
+          buildObject(
+            id: 'post-midnight-target',
+            number: 42,
+            ra: '05h 35m',
+            dec: '-05° 23m',
+            type: '발광성운',
+          ),
+        ];
+
+        final withoutWeatherWindow = await engine.build(
+          catalog: catalog,
+          settings: RecommendationSettings.defaults,
+          context: buildContext(),
+          session: session,
+          limit: 10,
+        );
+        final withWeatherWindow = await engine.build(
+          catalog: catalog,
+          settings: RecommendationSettings.defaults,
+          context: buildContext().copyWith(
+            observationWindow: buildSiteWeatherWindow(session.start),
+          ),
+          session: session,
+          limit: 10,
+        );
+
+        List<String> ids(RecommendationBuildResult result) => result
+            .allRecommendations
+            .map((recommendation) => recommendation.object.id)
+            .toList();
+
+        expect(ids(withoutWeatherWindow), containsAll(ids(withWeatherWindow)));
+        expect(ids(withWeatherWindow), contains('evening-target'));
+        expect(ids(withWeatherWindow), contains('post-midnight-target'));
+      },
+    );
+
+    test(
+      'shooting fit and tonight recommendation both ignore weather',
       () async {
         final session = buildSession();
         final object = buildObject(
@@ -280,12 +356,10 @@ void main() {
             clear.imagingAssessment?.scoreMultiplier,
           );
         }
-        expect(clear.score, greaterThan(overcast.score));
+        expect(overcast.score, clear.score);
+        expect(unknown.score, clear.score);
         expect(unknown.observationWindow?.hasWeatherData, isFalse);
-        expect(
-          unknown.observationWindow?.optimalWeatherScore,
-          isNull,
-        );
+        expect(unknown.observationWindow?.optimalWeatherScore, isNull);
       },
     );
 
@@ -314,39 +388,197 @@ void main() {
       },
     );
 
-    test('uncaptured-first mode ranks uncaptured targets ahead', () async {
-      final catalog = [
-        buildObject(
-          id: 'm8',
-          number: 8,
-          ra: '18h 03m',
-          dec: '-24° 23m',
-          type: '발광성운',
-          captured: true,
-        ),
-        buildObject(
-          id: 'm20',
-          number: 20,
-          ra: '18h 02m',
-          dec: '-23° 02m',
-          type: '발광성운',
-          captured: false,
-        ),
-      ];
-
-      final result = await engine.build(
-        catalog: catalog,
-        settings: RecommendationSettings.defaults.copyWith(
+    test(
+      'capture history does not change candidates scores order or schedule',
+      () async {
+        final uncapturedCatalog = [
+          buildObject(
+            id: 'm8',
+            number: 8,
+            ra: '18h 03m',
+            dec: '-24° 23m',
+            type: '발광성운',
+          ),
+          buildObject(
+            id: 'm20',
+            number: 20,
+            ra: '18h 02m',
+            dec: '-23° 02m',
+            type: '발광성운',
+          ),
+        ];
+        final capturedCatalog = [
+          buildObject(
+            id: 'm8',
+            number: 8,
+            ra: '18h 03m',
+            dec: '-24° 23m',
+            type: '발광성운',
+            captured: true,
+          ),
+          buildObject(
+            id: 'm20',
+            number: 20,
+            ra: '18h 02m',
+            dec: '-23° 02m',
+            type: '발광성운',
+          ),
+        ];
+        final capturedAt = DateTime(2026, 7, 19, 22);
+        final settings = RecommendationSettings.defaults.copyWith(
           priorityMode: RecommendationPriorityMode.uncapturedFirst,
-        ),
-        context: buildContext(),
-        session: buildSession(),
-        limit: 10,
-      );
+        );
 
-      expect(result.allRecommendations.length, greaterThanOrEqualTo(2));
-      expect(result.allRecommendations.first.object.captured, isFalse);
-    });
+        final uncapturedResult = await engine.build(
+          catalog: uncapturedCatalog,
+          settings: settings,
+          context: buildContext(),
+          session: buildSession(),
+          limit: 10,
+        );
+        final capturedResult = await engine.build(
+          catalog: capturedCatalog,
+          settings: settings,
+          context: buildContext().copyWith(
+            shootingRecords: [
+              ShootingRecord(
+                id: 'record-m8',
+                celestialObjectId: 'm8',
+                capturedAt: capturedAt,
+                createdAt: capturedAt,
+              ),
+            ],
+          ),
+          session: buildSession(),
+          limit: 10,
+        );
+
+        List<String> recommendationIds(RecommendationBuildResult result) =>
+            result.allRecommendations
+                .map<String>((item) => item.object.id)
+                .toList();
+        List<String> scheduleIds(RecommendationBuildResult result) => result
+            .scheduleItems
+            .map<String>((item) => item.catalogObject.id)
+            .toList();
+        Map<String, double> scores(RecommendationBuildResult result) => {
+          for (final item in result.allRecommendations)
+            item.object.id: item.score,
+        };
+
+        expect(
+          recommendationIds(capturedResult),
+          recommendationIds(uncapturedResult),
+        );
+        expect(scores(capturedResult), scores(uncapturedResult));
+        expect(scheduleIds(capturedResult), scheduleIds(uncapturedResult));
+        expect(
+          capturedResult.allRecommendations
+              .expand((item) => item.reasons)
+              .map((reason) => reason.label),
+          isNot(contains('✓ 미촬영 대상')),
+        );
+      },
+    );
+
+    test(
+      'weather and capture history matrix keeps ranking schedule and windows',
+      () async {
+        final session = buildSession();
+        final catalog = [
+          buildObject(
+            id: 'm8-matrix',
+            number: 8,
+            ra: '18h 03m',
+            dec: '-24° 23m',
+            type: '발광성운',
+            captured: true,
+          ),
+          buildObject(
+            id: 'm20-matrix',
+            number: 20,
+            ra: '18h 02m',
+            dec: '-23° 02m',
+            type: '발광성운',
+          ),
+        ];
+        final capturedAt = DateTime(2026, 7, 19, 22);
+
+        List<WeatherForecastSlot> forecasts({required int cloud}) => [
+          for (var offset = 0; offset <= 6; offset += 3)
+            WeatherForecastSlot(
+              time: session.start.add(Duration(hours: offset)),
+              temperature: 20,
+              humidity: cloud == 0 ? 50 : 95,
+              windSpeed: cloud == 0 ? 1.5 : 18,
+              cloudCoverage: cloud,
+              visibility: cloud == 0 ? 10000 : 1000,
+              pop: cloud == 0 ? 0 : 90,
+              description: cloud == 0 ? '맑음' : '비',
+              icon: cloud == 0 ? '01n' : '10n',
+            ),
+        ];
+
+        Future<RecommendationBuildResult> buildWith(
+          List<WeatherForecastSlot>? weather,
+        ) {
+          return engine.build(
+            catalog: catalog,
+            settings: RecommendationSettings.defaults,
+            context: buildContext().copyWith(
+              cloudCover: weather == null ? 0 : weather.first.cloudCoverage,
+              sessionWeather: weather == null
+                  ? null
+                  : SessionWeatherIndex.build(
+                      session: session,
+                      forecasts: weather,
+                    ),
+              shootingRecords: [
+                ShootingRecord(
+                  id: 'record-m8-matrix',
+                  celestialObjectId: 'm8-matrix',
+                  capturedAt: capturedAt,
+                  createdAt: capturedAt,
+                ),
+              ],
+            ),
+            session: session,
+            limit: 10,
+          );
+        }
+
+        final clear = await buildWith(forecasts(cloud: 0));
+        final overcast = await buildWith(forecasts(cloud: 100));
+        final unknown = await buildWith(null);
+
+        List<Object?> recommendationSnapshot(
+          RecommendationBuildResult result,
+        ) => result.allRecommendations
+            .map(
+              (item) => (
+                item.object.id,
+                item.score,
+                item.observationWindow?.optimalStartTime,
+                item.observationWindow?.optimalEndTime,
+                item.starCount,
+              ),
+            )
+            .toList();
+        List<Object?> scheduleSnapshot(RecommendationBuildResult result) =>
+            result.scheduleItems
+                .map(
+                  (item) =>
+                      (item.catalogObject.id, item.startTime, item.endTime),
+                )
+                .toList();
+
+        expect(clear.allRecommendations, isNotEmpty);
+        for (final result in [overcast, unknown]) {
+          expect(recommendationSnapshot(result), recommendationSnapshot(clear));
+          expect(scheduleSnapshot(result), scheduleSnapshot(clear));
+        }
+      },
+    );
 
     test('keeps IC1396 when bortle is seoul-like (type default)', () async {
       final result = await engine.build(
@@ -524,6 +756,7 @@ void main() {
               ra: '21h 04m',
               dec: '-11° 22m',
               type: '행성상성운',
+              captured: true,
             ),
           ],
           settings: RecommendationSettings.defaults,
@@ -567,6 +800,7 @@ void main() {
           ra: '18h 03m',
           dec: '-24° 23m',
           type: '발광성운',
+          captured: true,
         ),
       ];
 
@@ -582,5 +816,29 @@ void main() {
         expect(result.scheduleItems, isEmpty);
       }
     });
+
+    test(
+      'captured target still requires valid astronomical coordinates',
+      () async {
+        final result = await engine.build(
+          catalog: [
+            buildObject(
+              id: 'captured-invalid-position',
+              number: 999,
+              ra: 'invalid',
+              dec: '-24° 23m',
+              type: '발광성운',
+              captured: true,
+            ),
+          ],
+          settings: RecommendationSettings.defaults,
+          context: buildContext(),
+          session: buildSession(),
+        );
+
+        expect(result.recommendations, isEmpty);
+        expect(result.scheduleItems, isEmpty);
+      },
+    );
   });
 }

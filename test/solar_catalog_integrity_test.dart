@@ -195,7 +195,7 @@ void main() {
 
   test('catalog data version remains independent from schema migration', () {
     expect(DatabaseConstants.databaseVersion, 35);
-    expect(DatabaseConstants.catalogDataVersion, 30);
+    expect(DatabaseConstants.catalogDataVersion, 31);
   });
 }
 

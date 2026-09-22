@@ -91,10 +91,7 @@ void main() {
 
     test('returns notRecommended when rain is forecast', () {
       final status = ShootingStatus.evaluate(
-        forecast: forecast(
-          time: DateTime(2026, 7, 6, 14),
-          pop: 80,
-        ),
+        forecast: forecast(time: DateTime(2026, 7, 6, 14), pop: 80),
         starCount: 5,
       );
 
@@ -145,10 +142,7 @@ void main() {
       expect(info.observationStatus, ObservationStatus.limited);
       expect(info.observationScore, summary?.finalScore);
       expect(info.starCount, ObservationStatus.limited.homeStarCount);
-      expect(
-        info.statusDisplayText,
-        contains('예보상 촬영 조건이 좋지 않을 수 있습니다'),
-      );
+      expect(info.statusDisplayText, contains('구름이 일부 예상됩니다'));
       expect(info.shootingStatus, ShootingStatus.limited);
       expect(info.hourlySlots.length, lessThanOrEqualTo(slots.length));
       if (info.hourlySlots.isNotEmpty) {

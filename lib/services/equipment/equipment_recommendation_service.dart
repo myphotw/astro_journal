@@ -482,7 +482,7 @@ class EquipmentRecommendationService {
 
     var imagingMult = (recommendation.score / 100).clamp(0.3, 1.0);
     var visualMult = imagingMult;
-    var visualFeasible = condition.isObservationFeasible;
+    var visualFeasible = true;
     String? imagingReason;
     String? visualReason;
     String? visualBlockReason;
@@ -497,13 +497,6 @@ class EquipmentRecommendationService {
       visualMult *= 0.7;
       imagingReason = '고도가 낮음';
       visualReason = '고도가 낮음';
-    }
-
-    if (condition.cloudCover > 50) {
-      imagingMult *= 0.7;
-      visualMult *= 0.5;
-      visualFeasible = false;
-      visualBlockReason = '현재 조건 부적합';
     }
 
     if (condition.moon.illumination > 0.6 &&
@@ -526,9 +519,7 @@ class EquipmentRecommendationService {
       visualMult *= 0.75;
     }
 
-    if (condition.score >= 75 && imagingReason == null) {
-      imagingReason = '현재 조건 최적';
-    }
+    imagingReason ??= '현재 조건 적합';
 
     if (!visualFeasible && visualBlockReason == null) {
       visualBlockReason = '현재 조건 부적합';

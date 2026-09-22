@@ -51,7 +51,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: imagingSummary, matching: find.text('촬영 가능')),
+      find.descendant(of: imagingSummary, matching: find.text('화각에 여유 있게 들어옴')),
       findsOneWidget,
     );
     expect(
@@ -276,7 +276,7 @@ const _recommendation = ObjectEquipmentRecommendation(
       equipment: _imaging,
       score: 80,
       starCount: 4,
-      reason: '촬영 가능',
+      reason: '화각에 여유 있게 들어옴',
       screenFillPercent: 38,
       framingRecommendation: FramingRecommendation.good,
     ),
@@ -307,7 +307,7 @@ const _imagingRecommendation = ImagingEquipmentRecommendation(
   equipment: _imaging,
   score: 80,
   starCount: 4,
-  reason: '촬영 가능',
+  reason: '화각에 여유 있게 들어옴',
   screenFillPercent: 38,
   framingRecommendation: FramingRecommendation.good,
 );

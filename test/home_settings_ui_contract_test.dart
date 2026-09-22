@@ -103,7 +103,9 @@ void main() {
   test('settings retains user data and observation management entries', () {
     expect(settings, contains('추천 필터 설정'));
     expect(recommendationSettings, contains('추천 카탈로그'));
-    expect(recommendationSettings, contains('추천 우선순위'));
+    expect(recommendationSettings, contains('천체 종류'));
+    expect(recommendationSettings, isNot(contains('미촬영 우선')));
+    expect(recommendationSettings, isNot(contains('미촬영 대상을 항상 먼저')));
     expect(settings, contains('관측지 관리'));
     expect(settings, contains('장비 등록·관리'));
     expect(settings, contains('백업 내보내기'));

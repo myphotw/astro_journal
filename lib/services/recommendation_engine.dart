@@ -1,14 +1,11 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/constants/catalog_type.dart';
-import '../core/constants/imaging_difficulty.dart';
-import '../core/constants/observation_status_config.dart';
 import '../core/services/performance_probe.dart';
 import '../data/models/catalog_object.dart';
 import '../data/models/imaging_suitability_assessment.dart';
 import '../data/models/observation_context.dart';
 import '../data/models/object_observation_window.dart';
-import '../data/models/observation_status.dart';
 import '../data/models/recommendation_build_result.dart';
 import '../data/models/recommendation_result.dart';
 import '../data/models/scored_observation_target.dart';
@@ -47,8 +44,7 @@ class RecommendationEngine {
            ObservationWindowCalculator(_celestialPositionService),
        _imagingSuitabilityService =
            imagingSuitabilityService ?? const ImagingSuitabilityService(),
-       _altAzImagingPolicy =
-           altAzImagingPolicy ?? const AltAzImagingPolicy();
+       _altAzImagingPolicy = altAzImagingPolicy ?? const AltAzImagingPolicy();
 
   final CelestialPositionService _celestialPositionService;
   final ExposurePolicy _exposurePolicy;
@@ -65,7 +61,6 @@ class RecommendationEngine {
     required ObservationContext context,
     required TonightObservationSession session,
     int limit = 20,
-    double windSpeed = 0,
     DateTime? referenceTime,
     TrackingMode trackingMode = TrackingMode.altAz,
     RecommendationCandidateScope candidateScope =
@@ -101,8 +96,8 @@ class RecommendationEngine {
     final now = referenceTime ?? context.currentTime;
     final refTime = _clampReferenceTime(now, session);
 
-    // Weather remains part of scoring and guidance, but never removes an
-    // otherwise observable target or its astronomical window.
+    // Weather stays on the context for reference UI only. Recommendation,
+    // ranking, and scheduling use astronomical and equipment inputs.
     final evalContext = context;
 
     final month = session.start.month;
@@ -115,9 +110,6 @@ class RecommendationEngine {
     var excludedInsufficientDuration = 0;
     const excludedLimitedDifficulty = 0;
     var excludedEquipmentUnsuitable = 0;
-
-    final isLimited =
-        evalContext.observationStatus == ObservationStatus.limited;
 
     final candidates = <ScoredObservationTarget>[];
     final windowSharedCache = ObservationWindowSharedCache();
@@ -244,22 +236,15 @@ class RecommendationEngine {
         evaluationTime: evaluationTime,
         positionService: _celestialPositionService,
       );
-      final observingConditionScore =
-          _recommendationScore.calculateObservingCondition(
-        object: object,
-        context: evalContext,
-        window: window,
-        evaluationTime: evaluationTime,
-        positionService: _celestialPositionService,
-      );
+      final observingConditionScore = _recommendationScore
+          .calculateObservingCondition(
+            object: object,
+            context: evalContext,
+            window: window,
+            evaluationTime: evaluationTime,
+            positionService: _celestialPositionService,
+          );
       score *= assessment.scoreMultiplier;
-
-      if (isLimited && profile.imagingDifficulty == ImagingDifficulty.normal) {
-        score *= ObservationStatusConfig.limitedNormalDifficultyScoreMultiplier;
-      }
-      if (evalContext.observationStatus == ObservationStatus.unavailable) {
-        score *= ObservationStatusConfig.unavailableRecommendationScoreMultiplier;
-      }
 
       if (score <= 0) continue;
 
@@ -322,9 +307,6 @@ class RecommendationEngine {
               moonIllumination: evalContext.moonIllumination,
               season: season,
               month: month,
-              cloudCoverage:
-                  candidate.window.optimalFeasibleCloudCoverage ?? -1,
-              windSpeed: candidate.window.optimalFeasibleWindSpeed ?? -1,
             ),
             season: season,
             score: candidate.score,
@@ -389,7 +371,9 @@ class RecommendationEngine {
           (object) =>
               settings.enabledCatalogs.contains(object.catalog) &&
               (settings.enabledObjectTypes.isEmpty ||
-                  settings.enabledObjectTypes.contains(object.resolvedObjectType)),
+                  settings.enabledObjectTypes.contains(
+                    object.resolvedObjectType,
+                  )),
         )
         .toList(growable: false);
     final scopeEligible = userFiltered

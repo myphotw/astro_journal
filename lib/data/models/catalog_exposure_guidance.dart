@@ -10,10 +10,10 @@ enum CatalogExposureFeasibility {
 
 extension CatalogExposureFeasibilityLabels on CatalogExposureFeasibility {
   String get statusLabel => switch (this) {
-    CatalogExposureFeasibility.recommended => '추천',
-    CatalogExposureFeasibility.feasible => '촬영 가능',
-    CatalogExposureFeasibility.notRecommended => '비추천',
-    CatalogExposureFeasibility.stronglyNotRecommended => '매우 비추천',
+    CatalogExposureFeasibility.recommended => '현재 광해 환경에서 추천',
+    CatalogExposureFeasibility.feasible => '현재 광해 환경에서 촬영 가능',
+    CatalogExposureFeasibility.notRecommended => '현재 광해 환경에서는 비추천',
+    CatalogExposureFeasibility.stronglyNotRecommended => '현재 광해 환경에서는 매우 비추천',
   };
 
   bool get showsCurrentExposureTime =>

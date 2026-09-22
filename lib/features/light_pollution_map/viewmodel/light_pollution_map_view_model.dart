@@ -942,7 +942,6 @@ class LightPollutionMapViewModel extends ChangeNotifier {
         context: context,
         session: session,
         limit: 3,
-        windSpeed: weatherInfo.windSpeed,
         referenceTime: now,
         candidateScope: RecommendationCandidateScope.all,
       );

@@ -11,6 +11,13 @@ Map<String, String> _loadIdRemap() {
   return raw.map((key, value) => MapEntry(key, value as String));
 }
 
+Map<String, dynamic> _loadJsonMap(String path) =>
+    jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+
+List<Map<String, dynamic>> _loadJsonObjects(String path) =>
+    (jsonDecode(File(path).readAsStringSync()) as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+
 String _resolveCanonical(String id, Map<String, String> remap) {
   var current = id;
   final visited = <String>{};
@@ -96,6 +103,104 @@ void main() {
       expect(helixTokens, isNot(contains("Barnard's Galaxy")));
       expect(helixTokens, isNot(contains('IC4895')));
       expect(helixTokens, isNot(contains('NGC6822')));
+    });
+
+    test('M42 keeps the NGC1976 cross-catalog identity', () {
+      final equivalence = _loadJsonMap(
+        'assets/catalog/catalog_equivalence.json',
+      );
+      final messierNgc = equivalence['messierNgc'] as Map<String, dynamic>;
+      final messier = _loadJsonObjects('assets/catalog/messier.json');
+      final m42 = messier.singleWhere((item) => item['id'] == 'M42');
+      final crossRefs = (m42['crossCatalogRefs'] as List<dynamic>)
+          .cast<String>();
+
+      expect(messierNgc['1976'], 42);
+      expect(crossRefs, contains('NGC 1976'));
+    });
+
+    test('NGC2024 has no M42 identity remap', () {
+      final equivalence = _loadJsonMap(
+        'assets/catalog/catalog_equivalence.json',
+      );
+      final messierNgc = equivalence['messierNgc'] as Map<String, dynamic>;
+      final embeddedRemap = equivalence['idRemap'] as Map<String, dynamic>;
+      final groups = (equivalence['groups'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+      final idRemap = _loadIdRemap();
+      final messier = _loadJsonObjects('assets/catalog/messier.json');
+      final m42 = messier.singleWhere((item) => item['id'] == 'M42');
+      final aliases = (m42['aliases'] as List<dynamic>).cast<String>();
+      final crossRefs = (m42['crossCatalogRefs'] as List<dynamic>)
+          .cast<String>();
+      final ngc2024Group = groups.singleWhere(
+        (group) => (group['members'] as List<dynamic>).contains('NGC2024'),
+      );
+
+      expect(messierNgc.containsKey('2024'), isFalse);
+      expect(embeddedRemap.containsKey('NGC2024'), isFalse);
+      expect(idRemap.containsKey('NGC2024'), isFalse);
+      expect(ngc2024Group['canonicalId'], 'NGC2024');
+      expect(ngc2024Group['members'], ['NGC2024']);
+      expect(crossRefs, isNot(contains('NGC2024')));
+      expect(aliases, isNot(contains('NGC2024')));
+    });
+
+    test('seed keeps M42 and NGC2024 as independent primary objects', () async {
+      final dbPath = File('assets/database/catalog_seed.db').absolute.path;
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(readOnly: true),
+      );
+      addTearDown(db.close);
+
+      final rows = await db.query(
+        'celestial_objects',
+        where: 'id IN (?, ?)',
+        whereArgs: ['M42', 'NGC2024'],
+      );
+      expect(rows, hasLength(2));
+      final m42 = rows.singleWhere((row) => row['id'] == 'M42');
+      final ngc2024 = rows.singleWhere((row) => row['id'] == 'NGC2024');
+      final m42Tokens = _metadataTokens(m42);
+      final ngc2024Tokens = _metadataTokens(ngc2024);
+
+      expect(m42['is_primary_catalog'], 1);
+      expect(m42['primary_catalog_id'], isNull);
+      expect(ngc2024['is_primary_catalog'], 1);
+      expect(ngc2024['primary_catalog_id'], isNull);
+      expect(m42Tokens, contains('NGC 1976'));
+      expect(m42Tokens, isNot(contains('NGC2024')));
+      expect(m42Tokens, isNot(contains('NGC 2024')));
+      expect(m42Tokens, isNot(contains('Flame Nebula')));
+      expect(ngc2024Tokens, contains('Flame Nebula'));
+      expect(ngc2024Tokens, contains('Sh2-277'));
+      expect(ngc2024['ra'], isNot(m42['ra']));
+    });
+
+    test('NGC2024 remains independently searchable in catalog assets', () async {
+      final seestar = _loadJsonObjects('assets/catalog/seestar_catalog.json');
+      final messier = _loadJsonObjects('assets/catalog/messier.json');
+      final ngc2024 = seestar.singleWhere((item) => item['id'] == 'NGC2024');
+      final m42 = messier.singleWhere((item) => item['id'] == 'M42');
+      expect(ngc2024['aliases'], contains('Flame Nebula'));
+      expect(ngc2024['ra'], isNot(m42['ra']));
+
+      final dbPath = File('assets/database/catalog_seed.db').absolute.path;
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(readOnly: true),
+      );
+      addTearDown(db.close);
+      final rows = await db.query(
+        'celestial_objects',
+        columns: ['id', 'search_keywords'],
+        where: 'id = ?',
+        whereArgs: ['NGC2024'],
+      );
+      expect(rows, hasLength(1));
+      expect(rows.single['search_keywords'], contains('NGC2024'));
+      expect(rows.single['search_keywords'], contains('Flame Nebula'));
     });
   });
 }

@@ -3,7 +3,6 @@ import '../../data/models/observation_feasibility_reason.dart';
 import '../../data/models/object_imaging_profile.dart';
 import '../../data/models/object_observation_window.dart';
 import '../../data/models/observation_context.dart';
-import '../../data/models/observation_weather.dart';
 import '../../data/models/tonight_observation_session.dart';
 import '../../core/services/performance_probe.dart';
 import '../../core/constants/observation_feasibility_config.dart';
@@ -27,10 +26,7 @@ enum ObservationWindowExclusion {
   insufficientDuration,
 }
 
-enum ObservationWindowDurationPolicy {
-  strict,
-  informational,
-}
+enum ObservationWindowDurationPolicy { strict, informational }
 
 class ObservationWindowCalculation {
   const ObservationWindowCalculation({
@@ -174,12 +170,9 @@ class ObservationWindowCalculator {
       (a, b) => a.altitude >= b.altitude ? a : b,
     );
 
-    final siteWindow = context.observationWindow;
-    final geometricSlotStarts = visiblePoints
-        .map((point) => _alignToSlot(point.time))
-        .toSet()
-        .toList()
-      ..sort();
+    final geometricSlotStarts =
+        visiblePoints.map((point) => _alignToSlot(point.time)).toSet().toList()
+          ..sort();
     final slotScores = <DateTime, double>{};
     final pointBySlot = <DateTime, CelestialTimePoint>{};
     final lightPollutionScore = const LightPollutionScore().calculate(
@@ -216,11 +209,6 @@ class ObservationWindowCalculator {
         }
       }
 
-      final targetWeatherScore = sharedCache?.targetWeatherScore(
-        context: context,
-        evaluationTime: point.time,
-        weather: weather,
-      );
       final moonCoordinates = sharedCache?.moonCoordinates(
         positionService: _positionService,
         evaluationTime: point.time,
@@ -232,19 +220,17 @@ class ObservationWindowCalculator {
         evaluationTime: point.time,
         altitude: point.altitude,
         positionService: _positionService,
-        weather: weather,
         raHours: raH,
         declinationDeg: decD,
         lightPollutionScore: lightPollutionScore,
-        targetWeatherScore: targetWeatherScore,
         moonCoordinates: moonCoordinates,
       );
       slotScores[slotStart] = score;
       pointBySlot.putIfAbsent(slotStart, () => point);
 
-      final inSiteWindow =
-          siteWindow == null || siteWindow.containsTime(point.time);
-      if (inSiteWindow && score > bestScore) {
+      // A site-level weather window is advisory. It must not remove an
+      // otherwise valid astronomical target slot from consideration.
+      if (score > bestScore) {
         bestScore = score;
         bestPoint = point;
       }
@@ -489,7 +475,6 @@ class ObservationWindowPerformance {
 }
 
 class ObservationWindowSharedCache {
-  final Map<DateTime, double> _targetWeatherScores = {};
   final Map<DateTime, EquatorialCoordinates> _moonCoordinates = {};
 
   EquatorialCoordinates moonCoordinates({
@@ -499,21 +484,6 @@ class ObservationWindowSharedCache {
     return _moonCoordinates.putIfAbsent(
       evaluationTime,
       () => positionService.getMoonEquatorial(evaluationTime),
-    );
-  }
-
-  double targetWeatherScore({
-    required ObservationContext context,
-    required DateTime evaluationTime,
-    required ObservationWeather? weather,
-  }) {
-    return _targetWeatherScores.putIfAbsent(
-      evaluationTime,
-      () => ObservationScoreService.calculateTargetWeatherScore(
-        context: context,
-        evaluationTime: evaluationTime,
-        weather: weather,
-      ),
     );
   }
 }

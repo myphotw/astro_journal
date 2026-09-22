@@ -24,5 +24,7 @@ void main() {
     expect(find.text('LDN'), findsOneWidget);
     expect(find.text('LBN'), findsOneWidget);
     expect(find.byType(CheckboxListTile), findsNWidgets(11));
+    expect(find.text('미촬영 우선'), findsNothing);
+    expect(find.text('혼합'), findsNothing);
   });
 }

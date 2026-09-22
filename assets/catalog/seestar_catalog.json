@@ -1623,6 +1623,29 @@
     "description": "오리온자리에 위치한 발광성운. Alnilam."
   },
   {
+    "id": "NGC2024",
+    "number": 2024,
+    "catalog": "ngc",
+    "displayName": "NGC 2024",
+    "commonName": "불꽃 성운",
+    "name": "불꽃 성운",
+    "objectType": "발광성운",
+    "type": "발광성운",
+    "constellation": "오리온자리",
+    "ra": "05h 41m 42.57s",
+    "dec": "-01°51'22.6\"",
+    "magnitude": "-",
+    "seestarSupported": true,
+    "aliases": [
+      "Flame Nebula",
+      "Sh2-277"
+    ],
+    "angularSize": "30.00'",
+    "peakMonth": 12,
+    "bestSeason": "최적 12월 · 겨울 (12~2월)",
+    "description": "오리온자리에 위치한 발광성운. 불꽃 성운."
+  },
+  {
     "id": "NGC2052",
     "number": 2052,
     "catalog": "ngc",

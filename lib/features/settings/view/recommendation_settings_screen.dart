@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/object_type.dart';
-import '../../../core/constants/recommendation_priority_mode.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/home/viewmodel/home_view_model.dart';
@@ -40,7 +39,6 @@ class _RecommendationSettingsScreenState
 
   late Set<CatalogType> _enabledCatalogs;
   late Set<ObjectType> _enabledObjectTypes;
-  late RecommendationPriorityMode _priorityMode;
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -63,7 +61,6 @@ class _RecommendationSettingsScreenState
     setState(() {
       _enabledCatalogs = Set.of(settings.enabledCatalogs);
       _enabledObjectTypes = Set.of(settings.enabledObjectTypes);
-      _priorityMode = settings.priorityMode;
       _isLoading = false;
     });
   }
@@ -83,7 +80,6 @@ class _RecommendationSettingsScreenState
         azimuthEnd: 359,
         minAltitude: 0,
         maxAltitude: 90,
-        priorityMode: _priorityMode,
       );
       await context.read<RecommendationSettingsService>().save(settings);
       if (!mounted) return;
@@ -148,8 +144,6 @@ class _RecommendationSettingsScreenState
                 _buildCatalogSection(),
                 const SizedBox(height: AppTheme.spacingXl),
                 _buildObjectTypeSection(),
-                const SizedBox(height: AppTheme.spacingXl),
-                _buildPrioritySection(),
                 const SizedBox(height: AppTheme.spacingXl),
                 _buildNote(),
               ],
@@ -226,68 +220,6 @@ class _RecommendationSettingsScreenState
     );
   }
 
-  // ── 추천 우선순위 ────────────────────────────────────────────────────────
-
-  Widget _buildPrioritySection() {
-    return _Section(
-      icon: Icons.sort_outlined,
-      title: '추천 우선순위',
-      subtitle: '홈 화면 추천 목록의 정렬 기준을 선택합니다.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SegmentedButton<RecommendationPriorityMode>(
-            segments: RecommendationPriorityMode.values
-                .map(
-                  (mode) => ButtonSegment<RecommendationPriorityMode>(
-                    value: mode,
-                    label: Text(
-                      mode.label,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                )
-                .toList(),
-            selected: {_priorityMode},
-            onSelectionChanged: (selection) {
-              setState(() => _priorityMode = selection.first);
-            },
-            style: ButtonStyle(
-              foregroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return AppColors.background;
-                }
-                return AppColors.textPrimary;
-              }),
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return AppColors.messier;
-                }
-                return AppColors.surface;
-              }),
-            ),
-          ),
-          const SizedBox(height: AppTheme.spacingSm),
-          Text(
-            _priorityModeDescription(_priorityMode),
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _priorityModeDescription(RecommendationPriorityMode mode) {
-    return switch (mode) {
-      RecommendationPriorityMode.uncapturedFirst => '미촬영 대상을 항상 먼저 표시합니다.',
-      RecommendationPriorityMode.scoreFirst => '추천 점수가 높은 대상을 우선합니다.',
-      RecommendationPriorityMode.mixed => '점수와 미촬영 여부를 함께 반영합니다.',
-    };
-  }
-
   Widget _buildNote() {
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingMd),
@@ -311,7 +243,7 @@ class _RecommendationSettingsScreenState
           Text(
             '• 관측 방향과 고도는 현재 전역 제한 없이 계산합니다.\n'
             '• 관측지 Horizon 반영은 다음 단계에서 제공됩니다.\n'
-            '• 추천 우선순위는 미촬영·점수·촬영시간 등을 반영합니다.\n'
+            '• 촬영 이력은 추천 제외 또는 순위 기준으로 사용하지 않습니다.\n'
             '• 조건을 벗어난 대상은 추천에서 제외됩니다.\n'
             '• 저장 후 추천 목록이 즉시 갱신됩니다.',
             style: TextStyle(

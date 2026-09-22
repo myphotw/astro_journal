@@ -149,6 +149,30 @@ void main() {
     expect(blocked.isAvailable, isFalse);
   });
 
+  test('directional Horizon replaces legacy site-wide altitude bounds', () {
+    final result = service.findToday(
+      object: _m16,
+      reference: _reference(),
+      site: _site.copyWith(
+        defaultMinAltitude: 90,
+        defaultMaxAltitude: 90,
+        horizonPoints: const [
+          HorizonPoint(
+            id: 'physical-horizon',
+            observationSiteId: _siteId,
+            azimuth: 0,
+            minAltitude: 0,
+            maxAltitude: 90,
+          ),
+        ],
+      ),
+      equipment: _equipment,
+      today: DateTime(2026, 7, 16),
+    );
+
+    expect(result.isAvailable, isTrue);
+  });
+
   test('directional maximum altitude makes an exact HA unavailable', () {
     final result = service.findToday(
       object: _m16,

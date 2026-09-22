@@ -346,19 +346,11 @@ class ObservationScoreService {
     required DateTime evaluationTime,
     required double altitude,
     required CelestialPositionService positionService,
-    ObservationWeather? weather,
     double? raHours,
     double? declinationDeg,
     double? lightPollutionScore,
-    double? targetWeatherScore,
     EquatorialCoordinates? moonCoordinates,
   }) {
-    final slotWeather =
-        weather ??
-        context.sessionWeather?.weatherAt(
-          _alignToTenMinuteSlot(evaluationTime),
-        );
-
     final altitudeScore = _altitudeScore(altitude);
     final moon = raHours == null || declinationDeg == null
         ? _moonScore.calculate(
@@ -378,18 +370,14 @@ class ObservationScoreService {
     final lightPollution =
         lightPollutionScore ??
         _lightPollutionScore.calculate(context: context, profile: profile);
-    final weatherScore =
-        targetWeatherScore ??
-        calculateTargetWeatherScore(
-          context: context,
-          evaluationTime: evaluationTime,
-          weather: slotWeather,
-        );
-
-    return (altitudeScore * ObservationScoreWeights.altitude +
-            moon * ObservationScoreWeights.moon +
-            lightPollution * ObservationScoreWeights.lightPollution +
-            weatherScore * ObservationScoreWeights.weather)
+    const astronomicalWeight =
+        ObservationScoreWeights.altitude +
+        ObservationScoreWeights.moon +
+        ObservationScoreWeights.lightPollution;
+    return ((altitudeScore * ObservationScoreWeights.altitude +
+                moon * ObservationScoreWeights.moon +
+                lightPollution * ObservationScoreWeights.lightPollution) /
+            astronomicalWeight)
         .clamp(0.0, 100.0);
   }
 
@@ -741,27 +729,38 @@ class ObservationScoreService {
   ) {
     const sunsetHours = [17, 17, 18, 19, 19, 19, 19, 19, 18, 17, 17, 17];
     const sunriseHours = [7, 7, 6, 6, 5, 5, 5, 5, 6, 6, 7, 7];
-    final monthIndex = now.month - 1;
+
+    ({DateTime nightStart, DateTime nightEnd}) windowForEvening(
+      DateTime eveningDate,
+    ) {
+      final nextDay = eveningDate.add(const Duration(days: 1));
+      final sunset = DateTime(
+        eveningDate.year,
+        eveningDate.month,
+        eveningDate.day,
+        sunsetHours[eveningDate.month - 1],
+        30,
+      );
+      final sunrise = DateTime(
+        nextDay.year,
+        nextDay.month,
+        nextDay.day,
+        sunriseHours[nextDay.month - 1],
+        30,
+      );
+      return (
+        nightStart: observationStartTime(sunset),
+        nightEnd: observationEndTime(sunrise),
+      );
+    }
+
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final sunset = DateTime(
-      today.year,
-      today.month,
-      today.day,
-      sunsetHours[monthIndex],
-      30,
+    final previousNight = windowForEvening(
+      today.subtract(const Duration(days: 1)),
     );
-    final sunrise = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      sunriseHours[monthIndex],
-      30,
-    );
-    return (
-      nightStart: observationStartTime(sunset),
-      nightEnd: observationEndTime(sunrise),
-    );
+    if (!now.isAfter(previousNight.nightEnd)) return previousNight;
+
+    return windowForEvening(today);
   }
 
   static ({DateTime nightStart, DateTime nightEnd}) observationNightWindow({

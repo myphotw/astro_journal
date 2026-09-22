@@ -512,6 +512,7 @@ String? _commonNameForGroup(
     'IC1805': '하트 성운',
     'IC1848': '영혼 성운',
     'NGC7000': '북아메리카 성운',
+    'NGC2024': '불꽃 성운',
     'IC434': '말머리 성운',
     'NGC6960': '서쪽 베일 성운',
     'NGC6992': '동쪽 베일 성운',
@@ -651,6 +652,7 @@ List<String> _finalizeAliases(String canonicalId, List<String> aliases) {
     'IC1805': ['하트', 'Heart Nebula', 'Heart'],
     'IC1848': ['영혼', 'Soul Nebula', 'Soul'],
     'NGC7000': ['북아메리카', 'North America Nebula', 'C20', 'Caldwell 20'],
+    'NGC2024': ['불꽃 성운', 'Flame Nebula', 'Sh2-277'],
   };
   if (extra.containsKey(canonicalId)) {
     set.addAll(extra[canonicalId]!);
@@ -665,7 +667,6 @@ Map<int, int> _buildMessierNgcMap() {
     598: 33,
     1952: 1,
     1976: 42,
-    2024: 42, // M43 region - keep M42
     3031: 81,
     3034: 82,
     4594: 104,

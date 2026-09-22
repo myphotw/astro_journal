@@ -9,6 +9,64 @@ import 'package:astro_journal/shared/widgets/catalog_imaging_availability_sectio
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+Future<void> _pumpAvailabilityWindow(
+  WidgetTester tester, {
+  required CatalogObject object,
+  required List<ObservationSite> sites,
+  required DateTime referenceDate,
+  required DateTime start,
+  required DateTime end,
+  DateTime? optimalStart,
+  DateTime? optimalEnd,
+  ShootingTimeWindow? usableWindow,
+}) async {
+  final effectiveOptimalStart = optimalStart ?? start;
+  final effectiveOptimalEnd = optimalEnd ?? end;
+  final recommendation = RecommendationResult(
+    object: object,
+    reasons: const [],
+    season: '가을',
+    score: 80,
+    moonSeparation: 90,
+    observationWindow: ObjectObservationWindow(
+      currentAltitude: 35,
+      currentAzimuth: 180,
+      isCurrentlyVisible: true,
+      recommendStartTime: start,
+      optimalStartTime: effectiveOptimalStart,
+      optimalEndTime: effectiveOptimalEnd,
+      observationEndTime: end,
+      totalObservableMinutes: end.difference(start).inMinutes,
+    ),
+  );
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: CatalogImagingAvailabilitySection(
+          sites: sites,
+          selectedSite: sites.first,
+          availability: TargetImagingAvailability(
+            object: object,
+            referenceDate: referenceDate,
+            isAvailableTonight: true,
+            recommendation: recommendation,
+            state: TargetImagingAvailabilityState.sufficientWindow,
+            usableWindow: usableWindow,
+            usableMinutes: usableWindow?.duration.inMinutes,
+          ),
+          isLoading: false,
+          onSelectSite: (_) {},
+        ),
+      ),
+    ),
+  );
+}
+
+Finder _textInAvailabilityRow(String row, String text) => find.descendant(
+  of: find.byKey(Key('availability-today-$row')),
+  matching: find.text(text),
+);
+
 void main() {
   final object = CatalogObject(
     id: 'm31',
@@ -75,11 +133,11 @@ void main() {
       expect(find.text('등록 관측지'), findsOneWidget);
       expect(find.text('촬영 가능성'), findsNothing);
       expect(find.text('집 (Bortle 8)'), findsOneWidget);
-      expect(find.text('관측 가능 구간 없음'), findsOneWidget);
+      expect(find.text('관측 불가'), findsOneWidget);
       expect(find.text('관측 가능 시간 동안 고도가 부족합니다.'), findsOneWidget);
       expect(find.text('오늘 9/3'), findsOneWidget);
       expect(find.text('내일 9/4'), findsOneWidget);
-      expect(find.text('· 기상정보 미반영'), findsOneWidget);
+      expect(find.text('· 기상정보 미반영'), findsNothing);
       expect(
         find.byKey(const Key('catalog-availability-days-row')),
         findsOneWidget,
@@ -97,9 +155,6 @@ void main() {
         find.byKey(const Key('availability-tomorrow-season')),
         findsOneWidget,
       );
-      final tomorrowTop = tester.getTopLeft(find.text('내일 9/4')).dy;
-      final weatherTop = tester.getTopLeft(find.text('· 기상정보 미반영')).dy;
-      expect((tomorrowTop - weatherTop).abs(), lessThanOrEqualTo(2));
       expect(find.text('9월 ~ 2월'), findsNWidgets(2));
       for (final row in const [
         'status',
@@ -181,6 +236,35 @@ void main() {
     expect(find.text('등록된 관측지가 없습니다.'), findsOneWidget);
   });
 
+  testWidgets('hides reason counts and skips weather advice without a window', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CatalogImagingAvailabilitySection(
+            sites: sites,
+            selectedSite: sites.first,
+            availability: TargetImagingAvailability(
+              object: object,
+              referenceDate: DateTime(2026, 9, 3),
+              isAvailableTonight: false,
+              primaryReason: '관측 가능 시간 부족 (1개)',
+              weatherAdvisory: '현재 예보상 촬영 조건이 양호합니다.',
+            ),
+            isLoading: false,
+            onSelectSite: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('관측 가능 시간 부족'), findsOneWidget);
+    expect(find.textContaining('(1개)'), findsNothing);
+    expect(find.text('현재 예보상 촬영 조건이 양호합니다.'), findsNothing);
+    expect(find.text('관측 가능 시간이 없어 기상 조건을 평가하지 않습니다.'), findsOneWidget);
+  });
+
   testWidgets('bad weather remains advice beside astronomical windows', (
     tester,
   ) async {
@@ -225,8 +309,7 @@ void main() {
               usableMinutes: 50,
               minimumMinutes: 30,
               recommendedMinutes: 60,
-              weatherAdvisory:
-                  '구름량 100% 예보가 있습니다. 실제 하늘 상태를 확인해 주세요.',
+              weatherAdvisory: '구름량 100% 예보가 있습니다. 실제 하늘 상태를 확인해 주세요.',
             ),
             isLoading: false,
             onSelectSite: (_) {},
@@ -235,54 +318,175 @@ void main() {
       ),
     );
 
-    expect(find.text('21:10 ~ 04:20'), findsOneWidget);
-    expect(find.text('03:10 ~ 04:00 · 50분'), findsOneWidget);
+    expect(find.text('21:10 ~ 다음 날 04:20'), findsOneWidget);
+    expect(find.text('다음 날 03:10 ~ 04:00 · 50분'), findsOneWidget);
     expect(usableWindow.duration.inMinutes, 50);
-    expect(find.text('천문학적 관측 가능'), findsOneWidget);
-    expect(find.text('실제 촬영 가능'), findsOneWidget);
-    expect(find.text('00:15 ~ 01:35'), findsOneWidget);
-    expect(find.text('기상 의견'), findsOneWidget);
+    expect(find.text('관측 가능 시간 (고도·시야 기준)'), findsOneWidget);
+    expect(find.text('권장 촬영 구간'), findsOneWidget);
+    expect(find.text('다음 날 00:15 ~ 01:35'), findsOneWidget);
+    expect(find.text('기상 참고'), findsOneWidget);
     expect(find.textContaining('실제 하늘 상태를 확인해 주세요.'), findsOneWidget);
+    expect(find.text('관측 가능 시간이 없어 기상 조건을 평가하지 않습니다.'), findsNothing);
     expect(find.text('촬영 불가'), findsNothing);
     expect(find.text('관측 불가'), findsNothing);
   });
 
-  for (final scenario in <({
-    TargetImagingAvailabilityState state,
-    String label,
-    int? usableMinutes,
-    bool hasReference,
-    bool framingMatched,
-  })>[
-    (
-      state: TargetImagingAvailabilityState.noObservableWindow,
-      label: '관측 가능 구간 없음',
-      usableMinutes: null,
-      hasReference: false,
-      framingMatched: false,
-    ),
-    (
-      state: TargetImagingAvailabilityState.shortWindow,
-      label: '촬영 가능 시간이 짧음',
-      usableMinutes: 17,
-      hasReference: false,
-      framingMatched: false,
-    ),
-    (
-      state: TargetImagingAvailabilityState.multiNightAccumulation,
-      label: '동일구도 누적 가능',
-      usableMinutes: 17,
-      hasReference: true,
-      framingMatched: true,
-    ),
-    (
-      state: TargetImagingAvailabilityState.sufficientWindow,
-      label: '최소 촬영시간 충족',
-      usableMinutes: 60,
-      hasReference: false,
-      framingMatched: false,
-    ),
-  ]) {
+  testWidgets('same-date windows keep the compact time-only format', (
+    tester,
+  ) async {
+    await _pumpAvailabilityWindow(
+      tester,
+      object: object,
+      sites: sites,
+      referenceDate: DateTime(2026, 9, 22),
+      start: DateTime(2026, 9, 22, 19),
+      end: DateTime(2026, 9, 22, 22),
+    );
+
+    expect(
+      _textInAvailabilityRow('shooting-window', '19:00 ~ 22:00'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('다음 날'), findsNothing);
+  });
+
+  testWidgets('a window crossing midnight marks only its next-day end', (
+    tester,
+  ) async {
+    await _pumpAvailabilityWindow(
+      tester,
+      object: object,
+      sites: sites,
+      referenceDate: DateTime(2026, 9, 22),
+      start: DateTime(2026, 9, 22, 23),
+      end: DateTime(2026, 9, 23, 1, 30),
+    );
+
+    expect(
+      _textInAvailabilityRow(
+        'shooting-window',
+        '23:00 ~ 다음 날 01:30',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('next-day dawn windows are marked in every window row', (
+    tester,
+  ) async {
+    final start = DateTime(2026, 9, 23, 2);
+    final end = DateTime(2026, 9, 23, 5, 10);
+    await _pumpAvailabilityWindow(
+      tester,
+      object: object,
+      sites: sites,
+      referenceDate: DateTime(2026, 9, 22),
+      start: start,
+      end: end,
+      usableWindow: ShootingTimeWindow(start: start, end: end),
+    );
+
+    expect(
+      _textInAvailabilityRow(
+        'shooting-window',
+        '다음 날 02:00 ~ 05:10',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      _textInAvailabilityRow('optimal-window', '다음 날 02:00 ~ 05:10'),
+      findsOneWidget,
+    );
+    expect(
+      _textInAvailabilityRow(
+        'usable-duration',
+        '다음 날 02:00 ~ 05:10 · 190분',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('month-boundary windows use actual calendar dates', (
+    tester,
+  ) async {
+    await _pumpAvailabilityWindow(
+      tester,
+      object: object,
+      sites: sites,
+      referenceDate: DateTime(2026, 9, 30),
+      start: DateTime(2026, 9, 30, 23),
+      end: DateTime(2026, 10, 1, 1, 30),
+    );
+
+    expect(
+      _textInAvailabilityRow(
+        'shooting-window',
+        '23:00 ~ 다음 날 01:30',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('year-boundary windows use actual calendar dates', (
+    tester,
+  ) async {
+    await _pumpAvailabilityWindow(
+      tester,
+      object: object,
+      sites: sites,
+      referenceDate: DateTime(2026, 12, 31),
+      start: DateTime(2026, 12, 31, 23),
+      end: DateTime(2027, 1, 1, 1, 30),
+    );
+
+    expect(
+      _textInAvailabilityRow(
+        'shooting-window',
+        '23:00 ~ 다음 날 01:30',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  for (final scenario
+      in <
+        ({
+          TargetImagingAvailabilityState state,
+          String label,
+          int? usableMinutes,
+          bool hasReference,
+          bool framingMatched,
+        })
+      >[
+        (
+          state: TargetImagingAvailabilityState.noObservableWindow,
+          label: '관측 불가',
+          usableMinutes: null,
+          hasReference: false,
+          framingMatched: false,
+        ),
+        (
+          state: TargetImagingAvailabilityState.shortWindow,
+          label: '시간 부족',
+          usableMinutes: 17,
+          hasReference: false,
+          framingMatched: false,
+        ),
+        (
+          state: TargetImagingAvailabilityState.multiNightAccumulation,
+          label: '시간 부족 · 동일구도 누적 가능',
+          usableMinutes: 17,
+          hasReference: true,
+          framingMatched: true,
+        ),
+        (
+          state: TargetImagingAvailabilityState.sufficientWindow,
+          label: '가능',
+          usableMinutes: 60,
+          hasReference: false,
+          framingMatched: false,
+        ),
+      ]) {
     testWidgets('renders semantic availability state: ${scenario.label}', (
       tester,
     ) async {
@@ -320,21 +524,15 @@ void main() {
 
       expect(textInTodayRow('status', scenario.label), findsOneWidget);
       expect(find.text('촬영 불가'), findsNothing);
-      expect(
-        textInTodayRow('minimum-duration', '일반 최소 기준'),
-        findsOneWidget,
-      );
+      if (scenario.state == TargetImagingAvailabilityState.shortWindow) {
+        expect(find.text('연속 촬영시간을 충분히 확보하기 어렵습니다.'), findsOneWidget);
+      }
+      expect(textInTodayRow('minimum-duration', '일반 최소 기준'), findsOneWidget);
       expect(textInTodayRow('minimum-duration', '30분'), findsOneWidget);
-      expect(
-        textInTodayRow('recommended-duration', '권장 촬영시간'),
-        findsOneWidget,
-      );
+      expect(textInTodayRow('recommended-duration', '권장 촬영시간'), findsOneWidget);
       expect(textInTodayRow('recommended-duration', '60분'), findsOneWidget);
       if (scenario.usableMinutes != null) {
-        expect(
-          textInTodayRow('usable-duration', '실제 촬영 가능'),
-          findsOneWidget,
-        );
+        expect(textInTodayRow('usable-duration', '권장 촬영 구간'), findsOneWidget);
         expect(
           textInTodayRow('usable-duration', '${scenario.usableMinutes}분'),
           findsOneWidget,
@@ -399,7 +597,7 @@ void main() {
 
       expect(find.text('오늘 9/3'), findsOneWidget);
       expect(find.text('내일 9/4'), findsOneWidget);
-      expect(find.text('· 기상정보 미반영'), findsOneWidget);
+      expect(find.text('· 기상정보 미반영'), findsNothing);
       expect(find.text('8월 ~ 2월'), findsNWidgets(2));
       expect(find.text('10월 ~ 12월'), findsNWidgets(2));
       if (!scenario.tomorrow) {

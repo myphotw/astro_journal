@@ -123,7 +123,7 @@ class DatabaseConstants {
   static const String colPixelY = 'pixel_y';
 
   /// 카탈로그 데이터 변경 시 증가 (import 재실행 트리거).
-  static const int catalogDataVersion = 30;
+  static const int catalogDataVersion = 31;
 
   /// 카탈로그 목록용 경량 컬럼 (상세/메타데이터 제외).
   static const List<String> celestialObjectListColumns = [

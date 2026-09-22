@@ -1006,8 +1006,7 @@
       "Orion Nebula",
       "LBN 974",
       "MWSC 0582",
-      "Orion",
-      "NGC2024"
+      "Orion"
     ],
     "peakMonth": 12,
     "bestSeason": "최적 12월 · 겨울 (12~2월)",
@@ -1015,7 +1014,6 @@
     "description": "오리온자리에 위치한 성단과 성운. 오리온 성운.",
     "crossCatalogRefs": [
       "NGC 1976",
-      "NGC2024",
       "LBN 974",
       "MWSC 0582"
     ]

@@ -77,10 +77,31 @@ class TargetImagingAvailability {
 
   String get tonightStatusLabel {
     return switch (effectiveState) {
-      TargetImagingAvailabilityState.noObservableWindow => '관측 가능 구간 없음',
-      TargetImagingAvailabilityState.shortWindow => '촬영 가능 시간이 짧음',
-      TargetImagingAvailabilityState.multiNightAccumulation => '동일구도 누적 가능',
-      TargetImagingAvailabilityState.sufficientWindow => '최소 촬영시간 충족',
+      TargetImagingAvailabilityState.noObservableWindow => '관측 불가',
+      TargetImagingAvailabilityState.shortWindow => '시간 부족',
+      TargetImagingAvailabilityState.multiNightAccumulation =>
+        '시간 부족 · 동일구도 누적 가능',
+      TargetImagingAvailabilityState.sufficientWindow => '가능',
     };
+  }
+
+  String? get statusReason {
+    final reason = switch (effectiveState) {
+      TargetImagingAvailabilityState.noObservableWindow =>
+        primaryReason ?? '오늘은 고도·방위·시야 조건을 만족하는 시간대가 없습니다.',
+      TargetImagingAvailabilityState.shortWindow => '연속 촬영시간을 충분히 확보하기 어렵습니다.',
+      TargetImagingAvailabilityState.multiNightAccumulation =>
+        '오늘은 연속 촬영시간이 부족하지만 같은 구도로 여러 날 누적할 수 있습니다.',
+      TargetImagingAvailabilityState.sufficientWindow => null,
+    };
+    return reason?.replaceFirst(RegExp(r'\s*\(\d+개\)$'), '');
+  }
+
+  String? get displayWeatherAdvisory {
+    if (effectiveState == TargetImagingAvailabilityState.noObservableWindow ||
+        window == null) {
+      return '관측 가능 시간이 없어 기상 조건을 평가하지 않습니다.';
+    }
+    return weatherAdvisory;
   }
 }

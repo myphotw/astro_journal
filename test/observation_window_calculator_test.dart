@@ -1,13 +1,16 @@
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
+import 'package:astro_journal/data/models/observation_feasibility_result.dart';
 import 'package:astro_journal/data/models/observation_context.dart';
 import 'package:astro_journal/data/models/horizon_point.dart';
+import 'package:astro_journal/data/models/observation_quality_index.dart';
 import 'package:astro_journal/data/models/site_horizon_profile.dart';
 import 'package:astro_journal/data/models/tonight_observation_session.dart';
 import 'package:astro_journal/data/models/weather_forecast_slot.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
+import 'package:astro_journal/services/observation_score_service.dart';
 import 'package:astro_journal/services/recommendation/observation_window_calculator.dart';
 import 'package:astro_journal/services/recommendation_settings_service.dart';
 import 'package:astro_journal/services/session_weather_index.dart';
@@ -35,6 +38,31 @@ void main() {
         dec: dec,
         magnitude: '5.0',
       );
+    }
+
+    ObservationWindow buildSiteWeatherWindow(List<DateTime> times) {
+      final slots = times.map((time) {
+        final forecast = WeatherForecastSlot(
+          time: time,
+          temperature: 20,
+          humidity: 50,
+          windSpeed: 1,
+          cloudCoverage: 0,
+          visibility: 10000,
+          pop: 0,
+          description: '맑음',
+          icon: '01n',
+        );
+        return TonightObservationSlot(
+          label: ObservationScoreService.formatHourLabel(time),
+          targetTime: time,
+          forecast: forecast,
+          moon: ObservationScoreService.computeMoonInfo(time),
+          feasibility: const ObservationFeasibilityResult.observable(),
+          qualityIndex: const ObservationQualityIndex(oqi: 90, components: []),
+        );
+      }).toList();
+      return ObservationScoreService.findObservationWindow(slots)!;
     }
 
     test('uses quality-based optimal time within altitude constraints', () {
@@ -232,6 +260,126 @@ void main() {
       expect(result.window!.optimalFeasibleWindSpeed, 18);
       expect(result.window!.hasWeatherData, isTrue);
     });
+
+    test(
+      'site weather window outside target visibility does not erase target',
+      () {
+        final object = buildObject(
+          id: 'm42-dawn',
+          ra: '05h 35m',
+          dec: '-05° 23m',
+        );
+        final profile = profileProvider.profileFor(object);
+        final session = TonightObservationSession(
+          start: DateTime(2026, 9, 22, 19),
+          end: DateTime(2026, 9, 23, 5),
+        );
+        final baseContext = ObservationContext(
+          latitude: 37.5,
+          longitude: 127,
+          bortle: 9,
+          moonIllumination: 0.1,
+          moonAltitude: -10,
+          moonAzimuth: 180,
+          cloudCover: 0,
+          observationStart: session.start,
+          observationEnd: session.end,
+          currentTime: session.start,
+        );
+
+        ObservationWindowCalculation calculate(ObservationContext context) =>
+            calculator.calculate(
+              object: object,
+              profile: profile,
+              context: context,
+              settings: RecommendationSettings.defaults,
+              session: session,
+              referenceTime: session.start,
+              minimumExposure: const Duration(minutes: 30),
+              recommendedExposure: const Duration(minutes: 60),
+            );
+
+        final withoutSiteWindow = calculate(baseContext);
+        expect(withoutSiteWindow.window, isNotNull);
+
+        final withDisjointSiteWindow = calculate(
+          baseContext.copyWith(
+            observationWindow: buildSiteWeatherWindow([
+              DateTime(2026, 9, 22, 19),
+              DateTime(2026, 9, 22, 20),
+            ]),
+          ),
+        );
+
+        expect(
+          withDisjointSiteWindow.exclusion,
+          ObservationWindowExclusion.none,
+        );
+        expect(withDisjointSiteWindow.window, isNotNull);
+        expect(
+          withDisjointSiteWindow.window!.geometricSlotStarts,
+          withoutSiteWindow.window!.geometricSlotStarts,
+        );
+      },
+    );
+
+    test(
+      'short site weather overlap does not replace sufficient target window',
+      () {
+        final object = buildObject(
+          id: 'm42-partial-weather',
+          ra: '05h 35m',
+          dec: '-05° 23m',
+        );
+        final profile = profileProvider.profileFor(object);
+        final session = TonightObservationSession(
+          start: DateTime(2026, 9, 22, 19),
+          end: DateTime(2026, 9, 23, 5),
+        );
+        final context = ObservationContext(
+          latitude: 37.5,
+          longitude: 127,
+          bortle: 9,
+          moonIllumination: 0.1,
+          moonAltitude: -10,
+          moonAzimuth: 180,
+          cloudCover: 0,
+          observationStart: session.start,
+          observationEnd: session.end,
+          currentTime: session.start,
+        );
+
+        ObservationWindowCalculation calculate(ObservationContext value) =>
+            calculator.calculate(
+              object: object,
+              profile: profile,
+              context: value,
+              settings: RecommendationSettings.defaults,
+              session: session,
+              referenceTime: session.start,
+              minimumExposure: const Duration(minutes: 30),
+              recommendedExposure: const Duration(minutes: 60),
+            );
+
+        final baseline = calculate(context);
+        expect(baseline.window, isNotNull);
+        final oneVisibleSlot = baseline.window!.geometricSlotStarts.first;
+
+        final result = calculate(
+          context.copyWith(
+            observationWindow: buildSiteWeatherWindow([oneVisibleSlot]),
+          ),
+        );
+
+        expect(result.exclusion, ObservationWindowExclusion.none);
+        expect(result.window, isNotNull);
+        expect(result.window!.totalObservableMinutes, greaterThanOrEqualTo(30));
+        expect(
+          result.window!.geometricSlotStarts,
+          baseline.window!.geometricSlotStarts,
+        );
+      },
+    );
 
     test('site horizon excludes a target below the physical skyline', () {
       final object = buildObject(id: 'm8', ra: '18h 03m', dec: '-24° 23m');

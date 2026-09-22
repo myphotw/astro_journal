@@ -37,8 +37,7 @@ class LocationWeatherInfo {
   bool get isObservationFeasible =>
       observationStatus != ObservationStatus.unavailable;
 
-  String get starsText =>
-      '${'★' * starCount}${'☆' * (5 - starCount)}';
+  String get starsText => '${'★' * starCount}${'☆' * (5 - starCount)}';
 
   String? get statusPrimaryReason => statusMessage;
 
@@ -53,14 +52,12 @@ class LocationWeatherInfo {
 
   String get statusMessageText {
     if (!isObservationFeasible) {
-      return statusMessage ??
-          statusPrimaryReason ??
-          observationStatus.headline;
+      return statusMessage ?? statusPrimaryReason ?? observationStatus.headline;
     }
 
     return switch (observationStatus) {
       ObservationStatus.good => observationStatus.headline,
-      ObservationStatus.limited => observationStatus.limitedRecommendationNotice,
+      ObservationStatus.limited => observationStatus.headline,
       ObservationStatus.unavailable => observationStatus.headline,
     };
   }
@@ -125,7 +122,8 @@ class LocationWeatherInfo {
         ? 0
         : (summary?.finalScore ?? 0);
     final starCount = status.homeStarCount;
-    final statusMessage = context.statusUserMessage ?? context.statusPrimaryReason;
+    final statusMessage =
+        context.statusUserMessage ?? context.statusPrimaryReason;
 
     final nearest = summary?.slots.isNotEmpty == true
         ? _nearestSlot(summary!.slots, now ?? DateTime.now())
@@ -134,8 +132,8 @@ class LocationWeatherInfo {
     return LocationWeatherInfo(
       temperature: current.temperature,
       starCount: starCount,
-      cloudCoverage: summary?.averageCloudCoverage.round() ??
-          current.cloudCoverage,
+      cloudCoverage:
+          summary?.averageCloudCoverage.round() ?? current.cloudCoverage,
       precipitationProbability:
           summary?.averagePrecipitationPop ?? nearest?.forecast.pop ?? 0,
       windSpeed: summary?.averageWindSpeed ?? current.windSpeed,

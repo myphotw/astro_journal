@@ -58,6 +58,78 @@ void main() {
     });
   });
 
+  group('estimatedNightWindow observing-night boundary', () {
+    test('afternoon and evening use the upcoming observing night', () {
+      for (final now in [
+        DateTime(2026, 9, 22, 13),
+        DateTime(2026, 9, 22, 21),
+      ]) {
+        final window = ObservationScoreService.estimatedNightWindow(now);
+
+        expect(window.nightStart, DateTime(2026, 9, 22, 19));
+        expect(window.nightEnd, DateTime(2026, 9, 23, 5));
+      }
+    });
+
+    test('after midnight and pre-dawn keep the active observing night', () {
+      for (final now in [
+        DateTime(2026, 9, 23, 0, 30),
+        DateTime(2026, 9, 23, 4),
+      ]) {
+        final window = ObservationScoreService.estimatedNightWindow(now);
+
+        expect(window.nightStart, DateTime(2026, 9, 22, 19));
+        expect(window.nightEnd, DateTime(2026, 9, 23, 5));
+      }
+    });
+
+    test('night end is inclusive and switches immediately afterward', () {
+      final nightEnd = DateTime(2026, 9, 23, 5);
+      final beforeBoundary = ObservationScoreService.estimatedNightWindow(
+        nightEnd.subtract(const Duration(microseconds: 1)),
+      );
+      final atBoundary = ObservationScoreService.estimatedNightWindow(nightEnd);
+      final afterBoundary = ObservationScoreService.estimatedNightWindow(
+        nightEnd.add(const Duration(microseconds: 1)),
+      );
+
+      expect(beforeBoundary.nightStart, DateTime(2026, 9, 22, 19));
+      expect(beforeBoundary.nightEnd, nightEnd);
+      expect(atBoundary.nightStart, DateTime(2026, 9, 22, 19));
+      expect(atBoundary.nightEnd, nightEnd);
+      expect(afterBoundary.nightStart, DateTime(2026, 9, 23, 19));
+      expect(afterBoundary.nightEnd, DateTime(2026, 9, 24, 5));
+    });
+
+    test('uses each date month across month and year boundaries', () {
+      final monthBoundary = ObservationScoreService.estimatedNightWindow(
+        DateTime(2026, 10, 1, 4),
+      );
+      final yearBoundary = ObservationScoreService.estimatedNightWindow(
+        DateTime(2027, 1, 1, 4),
+      );
+
+      expect(monthBoundary.nightStart, DateTime(2026, 9, 30, 19));
+      expect(monthBoundary.nightEnd, DateTime(2026, 10, 1, 5));
+      expect(yearBoundary.nightStart, DateTime(2026, 12, 31, 18));
+      expect(yearBoundary.nightEnd, DateTime(2027, 1, 1, 6));
+    });
+
+    test('pre-dawn weather and fallback windows select the same night', () {
+      final now = DateTime(2026, 9, 23, 4);
+      final fallback = ObservationScoreService.estimatedNightWindow(now);
+      final weather = ObservationScoreService.observationNightWindow(
+        now: now,
+        sunrise: DateTime(2026, 9, 23, 6, 30),
+        sunset: DateTime(2026, 9, 23, 18, 30),
+      );
+
+      expect(fallback, weather);
+      expect(fallback.nightStart, DateTime(2026, 9, 22, 19));
+      expect(fallback.nightEnd, DateTime(2026, 9, 23, 5));
+    });
+  });
+
   group('ObservationQualityService cloud quality', () {
     test('maps DSO cloud tiers at breakpoints', () {
       expect(ObservationQualityService.cloudQuality(0), 100);

@@ -9,9 +9,8 @@ import 'recommendation_settings_service.dart';
 
 /// Single source of truth for whether a slot can be used for imaging.
 class ObservationFeasibilityPolicy {
-  const ObservationFeasibilityPolicy({
-    ExposurePolicy? exposurePolicy,
-  }) : _exposurePolicy = exposurePolicy ?? const ExposurePolicy();
+  const ObservationFeasibilityPolicy({ExposurePolicy? exposurePolicy})
+    : _exposurePolicy = exposurePolicy ?? const ExposurePolicy();
 
   final ExposurePolicy _exposurePolicy;
 
@@ -126,9 +125,7 @@ class ObservationFeasibilityPolicy {
             ? '구름량 ${forecast.cloudCoverage}%'
             : '구름량이 높음',
       ObservationFeasibilityReason.rainProbability =>
-        forecast == null
-            ? '강수 확률이 높음'
-            : '강수 확률 ${forecast.pop.round()}%',
+        forecast == null ? '강수 확률이 높음' : '강수 확률 ${forecast.pop.round()}%',
       ObservationFeasibilityReason.visibilityTooLow =>
         forecast == null
             ? '가시거리가 낮음'
@@ -178,9 +175,7 @@ class ObservationFeasibilityPolicy {
       }
     }
 
-    final top = counts.entries.reduce(
-      (a, b) => a.value >= b.value ? a : b,
-    );
+    final top = counts.entries.reduce((a, b) => a.value >= b.value ? a : b);
     return formatReason(
       top.key,
       forecast: sampleForecast,
@@ -201,10 +196,7 @@ class ObservationFeasibilityPolicy {
     if (primary == null) {
       return const ['조건을 만족하는 추천 대상이 없습니다'];
     }
-    return [
-      '오늘 밤은 촬영 가능한 시간이 없습니다.',
-      '대표 원인: $primary',
-    ];
+    return ['오늘 밤은 촬영 가능한 시간이 없습니다.', primary];
   }
 
   static String? buildWeatherAdvisory({
@@ -218,8 +210,17 @@ class ObservationFeasibilityPolicy {
       representativeCloudCoverage: representativeCloudCoverage,
     );
     if (primary == null) return null;
+    if (primary.contains('강수')) {
+      return '비 또는 눈이 예상됩니다. 관측 전 실제 기상 상태를 확인해 주세요.';
+    }
     if (primary == '구름량이 높음') {
-      return '구름량이 높게 예보되었습니다. 실제 하늘 상태를 확인해 주세요.';
+      return '오늘은 구름이 많아 관측을 추천드리지 않습니다. 실제 하늘 상태를 확인해 주세요.';
+    }
+    if (primary.contains('풍속')) {
+      return '바람이 강할 것으로 예상됩니다. 촬영 시 흔들림에 주의해 주세요.';
+    }
+    if (primary.contains('가시거리')) {
+      return '가시거리가 낮을 것으로 예상됩니다. 실제 하늘 상태를 확인해 주세요.';
     }
     return '$primary 예보가 있습니다. 실제 하늘 상태를 확인해 주세요.';
   }

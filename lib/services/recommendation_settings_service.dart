@@ -13,7 +13,7 @@ class RecommendationSettings {
     required this.minAltitude,
     required this.maxAltitude,
     this.enabledObjectTypes = const {},
-    this.priorityMode = RecommendationPriorityMode.uncapturedFirst,
+    this.priorityMode = RecommendationPriorityMode.scoreFirst,
   });
 
   /// 추천에 포함할 카탈로그 집합.
@@ -95,7 +95,6 @@ class RecommendationSettings {
 class RecommendationSettingsService {
   static const _keyCatalogs = 'rec_catalogs_v1';
   static const _keyObjectTypes = 'rec_object_types_v1';
-  static const _keyPriorityMode = 'rec_priority_mode_v1';
 
   Future<RecommendationSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -116,9 +115,7 @@ class RecommendationSettingsService {
     }
 
     final objectTypes = (prefs.getStringList(_keyObjectTypes) ?? const [])
-        .map(
-          (value) => ObjectType.values.where((type) => type.name == value),
-        )
+        .map((value) => ObjectType.values.where((type) => type.name == value))
         .where((matches) => matches.isNotEmpty)
         .map((matches) => matches.first)
         .toSet();
@@ -133,9 +130,9 @@ class RecommendationSettingsService {
       // Site Horizon 연동 전에는 과거 전역 고도 제한을 적용하지 않는다.
       minAltitude: 0,
       maxAltitude: 90,
-      priorityMode: RecommendationPriorityMode.fromStorageValue(
-        prefs.getString(_keyPriorityMode),
-      ),
+      // Legacy capture-history priority preferences no longer affect tonight's
+      // recommendation order.
+      priorityMode: RecommendationPriorityMode.scoreFirst,
     );
   }
 
@@ -149,6 +146,5 @@ class RecommendationSettingsService {
       _keyObjectTypes,
       settings.enabledObjectTypes.map((type) => type.name).toList(),
     );
-    await prefs.setString(_keyPriorityMode, settings.priorityMode.storageValue);
   }
 }

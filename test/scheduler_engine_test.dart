@@ -208,13 +208,14 @@ void main() {
       expect(result.items, hasLength(1));
     });
 
-    test('unavailable weather preserves slots but suppresses auto schedule', () {
+    test('unavailable weather does not suppress auto schedule', () {
       final start = DateTime(2026, 7, 1, 20);
       final end = DateTime(2026, 7, 2, 0, 30);
       final session = buildSession(start: start, end: end);
-      final context = buildContext(start: start, end: end).copyWith(
-        observationStatus: ObservationStatus.unavailable,
-      );
+      final context = buildContext(
+        start: start,
+        end: end,
+      ).copyWith(observationStatus: ObservationStatus.unavailable);
       final target = buildTarget();
 
       final result = engine.buildSchedule(
@@ -229,8 +230,8 @@ void main() {
 
       expect(result.slots, isNotEmpty);
       expect(result.targets, hasLength(1));
-      expect(result.items, isEmpty);
-      expect(result.emptyMessage, SchedulerEngine.weatherLimitedMessage);
+      expect(result.items, hasLength(1));
+      expect(result.emptyMessage, isNull);
     });
 
     test('skips assignment when window is shorter than minimum exposure', () {
@@ -534,15 +535,15 @@ void main() {
       );
 
       ScoredObservationTarget targetFor(DateTime dayStart) => buildTarget(
-            windowStart: dayStart,
-            minimumExposure: const Duration(minutes: 30),
-            recommendedExposure: const Duration(minutes: 30),
-            imagingAssessment: assessment(
-              trackingMode: TrackingMode.altAz,
-              dailyDuration: const Duration(minutes: 30),
-              preferredHaWindow: preferredWindow,
-            ),
-          );
+        windowStart: dayStart,
+        minimumExposure: const Duration(minutes: 30),
+        recommendedExposure: const Duration(minutes: 30),
+        imagingAssessment: assessment(
+          trackingMode: TrackingMode.altAz,
+          dailyDuration: const Duration(minutes: 30),
+          preferredHaWindow: preferredWindow,
+        ),
+      );
 
       final firstTarget = targetFor(DateTime(2026, 7, 1, 21));
       final secondTarget = targetFor(DateTime(2026, 7, 2, 20, 50));
@@ -551,9 +552,7 @@ void main() {
           context: firstContext,
           session: firstSession,
           targets: [firstTarget],
-          resultsById: {
-            firstTarget.object.id: buildResult(firstTarget),
-          },
+          resultsById: {firstTarget.object.id: buildResult(firstTarget)},
           referenceTime: firstSession.start,
         ),
       );
@@ -562,9 +561,7 @@ void main() {
           context: secondContext,
           session: secondSession,
           targets: [secondTarget],
-          resultsById: {
-            secondTarget.object.id: buildResult(secondTarget),
-          },
+          resultsById: {secondTarget.object.id: buildResult(secondTarget)},
           referenceTime: secondSession.start,
         ),
       );

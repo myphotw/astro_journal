@@ -22,11 +22,14 @@ void main() {
     'lib/features/home/viewmodel/home_view_model.dart',
   ).readAsStringSync();
 
-  test('schedule card reads FilterMode from the existing result assessment', () {
-    expect(home, contains('item.result.imagingAssessment?.filterMode'));
-    expect(home, contains("'schedule-filter-"));
-    expect(home, contains("label: '필터 \${filterMode.label}'"));
-  });
+  test(
+    'schedule card reads FilterMode from the existing result assessment',
+    () {
+      expect(home, contains('item.result.imagingAssessment?.filterMode'));
+      expect(home, contains("'schedule-filter-"));
+      expect(home, contains("label: '필터 \${filterMode.label}'"));
+    },
+  );
 
   test('detail exposes the three distinct shooting-time concepts', () {
     expect(home, contains("title: '최적 촬영 구간'"));
@@ -74,20 +77,29 @@ void main() {
       home.indexOf('class RecommendationImagingStatusChips'),
     );
 
-    expect(compactCard, isNot(contains("'추천 \${'★' * recommended.starCount}'")));
+    expect(
+      compactCard,
+      isNot(contains("'추천 \${'★' * recommended.starCount}'")),
+    );
     expect(home, contains("'촬영 궁합'"));
     expect(home, contains('child: IntrinsicHeight('));
     expect(home, contains('crossAxisAlignment: CrossAxisAlignment.stretch'));
   });
 
-  test('unavailable weather cannot repopulate an empty auto schedule', () {
+  test('weather status does not gate the automatic schedule', () {
     expect(
       homeViewModel,
-      contains(
-        '_lastSessionContext?.observationStatus.allowsScheduling == false',
+      isNot(
+        contains(
+          '_lastSessionContext?.observationStatus.allowsScheduling == false',
+        ),
       ),
     );
-    expect(homeViewModel, contains('SchedulerEngine.weatherLimitedMessage'));
+    expect(
+      homeViewModel,
+      isNot(contains('SchedulerEngine.weatherLimitedMessage')),
+    );
+    expect(homeViewModel, contains('오늘 밤 촬영 순서를 추천할 대상이 없습니다'));
   });
 
   test('home cloud labels use the nightly representative value', () {
