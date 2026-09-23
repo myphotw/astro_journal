@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:astro_journal/features/home/view/widgets/shooting_plan_action_button.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -106,5 +108,50 @@ void main() {
     expect(home, contains("label: '☁ \${condition.cloudCover}%'"));
     expect(home, contains("value: '\${condition.cloudCover}%'"));
     expect(home, contains("label: '밤 대표 구름량'"));
+  });
+
+  testWidgets('shooting plan action distinguishes all three plan states', (
+    tester,
+  ) async {
+    Future<void> pumpState({
+      required bool isPlanned,
+      required bool isScheduled,
+      required VoidCallback onToggle,
+    }) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ShootingPlanActionButton(
+            isPlanned: isPlanned,
+            isScheduled: isScheduled,
+            onToggle: onToggle,
+          ),
+        ),
+      ),
+    );
+
+    await pumpState(
+      isPlanned: false,
+      isScheduled: false,
+      onToggle: () {},
+    );
+    expect(find.text('촬영 계획 추가'), findsOneWidget);
+
+    await pumpState(
+      isPlanned: true,
+      isScheduled: true,
+      onToggle: () {},
+    );
+    expect(find.text('계획 등록됨'), findsOneWidget);
+
+    var toggles = 0;
+    await pumpState(
+      isPlanned: true,
+      isScheduled: false,
+      onToggle: () => toggles++,
+    );
+    expect(find.text('시간 배정 불가'), findsOneWidget);
+    expect(find.text('계획 등록됨'), findsNothing);
+    await tester.tap(find.text('시간 배정 불가'));
+    expect(toggles, 1);
   });
 }

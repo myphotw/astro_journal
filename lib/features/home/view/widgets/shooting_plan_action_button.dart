@@ -7,21 +7,34 @@ class ShootingPlanActionButton extends StatelessWidget {
   const ShootingPlanActionButton({
     super.key,
     required this.isPlanned,
+    required this.isScheduled,
     required this.onToggle,
     this.compact = false,
   });
 
   final bool isPlanned;
+  final bool isScheduled;
   final VoidCallback onToggle;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final label = isPlanned ? '계획 등록됨' : '촬영 계획 추가';
-    final bg = isPlanned
-        ? AppColors.textSecondary.withAlpha(40)
-        : AppColors.ic.withAlpha(48);
-    final fg = isPlanned ? AppColors.textSecondary : AppColors.ic;
+    final String label;
+    final Color bg;
+    final Color fg;
+    if (!isPlanned) {
+      label = '촬영 계획 추가';
+      bg = AppColors.ic.withAlpha(48);
+      fg = AppColors.ic;
+    } else if (isScheduled) {
+      label = '계획 등록됨';
+      bg = AppColors.textSecondary.withAlpha(40);
+      fg = AppColors.textSecondary;
+    } else {
+      label = '시간 배정 불가';
+      bg = AppColors.solar.withAlpha(40);
+      fg = AppColors.solar;
+    }
 
     return Material(
       color: bg,

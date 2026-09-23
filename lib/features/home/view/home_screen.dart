@@ -464,6 +464,7 @@ class _HomeBodyState extends State<_HomeBody> {
                     items: viewModel.recommendedObjects.take(4).toList(),
                     onTap: (rec) => _showObjectDetail(context, rec),
                     isPlanned: viewModel.isPlanned,
+                    isScheduled: viewModel.isScheduled,
                     equipmentChipsFor: viewModel.todayEquipmentChipsFor,
                     canAddToPlan: viewModel.canAddToShootingPlan,
                     onTogglePlan: (id) =>
@@ -1971,6 +1972,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
     required this.items,
     required this.onTap,
     required this.isPlanned,
+    required this.isScheduled,
     required this.equipmentChipsFor,
     required this.canAddToPlan,
     required this.onTogglePlan,
@@ -1979,6 +1981,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
   final List<RecommendationResult> items;
   final ValueChanged<RecommendationResult> onTap;
   final bool Function(String objectId) isPlanned;
+  final bool Function(String objectId) isScheduled;
   final CatalogEquipmentChips Function(String objectId) equipmentChipsFor;
   final bool Function(String objectId) canAddToPlan;
   final ValueChanged<String> onTogglePlan;
@@ -2006,6 +2009,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
                     rank: i + 1,
                     onTap: () => onTap(items[i]),
                     isPlanned: isPlanned(items[i].object.id),
+                    isScheduled: isScheduled(items[i].object.id),
                     equipmentChips: equipmentChipsFor(items[i].object.id),
                     showPlanButton: canAddToPlan(items[i].object.id),
                     onTogglePlan: () => onTogglePlan(items[i].object.id),
@@ -2019,6 +2023,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
                       rank: i + 2,
                       onTap: () => onTap(items[i + 1]),
                       isPlanned: isPlanned(items[i + 1].object.id),
+                      isScheduled: isScheduled(items[i + 1].object.id),
                       equipmentChips: equipmentChipsFor(items[i + 1].object.id),
                       showPlanButton: canAddToPlan(items[i + 1].object.id),
                       onTogglePlan: () => onTogglePlan(items[i + 1].object.id),
@@ -2041,6 +2046,7 @@ class _RecommendCompactCard extends StatelessWidget {
     required this.rank,
     required this.onTap,
     required this.isPlanned,
+    required this.isScheduled,
     required this.equipmentChips,
     required this.showPlanButton,
     required this.onTogglePlan,
@@ -2050,6 +2056,7 @@ class _RecommendCompactCard extends StatelessWidget {
   final int rank;
   final VoidCallback onTap;
   final bool isPlanned;
+  final bool isScheduled;
   final CatalogEquipmentChips equipmentChips;
   final bool showPlanButton;
   final VoidCallback onTogglePlan;
@@ -2239,6 +2246,7 @@ class _RecommendCompactCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   ShootingPlanActionButton(
                     isPlanned: isPlanned,
+                    isScheduled: isScheduled,
                     onToggle: onTogglePlan,
                     compact: true,
                   ),
@@ -2470,6 +2478,7 @@ class _RecommendDetailSheet extends StatelessWidget {
     final captured = recommended.object.captured;
     final equipmentChips = homeVm.todayEquipmentChipsFor(recommended.object.id);
     final isPlanned = homeVm.isPlanned(recommended.object.id);
+    final isScheduled = homeVm.isScheduled(recommended.object.id);
     final assessment = recommended.imagingAssessment;
     final todayEquipment = homeVm.todayEquipmentRecommendationFor(
       recommended.object.id,
@@ -2549,6 +2558,7 @@ class _RecommendDetailSheet extends StatelessWidget {
               const SizedBox(height: AppTheme.spacingSm),
               ShootingPlanActionButton(
                 isPlanned: isPlanned,
+                isScheduled: isScheduled,
                 onToggle: () => homeVm.toggleTonightPlan(recommended.object.id),
               ),
             ],
@@ -2855,6 +2865,7 @@ class _RecommendedListSheet extends StatelessWidget {
                       rank: index + 1,
                       onTap: () => _showDetail(context, rec),
                       isPlanned: homeVm.isPlanned(rec.object.id),
+                      isScheduled: homeVm.isScheduled(rec.object.id),
                       equipmentChips: homeVm.todayEquipmentChipsFor(
                         rec.object.id,
                       ),
@@ -2879,6 +2890,7 @@ class _RecommendListTile extends StatelessWidget {
     required this.rank,
     required this.onTap,
     required this.isPlanned,
+    required this.isScheduled,
     required this.equipmentChips,
     required this.showPlanButton,
     required this.onTogglePlan,
@@ -2888,6 +2900,7 @@ class _RecommendListTile extends StatelessWidget {
   final int rank;
   final VoidCallback onTap;
   final bool isPlanned;
+  final bool isScheduled;
   final CatalogEquipmentChips equipmentChips;
   final bool showPlanButton;
   final VoidCallback onTogglePlan;
@@ -3075,6 +3088,7 @@ class _RecommendListTile extends StatelessWidget {
             if (showPlanButton)
               ShootingPlanActionButton(
                 isPlanned: isPlanned,
+                isScheduled: isScheduled,
                 onToggle: onTogglePlan,
                 compact: true,
               ),

@@ -430,6 +430,10 @@ class HomeViewModel extends ChangeNotifier {
 
   bool isPlanned(String objectId) => _plannedObjectOrder.contains(objectId);
 
+  bool isScheduled(String objectId) => _scheduleItems.any(
+    (item) => item.target.object.id == objectId,
+  );
+
   TonightShootingPlanEntry? planEntryFor(String objectId) =>
       _planEntriesById[objectId];
 
@@ -561,7 +565,7 @@ class HomeViewModel extends ChangeNotifier {
     _plannedObjectOrder = updated;
     _userEditedTonightPlan = true;
     await _persistTonightPlan();
-    _reorderScheduleItemsToMatchPlan();
+    _sortScheduleItemsByStartTime();
     notifyListeners();
   }
 
@@ -1083,29 +1087,8 @@ class HomeViewModel extends ChangeNotifier {
         .toList();
   }
 
-  void _reorderScheduleItemsToMatchPlan() {
-    if (_scheduleItems.isEmpty || _plannedObjectOrder.isEmpty) {
-      return;
-    }
-    final byId = {
-      for (final item in _scheduleItems) item.target.object.id: item,
-    };
-    _scheduleItems = _plannedObjectOrder
-        .map((id) => byId[id])
-        .whereType<ScheduleItem>()
-        .toList();
-  }
-
-  void _sortScheduleItemsByPlanOrder() {
-    _scheduleItems.sort((a, b) {
-      final ai = _plannedObjectOrder.indexOf(a.target.object.id);
-      final bi = _plannedObjectOrder.indexOf(b.target.object.id);
-      if (ai == -1 && bi == -1) return 0;
-      if (ai == -1) return 1;
-      if (bi == -1) return -1;
-      return ai.compareTo(bi);
-    });
-  }
+  void _sortScheduleItemsByStartTime() =>
+      _scheduleItems.sort((a, b) => a.startTime.compareTo(b.startTime));
 
   void _applyShootingPlanFilter() {
     if (_plannedObjectOrder.isEmpty) {
@@ -1116,6 +1099,7 @@ class HomeViewModel extends ChangeNotifier {
       }
 
       _scheduleItems = List<ScheduleItem>.from(_recommendedScheduleItems);
+      _sortScheduleItemsByStartTime();
       _scheduleEmptyMessage = _scheduleItems.isEmpty
           ? '오늘 밤 촬영 순서를 추천할 대상이 없습니다'
           : null;
@@ -1204,11 +1188,8 @@ class HomeViewModel extends ChangeNotifier {
       ...scheduleResult.items.where(
         (item) => item.status != ScheduleItemStatus.excluded,
       ),
-    ]..sort((a, b) => a.startTime.compareTo(b.startTime));
-
-    if (_userEditedTonightPlan) {
-      _sortScheduleItemsByPlanOrder();
-    }
+    ];
+    _sortScheduleItemsByStartTime();
 
     _scheduleEmptyMessage = _scheduleItems.isEmpty
         ? (scheduleResult.emptyMessage ?? '촬영 계획 대상의 촬영 순서를 계산할 수 없습니다')

@@ -255,9 +255,16 @@ class _ObservationEngine extends ObservationEngine {
 }
 
 class _Scheduler extends SchedulerEngine {
-  _Scheduler({this.returnItems = false});
+  _Scheduler({
+    this.returnItems = false,
+    Set<int> excludedNumbers = const {},
+    List<DateTime> startTimes = const [],
+  }) : excludedNumbers = Set.of(excludedNumbers),
+       startTimes = List.of(startTimes);
 
   final bool returnItems;
+  final Set<int> excludedNumbers;
+  final List<DateTime> startTimes;
   int builds = 0;
   final List<List<String>> candidateIds = [];
   final List<TrackingMode> trackingModes = [];
@@ -271,21 +278,26 @@ class _Scheduler extends SchedulerEngine {
     );
     trackingModes.add(input.context.trackingMode);
     horizonPointCounts.add(input.context.horizonProfile.points.length);
-    final result = input.targets.isEmpty
-        ? null
-        : input.resultsById[input.targets.first.object.id];
-    if (!returnItems || input.targets.isEmpty || result == null) {
+    final scheduledTargets = input.targets
+        .where((target) => !excludedNumbers.contains(target.object.number))
+        .toList(growable: false);
+    if (!returnItems || scheduledTargets.isEmpty) {
       return ScheduleResult(slots: generateSlots(input.session));
     }
 
-    final target = input.targets.first;
-    return ScheduleResult(
-      slots: generateSlots(input.session),
-      items: [
+    final items = <ScheduleItem>[];
+    for (var index = 0; index < scheduledTargets.length; index++) {
+      final target = scheduledTargets[index];
+      final result = input.resultsById[target.object.id];
+      if (result == null) continue;
+      final startTime = index < startTimes.length
+          ? startTimes[index]
+          : input.session.start.add(Duration(minutes: index * 10));
+      items.add(
         ScheduleItem(
           target: target,
-          startTime: input.session.start,
-          endTime: input.session.start.add(target.minimumExposure),
+          startTime: startTime,
+          endTime: startTime.add(target.minimumExposure),
           shootingDuration: target.minimumExposure,
           recommendedDuration: target.recommendedExposure,
           optimalTime: target.window.optimalTime ?? input.session.start,
@@ -296,7 +308,11 @@ class _Scheduler extends SchedulerEngine {
           status: ScheduleItemStatus.recommended,
           result: result,
         ),
-      ],
+      );
+    }
+    return ScheduleResult(
+      slots: generateSlots(input.session),
+      items: items,
     );
   }
 }
@@ -306,6 +322,7 @@ class _RecommendationEngine extends RecommendationEngine {
     this.scheduler,
     CelestialPositionService positions, {
     this.exposeRecommendations = false,
+    this.targetCount = 1,
   }) : super(
          positions,
          ExposurePolicy(),
@@ -315,6 +332,7 @@ class _RecommendationEngine extends RecommendationEngine {
 
   final _Scheduler scheduler;
   final bool exposeRecommendations;
+  final int targetCount;
   final List<TrackingMode> trackingModes = [];
   final List<RecommendationCandidateScope> candidateScopes = [];
   final List<int> horizonPointCounts = [];
@@ -360,17 +378,6 @@ class _RecommendationEngine extends RecommendationEngine {
     final selectedCatalog = settings.enabledCatalogs.toList()
       ..sort((left, right) => left.name.compareTo(right.name));
     final catalogType = selectedCatalog.firstOrNull ?? CatalogType.messier;
-    final object = CatalogObject(
-      id: 'candidate-${catalogType.name}',
-      number: 1,
-      catalog: catalogType,
-      name: 'Candidate',
-      type: '은하',
-      constellation: 'Test',
-      ra: '0h0m',
-      dec: '+0d0m',
-      magnitude: '5',
-    );
     final window = ObjectObservationWindow(
       currentAltitude: 45,
       currentAzimuth: 180,
@@ -392,36 +399,61 @@ class _RecommendationEngine extends RecommendationEngine {
           slot,
       ],
     );
-    final target = ScoredObservationTarget(
-      object: object,
-      window: window,
-      profile: const ObjectImagingProfileProvider().profileFor(object),
-      score: 80,
-      moonSeparation: 90,
-      minimumExposure: const Duration(minutes: 10),
-      recommendedExposure: const Duration(minutes: 30),
-    );
-    final result = RecommendationResult(
-      object: object,
-      reasons: const [],
-      season: 'test',
-      score: 80,
-      moonSeparation: 90,
-      observationWindow: window,
-    );
+    final objects = List.generate(targetCount, (index) {
+      final suffix = index == 0 ? '' : '-${index + 1}';
+      return CatalogObject(
+        id: 'candidate-${catalogType.name}$suffix',
+        number: index + 1,
+        catalog: catalogType,
+        name: 'Candidate ${index + 1}',
+        type: '은하',
+        constellation: 'Test',
+        ra: '0h0m',
+        dec: '+0d0m',
+        magnitude: '5',
+      );
+    });
+    final targets = objects
+        .map(
+          (object) => ScoredObservationTarget(
+            object: object,
+            window: window,
+            profile: const ObjectImagingProfileProvider().profileFor(object),
+            score: 80,
+            moonSeparation: 90,
+            minimumExposure: const Duration(minutes: 10),
+            recommendedExposure: const Duration(minutes: 30),
+          ),
+        )
+        .toList(growable: false);
+    final results = objects
+        .map(
+          (object) => RecommendationResult(
+            object: object,
+            reasons: const [],
+            season: 'test',
+            score: 80,
+            moonSeparation: 90,
+            observationWindow: window,
+          ),
+        )
+        .toList(growable: false);
+    final resultsById = {
+      for (final result in results) result.object.id: result,
+    };
     final schedule = scheduler.buildSchedule(
       SchedulerInput(
         context: context,
         session: session,
-        targets: [target],
-        resultsById: {object.id: result},
+        targets: targets,
+        resultsById: resultsById,
         referenceTime: referenceTime ?? context.currentTime,
       ),
     );
     return RecommendationBuildResult(
       session: session,
-      recommendations: exposeRecommendations ? [result] : const [],
-      allRecommendations: exposeRecommendations ? [result] : const [],
+      recommendations: exposeRecommendations ? results : const [],
+      allRecommendations: exposeRecommendations ? results : const [],
       scheduleItems: schedule.items,
       exclusionReasons: [
         'tracking:${trackingMode.name}',
@@ -429,7 +461,7 @@ class _RecommendationEngine extends RecommendationEngine {
         'catalogs:${settings.enabledCatalogs.map((item) => item.name).join(',')}',
       ],
       scheduleResult: schedule,
-      scoredTargets: [target],
+      scoredTargets: targets,
     );
   }
 }
@@ -448,6 +480,9 @@ void main() {
   loadPlanWorkflow(
     TonightShootingPlanSnapshot snapshot, {
     bool withEquipment = true,
+    int targetCount = 1,
+    Set<int> excludedScheduleNumbers = const {},
+    List<DateTime> scheduleStartTimes = const [],
   }) async {
     final invalidator = ObservationContextInvalidator();
     final now = DateTime(2026, 9, 15);
@@ -484,12 +519,17 @@ void main() {
       );
     }
     final positions = CelestialPositionService();
-    final scheduler = _Scheduler(returnItems: true);
+    final scheduler = _Scheduler(
+      returnItems: true,
+      excludedNumbers: excludedScheduleNumbers,
+      startTimes: scheduleStartTimes,
+    );
     final plan = _Plan(snapshot: snapshot);
     final recommendation = _RecommendationEngine(
       scheduler,
       positions,
       exposeRecommendations: true,
+      targetCount: targetCount,
     );
     final home = HomeViewModel(
       _CatalogRepository(),
@@ -560,6 +600,138 @@ void main() {
     expect(workflow.home.scheduleItems, isEmpty);
     expect(workflow.home.scheduleEmptyMessage, '현재 조건에서 촬영 가능한 계획 대상이 없습니다');
     expect(workflow.plan.savedOrders, isEmpty);
+  });
+
+  test(
+    'adding a target reschedules the complete automatic plan in start-time order',
+    () async {
+      final workflow = await loadPlanWorkflow(
+        const TonightShootingPlanSnapshot(orderedObjectIds: []),
+        targetCount: 2,
+        scheduleStartTimes: [
+          DateTime(2026, 9, 23, 3, 10),
+          DateTime(2026, 9, 23, 0, 50),
+        ],
+      );
+      addTearDown(workflow.home.dispose);
+      final firstId = workflow.home.recommendedObjects.first.object.id;
+      final secondId = workflow.home.recommendedObjects.last.object.id;
+
+      await workflow.home.toggleTonightPlan(secondId);
+      expect(workflow.home.plannedObjectIds, {firstId});
+      final buildsBeforeToggle = workflow.scheduler.builds;
+
+      await workflow.home.toggleTonightPlan(secondId);
+
+      expect(workflow.scheduler.builds, buildsBeforeToggle + 1);
+      expect(workflow.scheduler.candidateIds.last, [firstId, secondId]);
+      expect(workflow.home.plannedObjectIds, {firstId, secondId});
+      expect(workflow.plan.savedOrders.last, [firstId, secondId]);
+      expect(workflow.home.isScheduled(firstId), isTrue);
+      expect(workflow.home.isScheduled(secondId), isTrue);
+      expect(
+        workflow.home.scheduleItems.map((item) => item.target.object.id),
+        [secondId, firstId],
+      );
+    },
+  );
+
+  test('an unscheduled target remains planned and can be toggled off', () async {
+    final workflow = await loadPlanWorkflow(
+      const TonightShootingPlanSnapshot(orderedObjectIds: []),
+      targetCount: 2,
+      excludedScheduleNumbers: {2},
+    );
+    addTearDown(workflow.home.dispose);
+    final firstId = workflow.home.recommendedObjects.first.object.id;
+    final secondId = workflow.home.recommendedObjects.last.object.id;
+
+    await workflow.home.toggleTonightPlan(secondId);
+
+    expect(workflow.scheduler.candidateIds.last, [firstId, secondId]);
+    expect(workflow.home.isPlanned(secondId), isTrue);
+    expect(workflow.home.isScheduled(secondId), isFalse);
+    expect(
+      workflow.home.scheduleItems.map((item) => item.target.object.id),
+      isNot(contains(secondId)),
+    );
+
+    await workflow.home.toggleTonightPlan(secondId);
+
+    expect(workflow.home.isPlanned(secondId), isFalse);
+    expect(workflow.home.isScheduled(secondId), isFalse);
+  });
+
+  test('final schedule is ordered by DateTime on the same date', () async {
+    final workflow = await loadPlanWorkflow(
+      const TonightShootingPlanSnapshot(orderedObjectIds: []),
+      targetCount: 3,
+      scheduleStartTimes: [
+        DateTime(2026, 9, 23, 3, 10),
+        DateTime(2026, 9, 23, 0, 50),
+        DateTime(2026, 9, 23, 2, 20),
+      ],
+    );
+    addTearDown(workflow.home.dispose);
+    final firstId = workflow.home.recommendedObjects[0].object.id;
+    final secondId = workflow.home.recommendedObjects[1].object.id;
+    final thirdId = workflow.home.recommendedObjects[2].object.id;
+
+    expect(
+      workflow.home.scheduleItems.map((item) => item.target.object.id),
+      [secondId, thirdId, firstId],
+    );
+  });
+
+  test('final schedule preserves chronological order across midnight', () async {
+    final workflow = await loadPlanWorkflow(
+      const TonightShootingPlanSnapshot(orderedObjectIds: []),
+      targetCount: 3,
+      scheduleStartTimes: [
+        DateTime(2026, 9, 22, 23, 30),
+        DateTime(2026, 9, 23, 3, 10),
+        DateTime(2026, 9, 23, 0, 50),
+      ],
+    );
+    addTearDown(workflow.home.dispose);
+    final firstId = workflow.home.recommendedObjects[0].object.id;
+    final secondId = workflow.home.recommendedObjects[1].object.id;
+    final thirdId = workflow.home.recommendedObjects[2].object.id;
+
+    expect(
+      workflow.home.scheduleItems.map((item) => item.target.object.id),
+      [firstId, thirdId, secondId],
+    );
+  });
+
+  test('manual and automatic schedule items remain start-time ordered', () async {
+    final workflow = await loadPlanWorkflow(
+      const TonightShootingPlanSnapshot(orderedObjectIds: []),
+      targetCount: 2,
+    );
+    addTearDown(workflow.home.dispose);
+    final manualId = workflow.home.recommendedObjects.first.object.id;
+    final automaticId = workflow.home.recommendedObjects.last.object.id;
+    final manualStart = workflow
+        .home
+        .allRecommendedObjects
+        .first
+        .observationWindow!
+        .geometricSlotStarts
+        .last;
+
+    await workflow.home.updateScheduleTime(
+      objectId: manualId,
+      start: manualStart,
+      end: manualStart.add(SchedulerEngine.slotDuration),
+    );
+
+    expect(workflow.home.planEntryFor(manualId)?.hasTimeOverride, isTrue);
+    expect(workflow.home.planEntryFor(manualId)?.source, TonightPlanSource.manual);
+    expect(
+      workflow.home.scheduleItems.map((item) => item.target.object.id),
+      [automaticId, manualId],
+    );
   });
 
   test('manual time override stays inside geometric Horizon slots', () async {
