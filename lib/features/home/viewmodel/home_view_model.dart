@@ -32,6 +32,7 @@ import '../../../data/models/shooting_time_window.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/multi_night_framing_reference_repository.dart';
+import '../../../data/repositories/shooting_record_repository.dart';
 import '../../../services/celestial_position_service.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/tonight_shooting_plan_service.dart';
@@ -44,6 +45,7 @@ import '../../../services/recommendation/observation_window_calculator.dart';
 import '../../../services/recommendation_engine.dart';
 import '../../../services/recommendation_settings_service.dart';
 import '../../../services/scheduler_engine.dart';
+import '../../../services/catalog_thumbnail_resolver.dart';
 import '../../../services/multi_night_framing_match_service.dart';
 import '../../../services/shooting_suitability_service.dart';
 import '../../../services/weather_cache_service.dart';
@@ -256,6 +258,7 @@ class HomeViewModel extends ChangeNotifier {
     this._contextInvalidator,
     this._multiNightFramingRepository,
     this._multiNightFramingMatchService,
+    this._shootingRecordRepository,
   ]) {
     _contextBindingToken = _contextInvalidator?.bind(
       _handleContextInvalidation,
@@ -278,6 +281,7 @@ class HomeViewModel extends ChangeNotifier {
   final ObservationContextInvalidator? _contextInvalidator;
   final MultiNightFramingReferenceRepository? _multiNightFramingRepository;
   final MultiNightFramingMatchService? _multiNightFramingMatchService;
+  final ShootingRecordRepository? _shootingRecordRepository;
   final ShootingSuitabilityService _shootingSuitabilityService =
       const ShootingSuitabilityService();
   late final Object? _contextBindingToken;
@@ -308,6 +312,7 @@ class HomeViewModel extends ChangeNotifier {
   List<CategoryProgress> _categoryProgress = [];
   ObservationCondition? _observationCondition;
   List<CatalogObject> _cachedAllObjects = [];
+  final Map<String, String> _userPhotoByCatalogId = {};
   List<WeatherForecastSlot> _cachedForecasts = [];
   List<String> _exclusionReasons = [];
   String? _scheduleEmptyMessage;
@@ -369,6 +374,9 @@ class HomeViewModel extends ChangeNotifier {
   TrackingMode get trackingMode => _trackingMode;
   ActiveObservationSiteViewModel get activeObservationSiteViewModel =>
       _activeObservationSiteViewModel;
+
+  String? userPhotoFor(CatalogObject object) =>
+      CatalogThumbnailResolver.userPhotoFor(object, _userPhotoByCatalogId);
 
   Future<void> setTrackingMode(TrackingMode mode) async {
     if (_trackingMode == mode) return;
@@ -1564,6 +1572,7 @@ class HomeViewModel extends ChangeNotifier {
 
       final allObjects = await _catalogRepository.getAll(listOnly: true);
       _cachedAllObjects = allObjects;
+      await _loadUserPhotoIndex(allObjects);
       debugPrint(
         '[HomeVM] catalog getAll: ${sw.elapsedMilliseconds}ms '
         '(${allObjects.length} objects)',
@@ -1622,6 +1631,29 @@ class HomeViewModel extends ChangeNotifier {
 
     if (!deferHeavyWork) {
       _fetchWeather();
+    }
+  }
+
+  Future<void> _loadUserPhotoIndex(List<CatalogObject> catalog) async {
+    final repository = _shootingRecordRepository;
+    if (repository == null) {
+      _userPhotoByCatalogId.clear();
+      return;
+    }
+    try {
+      final records = await repository.getAll();
+      _userPhotoByCatalogId
+        ..clear()
+        ..addAll(
+          CatalogThumbnailResolver.buildUserPhotoIndex(
+            records: records,
+            catalog: catalog,
+          ),
+        );
+    } catch (error) {
+      // Thumbnail loading is presentation-only and must not block Home data.
+      debugPrint('[HomeVM] user thumbnail load skipped: $error');
+      _userPhotoByCatalogId.clear();
     }
   }
 

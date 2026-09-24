@@ -6,7 +6,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/catalog_equipment_chips.dart';
 import '../../data/models/catalog_object.dart';
-import 'app_file_image.dart';
+import '../../services/catalog_thumbnail_resolver.dart';
+import 'catalog_object_image.dart';
 import 'catalog_equipment_chips_row.dart';
 
 /// 카탈로그·계절별 촬영 대상 등에서 공통으로 쓰는 천체 카드.
@@ -36,7 +37,11 @@ class CatalogObjectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = object.catalog.accentColor;
-    final hasThumb = thumbnailPath != null && thumbnailPath!.isNotEmpty;
+    final thumbnail = CatalogThumbnailResolver.resolve(
+      object,
+      userPhotoPath: thumbnailPath,
+    );
+    final hasThumb = thumbnail.hasImage;
 
     return RepaintBoundary(
       child: Card(
@@ -48,14 +53,12 @@ class CatalogObjectCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               if (hasThumb)
-                AppFileImage(
-                  path: thumbnailPath!,
-                  fit: BoxFit.cover,
-                  memCacheWidth: 400,
-                  memCacheHeight: 400,
-                  filterQuality: FilterQuality.low,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                CatalogObjectImage(
+                  object: object,
+                  userPhotoPath: thumbnailPath,
+                  userPhotoFit: BoxFit.cover,
+                  assetFit: BoxFit.contain,
+                  fallbackBuilder: (_) => const SizedBox.shrink(),
                 ),
               if (hasThumb)
                 const DecoratedBox(

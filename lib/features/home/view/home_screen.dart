@@ -7,6 +7,7 @@ import '../../../core/services/performance_probe.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
+import '../../../data/models/catalog_object.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/object_imaging_profile.dart';
 import '../../../data/models/object_observation_window.dart';
@@ -17,6 +18,7 @@ import '../../../data/models/shooting_time_window.dart';
 import '../../../data/models/observation_quality_component.dart';
 import '../../../services/observation_score_service.dart';
 import '../../../shared/widgets/catalog_equipment_chips_row.dart';
+import '../../../shared/widgets/catalog_object_image.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
 import '../view/widgets/shooting_plan_action_button.dart';
@@ -466,6 +468,7 @@ class _HomeBodyState extends State<_HomeBody> {
                     isPlanned: viewModel.isPlanned,
                     isScheduled: viewModel.isScheduled,
                     equipmentChipsFor: viewModel.todayEquipmentChipsFor,
+                    userPhotoFor: viewModel.userPhotoFor,
                     canAddToPlan: viewModel.canAddToShootingPlan,
                     onTogglePlan: (id) =>
                         context.read<HomeViewModel>().toggleTonightPlan(id),
@@ -489,6 +492,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 onTap: (rec) => _showObjectDetail(context, rec),
                 onEdit: () => _showShootingOrderEditor(context, viewModel),
                 onManualAdd: () => _showShootingOrderEditor(context, viewModel),
+                userPhotoFor: viewModel.userPhotoFor,
               ),
             )
           else if (viewModel.scheduleEmptyMessage != null)
@@ -1974,6 +1978,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
     required this.isPlanned,
     required this.isScheduled,
     required this.equipmentChipsFor,
+    required this.userPhotoFor,
     required this.canAddToPlan,
     required this.onTogglePlan,
   });
@@ -1983,6 +1988,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
   final bool Function(String objectId) isPlanned;
   final bool Function(String objectId) isScheduled;
   final CatalogEquipmentChips Function(String objectId) equipmentChipsFor;
+  final String? Function(CatalogObject object) userPhotoFor;
   final bool Function(String objectId) canAddToPlan;
   final ValueChanged<String> onTogglePlan;
 
@@ -2011,6 +2017,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
                     isPlanned: isPlanned(items[i].object.id),
                     isScheduled: isScheduled(items[i].object.id),
                     equipmentChips: equipmentChipsFor(items[i].object.id),
+                    userPhotoPath: userPhotoFor(items[i].object),
                     showPlanButton: canAddToPlan(items[i].object.id),
                     onTogglePlan: () => onTogglePlan(items[i].object.id),
                   ),
@@ -2025,6 +2032,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
                       isPlanned: isPlanned(items[i + 1].object.id),
                       isScheduled: isScheduled(items[i + 1].object.id),
                       equipmentChips: equipmentChipsFor(items[i + 1].object.id),
+                      userPhotoPath: userPhotoFor(items[i + 1].object),
                       showPlanButton: canAddToPlan(items[i + 1].object.id),
                       onTogglePlan: () => onTogglePlan(items[i + 1].object.id),
                     ),
@@ -2048,6 +2056,7 @@ class _RecommendCompactCard extends StatelessWidget {
     required this.isPlanned,
     required this.isScheduled,
     required this.equipmentChips,
+    required this.userPhotoPath,
     required this.showPlanButton,
     required this.onTogglePlan,
   });
@@ -2058,6 +2067,7 @@ class _RecommendCompactCard extends StatelessWidget {
   final bool isPlanned;
   final bool isScheduled;
   final CatalogEquipmentChips equipmentChips;
+  final String? userPhotoPath;
   final bool showPlanButton;
   final VoidCallback onTogglePlan;
 
@@ -2211,6 +2221,20 @@ class _RecommendCompactCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                 ],
+              ),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Opacity(
+              opacity: 0.72,
+              child: CatalogObjectImage(
+                object: recommended.object,
+                userPhotoPath: userPhotoPath,
+                width: 38,
+                height: 38,
+                borderRadius: BorderRadius.circular(6),
               ),
             ),
           ),
@@ -2869,6 +2893,7 @@ class _RecommendedListSheet extends StatelessWidget {
                       equipmentChips: homeVm.todayEquipmentChipsFor(
                         rec.object.id,
                       ),
+                      userPhotoPath: homeVm.userPhotoFor(rec.object),
                       showPlanButton: showPlan,
                       onTogglePlan: () =>
                           homeVm.toggleTonightPlan(rec.object.id),
@@ -2892,6 +2917,7 @@ class _RecommendListTile extends StatelessWidget {
     required this.isPlanned,
     required this.isScheduled,
     required this.equipmentChips,
+    required this.userPhotoPath,
     required this.showPlanButton,
     required this.onTogglePlan,
   });
@@ -2902,6 +2928,7 @@ class _RecommendListTile extends StatelessWidget {
   final bool isPlanned;
   final bool isScheduled;
   final CatalogEquipmentChips equipmentChips;
+  final String? userPhotoPath;
   final bool showPlanButton;
   final VoidCallback onTogglePlan;
 
@@ -2937,6 +2964,14 @@ class _RecommendListTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppTheme.spacingMd),
+            CatalogObjectImage(
+              object: recommended.object,
+              userPhotoPath: userPhotoPath,
+              width: 44,
+              height: 44,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            const SizedBox(width: AppTheme.spacingSm),
             Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppTheme.spacingSm,
@@ -3157,12 +3192,14 @@ class _ObservationSessionTimeline extends StatelessWidget {
     required this.onTap,
     required this.onEdit,
     required this.onManualAdd,
+    required this.userPhotoFor,
   });
 
   final List<ScheduleItem> items;
   final void Function(RecommendationResult result) onTap;
   final VoidCallback onEdit;
   final VoidCallback onManualAdd;
+  final String? Function(CatalogObject object) userPhotoFor;
 
   @override
   Widget build(BuildContext context) {
@@ -3231,6 +3268,7 @@ class _ObservationSessionTimeline extends StatelessWidget {
                 for (var i = 0; i < visibleItems.length; i++) ...[
                   _SessionTableCell(
                     item: visibleItems[i],
+                    userPhotoPath: userPhotoFor(visibleItems[i].catalogObject),
                     onTap: () => onTap(visibleItems[i].result),
                   ),
                   if (i < visibleItems.length - 1)
@@ -3253,9 +3291,14 @@ class _ObservationSessionTimeline extends StatelessWidget {
 }
 
 class _SessionTableCell extends StatelessWidget {
-  const _SessionTableCell({required this.item, required this.onTap});
+  const _SessionTableCell({
+    required this.item,
+    required this.userPhotoPath,
+    required this.onTap,
+  });
 
   final ScheduleItem item;
+  final String? userPhotoPath;
   final VoidCallback onTap;
 
   @override
@@ -3291,6 +3334,14 @@ class _SessionTableCell extends StatelessWidget {
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            CatalogObjectImage(
+              object: item.catalogObject,
+              userPhotoPath: userPhotoPath,
+              width: 42,
+              height: 42,
+              borderRadius: BorderRadius.circular(6),
             ),
             const SizedBox(height: 4),
             Text(

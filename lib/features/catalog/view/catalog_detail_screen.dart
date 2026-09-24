@@ -11,6 +11,7 @@ import '../../../data/models/shooting_record.dart';
 import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/catalog_exposure_guidance_section.dart';
 import '../../../shared/widgets/catalog_imaging_availability_section.dart';
+import '../../../shared/widgets/catalog_object_image.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
 import '../../gallery/view/gallery_detail_screen.dart';
@@ -183,8 +184,7 @@ class _CatalogDetailPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
         children: [
           _HeaderCard(
-            displayId: object.displayName,
-            name: object.displayCommonName,
+            object: object,
             accentColor: accentColor,
             captured: object.captured,
           ),
@@ -212,8 +212,8 @@ class _CatalogDetailPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
         _HeaderCard(
-          displayId: object.displayName,
-          name: object.displayCommonName,
+          object: object,
+          userPhotoPath: viewModel.representativeRecord?.photoUri,
           accentColor: accentColor,
           captured: viewModel.isCaptured,
         ),
@@ -313,20 +313,20 @@ class _CatalogDetailPage extends StatelessWidget {
 
 class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
-    required this.displayId,
-    required this.name,
+    required this.object,
     required this.accentColor,
     required this.captured,
+    this.userPhotoPath,
   });
 
-  final String displayId;
-  final String name;
+  final CatalogObject object;
   final Color accentColor;
   final bool captured;
+  final String? userPhotoPath;
 
   @override
   Widget build(BuildContext context) {
-    final showName = name != displayId;
+    final showName = object.displayCommonName != object.displayName;
 
     return Container(
       width: double.infinity,
@@ -336,35 +336,46 @@ class _HeaderCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: accentColor.withAlpha(80), width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Text(
-                displayId,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: accentColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Icon(
-                captured ? Icons.check_circle : Icons.circle_outlined,
-                color: captured ? accentColor : AppColors.textSecondary,
-                size: 28,
-              ),
-            ],
+          CatalogObjectImage(
+            object: object,
+            userPhotoPath: userPhotoPath,
+            width: 76,
+            height: 76,
+            borderRadius: BorderRadius.circular(10),
           ),
-          if (showName) ...[
-            const SizedBox(height: 4),
-            Text(
-              name,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  object.displayName,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: accentColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (showName) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    object.displayCommonName,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
+          const SizedBox(width: 12),
+          Icon(
+            captured ? Icons.check_circle : Icons.circle_outlined,
+            color: captured ? accentColor : AppColors.textSecondary,
+            size: 28,
+          ),
         ],
       ),
     );

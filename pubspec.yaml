@@ -150,6 +150,7 @@ flutter:
     - assets/catalog/search_aliases.json
     - assets/catalog/search_cross_catalog.json
     - assets/catalog/display_name_dictionary.json
+    - assets/catalog/thumbnails/
     - assets/database/bortle.db
     - assets/database/catalog_seed.db
     - assets/icon/app_icon.png

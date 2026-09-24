@@ -15,6 +15,7 @@ import '../../../services/catalog_object_sorter.dart';
 import '../../../services/catalog_capture_projection_service.dart';
 import '../../../services/catalog_search_index.dart';
 import '../../../services/catalog_search_service.dart';
+import '../../../services/catalog_thumbnail_resolver.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
 
 enum ShootingFilter { all, captured, notCaptured }
@@ -124,7 +125,12 @@ class CatalogViewModel extends ChangeNotifier {
   }
 
   String? thumbnailFor(String celestialObjectId) =>
-      _thumbnailMap[celestialObjectId];
+      _thumbnailMap[CatalogThumbnailResolver.normalizeCanonicalId(
+        celestialObjectId,
+      )];
+
+  String? userPhotoFor(CatalogObject object) =>
+      CatalogThumbnailResolver.userPhotoFor(object, _thumbnailMap);
 
   CatalogEquipmentChips equipmentChipsFor(String celestialObjectId) =>
       _equipmentChipsMap[celestialObjectId] ?? const CatalogEquipmentChips();
@@ -215,7 +221,7 @@ class CatalogViewModel extends ChangeNotifier {
       _allObjects = objects;
       _objectsRevision++;
       _invalidateVisibleObjects();
-      _buildThumbnailMap(records);
+      _buildThumbnailMap(records, objects);
       debugPrint(
         '[CatalogVM] list+thumbnails: ${sw.elapsedMilliseconds}ms '
         '(${objects.length} objects)',
@@ -313,25 +319,18 @@ class CatalogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _buildThumbnailMap(List<ShootingRecord> records) {
-    _thumbnailMap.clear();
-
-    final sorted = [...records]
-      ..sort((a, b) => b.capturedAt.compareTo(a.capturedAt));
-
-    for (final record in sorted) {
-      if (record.photoUri == null || record.photoUri!.isEmpty) continue;
-      if (!record.isRepresentative) continue;
-      _thumbnailMap[record.celestialObjectId] = record.photoUri!;
-    }
-
-    for (final record in sorted) {
-      if (record.photoUri == null || record.photoUri!.isEmpty) continue;
-      _thumbnailMap.putIfAbsent(
-        record.celestialObjectId,
-        () => record.photoUri!,
+  void _buildThumbnailMap(
+    List<ShootingRecord> records,
+    List<CatalogObject> catalog,
+  ) {
+    _thumbnailMap
+      ..clear()
+      ..addAll(
+        CatalogThumbnailResolver.buildUserPhotoIndex(
+          records: records,
+          catalog: catalog,
+        ),
       );
-    }
   }
 
   /// 사진 등록 후 전체 reload 없이 촬영 상태·썸네일만 반영한다.
@@ -353,7 +352,16 @@ class CatalogViewModel extends ChangeNotifier {
     }
 
     if (photoUri.isNotEmpty) {
-      _thumbnailMap[celestialObjectId] = photoUri;
+      final matching = _allObjects.where(
+        (object) => object.id == celestialObjectId,
+      );
+      final effectiveId = matching.isEmpty
+          ? celestialObjectId
+          : matching.first.effectivePrimaryId;
+      _thumbnailMap[CatalogThumbnailResolver.normalizeCanonicalId(
+            effectiveId,
+          )] =
+          photoUri;
     }
     _invalidateVisibleObjects();
     notifyListeners();

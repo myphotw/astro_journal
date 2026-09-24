@@ -487,8 +487,8 @@ class _CatalogScreenState extends State<CatalogScreen>
                               itemCount: objects.length,
                               itemBuilder: (context, index) {
                                 final object = objects[index];
-                                final thumbnail = viewModel.thumbnailFor(
-                                  object.id,
+                                final thumbnail = viewModel.userPhotoFor(
+                                  object,
                                 );
                                 return CatalogObjectCard(
                                   object: object,

@@ -430,6 +430,7 @@ class AppProviders {
       observationContextInvalidator,
       multiNightFramingRepository,
       multiNightFramingMatchService,
+      galleryShootingRecordRepository,
     );
 
     // Home/Catalog/Gallery/Stats 등은 AppStartupViewModel이 순차 preload한다.
