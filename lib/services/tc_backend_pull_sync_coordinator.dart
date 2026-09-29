@@ -1,6 +1,7 @@
 import '../data/datasources/gallery_record_link_datasource.dart';
 import '../data/datasources/sync_checkpoint_datasource.dart';
 import '../data/models/tc_backend_change.dart';
+import '../data/models/gallery_observation_projection.dart';
 import '../data/repositories/gallery_repository.dart';
 import '../data/repositories/shooting_record_repository.dart';
 import 'tc_backend_changes_service.dart';
@@ -132,6 +133,9 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
         cursor = nextCursor;
       }
       if (!page.hasMore) {
+        observationRecordsChanged =
+            await _reconcileTombstonedRecordProjections() ||
+            observationRecordsChanged;
         await _reconcileCatalog();
         if (observationRecordsChanged) {
           try {
@@ -147,6 +151,31 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     throw const TcBackendChangesException(
       'Changes pagination exceeded the per-drain page limit.',
     );
+  }
+
+  Future<bool> _reconcileTombstonedRecordProjections() async {
+    final links = await _recordLinks.localIdsByBackendRecordId();
+    final backendRecordIdByLocalId = {
+      for (final entry in links.entries) entry.value: entry.key,
+    };
+    var changed = false;
+    for (final record in await _shootingRecordRepository.getAll()) {
+      final backendRecordId =
+          GalleryObservationProjection.backendRecordIdFromRemoteLocalId(
+            record.id,
+          ) ??
+          backendRecordIdByLocalId[record.id];
+      if (backendRecordId == null ||
+          await _galleryRepository.getAuthoritativeDeleteRevision(
+                backendRecordId,
+              ) ==
+              null) {
+        continue;
+      }
+      await _shootingRecordRepository.delete(record.id);
+      changed = true;
+    }
+    return changed;
   }
 
   Future<void> _reconcileCatalog() async {
@@ -187,9 +216,13 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
           deletedAt: change.deletedAt,
         );
         if (!applied) return false;
-        final localId = (await _recordLinks
+        final linkedLocalId = (await _recordLinks
             .localIdsByBackendRecordId())[change.resourceId];
-        if (localId != null) {
+        final localIds = <String>{
+          if (linkedLocalId != null) linkedLocalId,
+          GalleryObservationProjection.remoteLocalId(change.resourceId),
+        };
+        for (final localId in localIds) {
           await _shootingRecordRepository.delete(localId);
         }
         return true;

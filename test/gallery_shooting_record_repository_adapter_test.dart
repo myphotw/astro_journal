@@ -58,8 +58,13 @@ void main() {
     _FakeDrain? drain,
     bool enableCaptureProjection = false,
     void Function()? onRecordsChanged,
+    Map<String, int> tombstones = const {},
   }) {
-    final gallery = _FakeGalleryRepository(snapshot, detail: detail);
+    final gallery = _FakeGalleryRepository(
+      snapshot,
+      detail: detail,
+      tombstones: tombstones,
+    );
     final localRepository = _FakeLocalRepository(local);
     final catalogRepository = _FakeCatalogRepository(catalogObjects);
     final recordLinks = _FakeLinks(links);
@@ -410,6 +415,75 @@ void main() {
     ).adapter.getAll();
 
     expect(result.single, same(local));
+  });
+
+  test(
+    'authoritative tombstone prevents stale remote projection reappearing',
+    () async {
+      final stale = _local('remote:record-1', 'M42', capturedAt).copyWith(
+        isFavorite: true,
+        memo: 'durable local edit',
+      );
+      final result = harness(
+        snapshot: const GallerySnapshot(
+          items: [],
+          source: GallerySnapshotSource.cache,
+          backendEnabled: true,
+        ),
+        local: [stale],
+        tombstones: const {'record-1': 8},
+      );
+
+      expect(await result.adapter.getAll(), isEmpty);
+      expect(result.local.records, isEmpty);
+    },
+  );
+
+  test('authoritative tombstone also suppresses a stale cached item', () async {
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item('record-1', 'sha-1', 'M42', capturedAt),
+      ]),
+      tombstones: const {'record-1': 8},
+    );
+
+    expect(await result.adapter.getAll(), isEmpty);
+  });
+
+  test('authoritative tombstone removes a stale linked local row', () async {
+    final result = harness(
+      snapshot: const GallerySnapshot(
+        items: [],
+        source: GallerySnapshotSource.cache,
+        backendEnabled: true,
+      ),
+      local: [_local('local-1', 'M42', capturedAt)],
+      links: const {'record-1': 'local-1'},
+      tombstones: const {'record-1': 8},
+    );
+
+    expect(await result.adapter.getAll(), isEmpty);
+    expect(result.local.records, isEmpty);
+  });
+
+  test('failed image URL alone does not delete a remote projection', () async {
+    final stale = _local(
+      'remote:record-1',
+      'M42',
+      capturedAt,
+    ).copyWith(photoUri: 'https://backend.test/missing.jpg');
+    final result = harness(
+      snapshot: const GallerySnapshot(
+        items: [],
+        source: GallerySnapshotSource.none,
+        backendEnabled: true,
+        remoteFailed: true,
+      ),
+      local: [stale],
+    );
+
+    expect((await result.adapter.getAll()).single.id, 'remote:record-1');
+    expect(result.local.records.single, same(stale));
   });
 
   test('remote detail is requested using record_id', () async {
@@ -809,9 +883,14 @@ class _Harness {
 }
 
 class _FakeGalleryRepository implements GalleryRepository {
-  _FakeGalleryRepository(this.snapshot, {this.detail});
+  _FakeGalleryRepository(
+    this.snapshot, {
+    this.detail,
+    this.tombstones = const {},
+  });
   GallerySnapshot snapshot;
   final GalleryItem? detail;
+  final Map<String, int> tombstones;
   final List<String> detailIds = [];
   final List<Map<String, Object?>> localPatches = [];
   final List<String> localDeletes = [];
@@ -854,6 +933,10 @@ class _FakeGalleryRepository implements GalleryRepository {
       remoteFailed: snapshot.remoteFailed,
     );
   }
+
+  @override
+  Future<int?> getAuthoritativeDeleteRevision(String backendRecordId) async =>
+      tombstones[backendRecordId];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

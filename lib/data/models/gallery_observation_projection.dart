@@ -6,6 +6,17 @@ import 'plate_solve_result.dart';
 import 'shooting_record.dart';
 
 class GalleryObservationProjection {
+  static const remoteLocalIdPrefix = 'remote:';
+
+  static String remoteLocalId(String backendRecordId) =>
+      '$remoteLocalIdPrefix$backendRecordId';
+
+  static String? backendRecordIdFromRemoteLocalId(String localRecordId) {
+    if (!localRecordId.startsWith(remoteLocalIdPrefix)) return null;
+    final backendRecordId = localRecordId.substring(remoteLocalIdPrefix.length);
+    return backendRecordId.isEmpty ? null : backendRecordId;
+  }
+
   const GalleryObservationProjection({
     required this.backendRecordId,
     required this.revision,
@@ -116,7 +127,7 @@ class GalleryObservationProjection {
       dec: baseExif.dec,
     );
     return ShootingRecord(
-      id: localRecord?.id ?? 'remote:$backendRecordId',
+      id: localRecord?.id ?? remoteLocalId(backendRecordId),
       celestialObjectId: catalogObjectId,
       capturedAt: captureDatetime,
       photoUri: localRecord?.photoUri ?? previewUrl,

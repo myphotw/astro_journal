@@ -459,6 +459,15 @@ void main() {
     );
     expect(await subject.upsertPulledItem(revision2), isFalse);
     expect(await subject.getAll(), isEmpty);
+    expect(await subject.getAuthoritativeDeleteRevision('record-pulled'), 3);
+
+    final revision4 = _item('pulled', revision: 4);
+    expect(await subject.upsertPulledItem(revision4), isTrue);
+    expect(
+      await subject.getAuthoritativeDeleteRevision('record-pulled'),
+      isNull,
+    );
+    expect((await subject.getAll()).single.revision, 4);
   });
 
   test(

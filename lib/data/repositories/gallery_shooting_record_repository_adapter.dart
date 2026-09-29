@@ -95,7 +95,11 @@ class GalleryShootingRecordRepositoryAdapter
 
   @override
   Future<List<ShootingRecord>> getAll() async {
-    final local = await _localRepository.getAll();
+    final links = await _linkDataSource.localIdsByBackendRecordId();
+    final local = await _removeTombstonedRecordProjections(
+      await _localRepository.getAll(),
+      links: links,
+    );
     final snapshot = await _galleryRepository.getSnapshot();
     if (snapshot.source == GallerySnapshotSource.none ||
         (snapshot.source == GallerySnapshotSource.cache &&
@@ -105,13 +109,20 @@ class GalleryShootingRecordRepositoryAdapter
     }
 
     final catalog = await _catalogRepository.getAll(listOnly: true);
-    final links = await _linkDataSource.localIdsByBackendRecordId();
     final localById = {for (final record in local) record.id: record};
     final matchedLocalIds = <String>{};
     final projected = <ShootingRecord>[];
 
     for (final item in snapshot.items) {
-      final remoteProjectionId = 'remote:${item.backendRecordId}';
+      if (await _galleryRepository.getAuthoritativeDeleteRevision(
+                item.backendRecordId,
+              ) !=
+          null) {
+        continue;
+      }
+      final remoteProjectionId = GalleryObservationProjection.remoteLocalId(
+        item.backendRecordId,
+      );
       final linkedLocalId =
           links[item.backendRecordId] ??
           (localById.containsKey(remoteProjectionId)
@@ -139,8 +150,41 @@ class GalleryShootingRecordRepositoryAdapter
     return projected;
   }
 
+  Future<List<ShootingRecord>> _removeTombstonedRecordProjections(
+    List<ShootingRecord> records, {
+    required Map<String, String> links,
+  }) async {
+    final backendRecordIdByLocalId = {
+      for (final entry in links.entries) entry.value: entry.key,
+    };
+    final retained = <ShootingRecord>[];
+    final deleteIds = <String>{};
+    for (final record in records) {
+      final backendRecordId =
+          GalleryObservationProjection.backendRecordIdFromRemoteLocalId(
+            record.id,
+          ) ??
+          backendRecordIdByLocalId[record.id];
+      if (backendRecordId == null ||
+          await _galleryRepository.getAuthoritativeDeleteRevision(
+                backendRecordId,
+              ) ==
+              null) {
+        retained.add(record);
+        continue;
+      }
+      deleteIds.add(record.id);
+    }
+    for (final id in deleteIds) {
+      await _localRepository.delete(id);
+    }
+    return retained;
+  }
+
   bool _isRemoteOnly(String id) =>
-      id.startsWith('remote:') && _lastRemoteRecords.containsKey(id);
+      GalleryObservationProjection.backendRecordIdFromRemoteLocalId(id) !=
+          null &&
+      _lastRemoteRecords.containsKey(id);
 
   @override
   Future<ShootingRecord?> getById(String id) => _getById(id);

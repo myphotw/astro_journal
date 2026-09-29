@@ -33,6 +33,7 @@ abstract class GalleryRepository {
   });
   Future<void> applyLocalDelete(String backendRecordId);
   Future<int?> getCachedRevision(String backendRecordId);
+  Future<int?> getAuthoritativeDeleteRevision(String backendRecordId);
   Future<bool> upsertPulledItem(GalleryItem item);
   Future<bool> applyPulledDelete(
     String backendRecordId, {

@@ -327,6 +327,33 @@ class HybridGalleryRepository implements GalleryRepository {
   }
 
   @override
+  Future<int?> getAuthoritativeDeleteRevision(String backendRecordId) =>
+      _serializeListMutation(
+        () => _getAuthoritativeDeleteRevisionLocked(backendRecordId),
+      );
+
+  Future<int?> _getAuthoritativeDeleteRevisionLocked(
+    String backendRecordId,
+  ) async {
+    final tombstone = _tombstone(
+      await _cache.read('astro:gallery:tombstone:$backendRecordId'),
+    );
+    if (tombstone == null) return null;
+
+    final detail = _cachedItem(
+      await _cache.read('astro:gallery:detail:$backendRecordId'),
+    );
+    if (detail != null && detail.revision > tombstone.revision) return null;
+    for (final item in _cachedItems(await _cache.read(_listCacheKey))) {
+      if (item.backendRecordId == backendRecordId &&
+          item.revision > tombstone.revision) {
+        return null;
+      }
+    }
+    return tombstone.revision;
+  }
+
+  @override
   Future<bool> upsertPulledItem(GalleryItem item) =>
       _serializeListMutation(() => _upsertPulledItemLocked(item));
 

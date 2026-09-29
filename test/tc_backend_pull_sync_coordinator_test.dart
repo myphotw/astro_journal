@@ -6,6 +6,7 @@ import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
 import 'package:astro_journal/data/models/plate_solve_queue.dart';
+import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/models/tc_backend_change.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/gallery_repository.dart';
@@ -215,7 +216,7 @@ void main() {
       ], 'cursor-1'),
     });
     final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
-    final records = _FakeRecords();
+    final records = _FakeRecords([_record('local-1')]);
     final catalog = _FakeCatalog()..captured = true;
     final projection = CatalogCaptureProjectionService(
       catalogRepository: catalog,
@@ -234,8 +235,166 @@ void main() {
 
     expect(gallery.items, isEmpty);
     expect(gallery.tombstones['record-1'], 3);
-    expect(records.deleted, ['local-1']);
+    expect(records.deleted, contains('local-1'));
+    expect(records.records, isEmpty);
     expect(catalog.captured, isFalse);
+  });
+
+  test(
+    'DELETE without outbox link removes remote local projection',
+    () async {
+      final api = _FakeChangesApi({
+        null: _page([
+          _change('record-1', TcBackendChangeOperation.delete, 3),
+        ], 'cursor-1'),
+      });
+      final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
+      final records = _FakeRecords([_record('remote:record-1')]);
+
+      await subject(
+        api: api,
+        checkpoints: _FakeCheckpoints(),
+        gallery: gallery,
+        records: records,
+      ).drain();
+
+      expect(records.records, isEmpty);
+      expect(records.deleted, ['remote:record-1']);
+    },
+  );
+
+  test('DELETE removes a modified durable remote projection', () async {
+    final api = _FakeChangesApi({
+      null: _page([
+        _change('record-1', TcBackendChangeOperation.delete, 3),
+      ], 'cursor-1'),
+    });
+    final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
+    final records = _FakeRecords([
+      _record('remote:record-1').copyWith(
+        isFavorite: true,
+        memo: 'edited on this device',
+      ),
+    ]);
+
+    await subject(
+      api: api,
+      checkpoints: _FakeCheckpoints(),
+      gallery: gallery,
+      records: records,
+    ).drain();
+
+    expect(records.records, isEmpty);
+  });
+
+  test('duplicate DELETE remains idempotent', () async {
+    final delete = _change('record-1', TcBackendChangeOperation.delete, 3);
+    final api = _FakeChangesApi({
+      null: _page([delete, delete], 'cursor-1'),
+    });
+    final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
+    final records = _FakeRecords([_record('remote:record-1')]);
+
+    await subject(
+      api: api,
+      checkpoints: _FakeCheckpoints(),
+      gallery: gallery,
+      records: records,
+    ).drain();
+
+    expect(records.records, isEmpty);
+    expect(records.deleted, ['remote:record-1']);
+    expect(gallery.tombstones['record-1'], 3);
+  });
+
+  test('linked and remote identity paths delete the same row once', () async {
+    final api = _FakeChangesApi({
+      null: _page([
+        _change('record-1', TcBackendChangeOperation.delete, 3),
+      ], 'cursor-1'),
+    });
+    final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
+    final records = _FakeRecords([_record('remote:record-1')]);
+
+    await subject(
+      api: api,
+      checkpoints: _FakeCheckpoints(),
+      gallery: gallery,
+      records: records,
+      links: const {'record-1': 'remote:record-1'},
+    ).drain();
+
+    expect(records.deleted, ['remote:record-1']);
+  });
+
+  test('unrelated DELETE preserves local-only pending and V1 records', () async {
+    final api = _FakeChangesApi({
+      null: _page([
+        _change('deleted-record', TcBackendChangeOperation.delete, 1),
+      ], 'cursor-1'),
+    });
+    final records = _FakeRecords([
+      _record('local-only'),
+      _record('pending-upload'),
+      _record('legacy-v1'),
+    ]);
+
+    await subject(
+      api: api,
+      checkpoints: _FakeCheckpoints(),
+      gallery: _FakeGallery(),
+      records: records,
+    ).drain();
+
+    expect(
+      records.records.map((record) => record.id),
+      ['local-only', 'pending-upload', 'legacy-v1'],
+    );
+  });
+
+  test(
+    'startup reconciliation removes stale shell after DELETE checkpoint',
+    () async {
+      final checkpoints = _FakeCheckpoints()..cursor = 'cursor-after-delete';
+      final api = _FakeChangesApi({
+        'cursor-after-delete': _page(const [], 'cursor-after-delete'),
+      });
+      final gallery = _FakeGallery()..tombstones['record-1'] = 3;
+      final records = _FakeRecords([
+        _record('remote:record-1'),
+        _record('local-only'),
+      ]);
+
+      await subject(
+        api: api,
+        checkpoints: checkpoints,
+        gallery: gallery,
+        records: records,
+      ).drain();
+
+      expect(records.records.map((record) => record.id), ['local-only']);
+      expect(records.deleted, ['remote:record-1']);
+    },
+  );
+
+  test('startup reconciliation also removes a tombstoned linked row', () async {
+    final checkpoints = _FakeCheckpoints()..cursor = 'cursor-after-delete';
+    final api = _FakeChangesApi({
+      'cursor-after-delete': _page(const [], 'cursor-after-delete'),
+    });
+    final gallery = _FakeGallery()..tombstones['record-1'] = 3;
+    final records = _FakeRecords([_record('local-1')]);
+
+    await subject(
+      api: api,
+      checkpoints: checkpoints,
+      gallery: gallery,
+      records: records,
+      links: const {'record-1': 'local-1'},
+    ).drain();
+
+    expect(records.records, isEmpty);
+    expect(records.deleted, ['local-1']);
   });
 
   test('cursor pagination advances after every completed page', () async {
@@ -398,6 +557,14 @@ GalleryItem _item(
   originalUrl: '/original/$id',
 );
 
+ShootingRecord _record(String id) => ShootingRecord(
+  id: id,
+  celestialObjectId: 'M42',
+  capturedAt: DateTime.utc(2026),
+  photoUri: '/local/$id.jpg',
+  createdAt: DateTime.utc(2026),
+);
+
 class _FakeChangesApi implements TcBackendChangesApi {
   _FakeChangesApi(this.pages, {this.details = const {}});
 
@@ -456,6 +623,14 @@ class _FakeGallery implements GalleryRepository {
       tombstones[backendRecordId] ?? items[backendRecordId]?.revision;
 
   @override
+  Future<int?> getAuthoritativeDeleteRevision(String backendRecordId) async {
+    final tombstone = tombstones[backendRecordId];
+    if (tombstone == null) return null;
+    final liveRevision = items[backendRecordId]?.revision;
+    return liveRevision != null && liveRevision > tombstone ? null : tombstone;
+  }
+
+  @override
   Future<bool> upsertPulledItem(GalleryItem item) async {
     final revision = await getCachedRevision(item.backendRecordId);
     if (revision != null && revision >= item.revision) return false;
@@ -486,14 +661,20 @@ class _FakeGallery implements GalleryRepository {
 }
 
 class _FakeRecords implements ShootingRecordRepository {
+  _FakeRecords([List<ShootingRecord> records = const []])
+    : records = List<ShootingRecord>.from(records);
+
+  final List<ShootingRecord> records;
   final List<String> deleted = [];
 
   @override
-  Future<List<Never>> getAll() async => const [];
+  Future<List<ShootingRecord>> getAll() async => List.of(records);
 
   @override
   Future<void> delete(String id) async {
-    deleted.add(id);
+    final existed = records.any((record) => record.id == id);
+    records.removeWhere((record) => record.id == id);
+    if (existed) deleted.add(id);
   }
 
   @override
