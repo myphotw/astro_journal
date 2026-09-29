@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -642,13 +641,24 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     if (metadata == null) return;
 
     if (_tileProvider == null) {
+      final isWindows =
+          !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
       _tileProvider = LightPollutionTileProvider(
         observationConditionService: _observationConditionService,
 
         metadata: metadata,
+
+        maxConcurrent: isWindows ? 3 : 1,
+
+        gapBetweenTiles: isWindows
+            ? Duration.zero
+            : const Duration(milliseconds: 40),
       );
-      // 잘못 생성된 이전 타일(다른 알고리즘/캐시 키) 제거.
-      _tileProvider!.clearCache();
+      // Windows는 버전이 포함된 디스크 캐시를 재사용한다. 모바일의 기존
+      // 초기화 정책은 그대로 유지한다.
+      if (!isWindows) {
+        _tileProvider!.clearCache();
+      }
     } else {
       _tileProvider!.updateMetadata(metadata);
     }

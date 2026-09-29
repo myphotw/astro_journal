@@ -37,6 +37,8 @@ class _WindowsLightPollutionMapScreenState
   static const _locationCardWidth = 220.0;
 
   final _mapController = flutter_map.MapController();
+  LightPollutionMapViewModel? _tileProviderOwner;
+  WindowsLightPollutionTileProvider? _windowsTileProvider;
   bool _isMapReady = false;
   bool _didInitialCameraMove = false;
   bool _showTileOverlay = true;
@@ -62,6 +64,19 @@ class _WindowsLightPollutionMapScreenState
     context.read<LightPollutionMapViewModel>().selectLocation(
       google_maps.LatLng(point.latitude, point.longitude),
     );
+  }
+
+  WindowsLightPollutionTileProvider _tileProviderFor(
+    LightPollutionMapViewModel viewModel,
+  ) {
+    if (!identical(_tileProviderOwner, viewModel) ||
+        _windowsTileProvider == null) {
+      _tileProviderOwner = viewModel;
+      _windowsTileProvider = WindowsLightPollutionTileProvider(
+        loadTileBytes: viewModel.getLightPollutionTileBytes,
+      );
+    }
+    return _windowsTileProvider!;
   }
 
   void _maybeMoveToInitialPosition({bool force = false}) {
@@ -173,6 +188,7 @@ class _WindowsLightPollutionMapScreenState
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<LightPollutionMapViewModel>();
+    final windowsTileProvider = _tileProviderFor(vm);
     if (widget.isActive &&
         !_didInitialCameraMove &&
         !vm.isLoading &&
@@ -224,12 +240,14 @@ class _WindowsLightPollutionMapScreenState
                 if (widget.isActive && _showTileOverlay && vm.metadata != null)
                   flutter_map.TileLayer(
                     urlTemplate: 'bortle://{z}/{x}/{y}.png',
-                    tileProvider: WindowsLightPollutionTileProvider(
-                      loadTileBytes: vm.getLightPollutionTileBytes,
-                    ),
+                    tileProvider: windowsTileProvider,
                     maxNativeZoom: 19,
+                    keepBuffer: 4,
+                    panBuffer: 1,
+                    tileDisplay: const flutter_map.TileDisplay.instantaneous(),
                     tileBuilder: (_, tileWidget, _) => Opacity(
-                      opacity: LightPollutionTileConstants.overlayOpacity,
+                      opacity:
+                          LightPollutionTileConstants.windowsOverlayOpacity,
                       child: tileWidget,
                     ),
                   ),

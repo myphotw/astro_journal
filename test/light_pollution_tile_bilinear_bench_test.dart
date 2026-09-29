@@ -24,7 +24,7 @@ void main() {
     );
 
     /// 제주 타일(z=11) 근처 조밀한 가짜 셀.
-    List<BrightnessCell> _jejuCells() {
+    List<BrightnessCell> jejuCells() {
       final cells = <BrightnessCell>[];
       for (var row = 730; row <= 820; row++) {
         for (var col = 300; col <= 450; col++) {
@@ -39,7 +39,7 @@ void main() {
       // Jeju City ~ tile 1743,821 @ z11
       final png = await LightPollutionTileGenerator.generatePng(
         metadata: metadata,
-        cells: _jejuCells(),
+        cells: jejuCells(),
         tileX: 1743,
         tileY: 821,
         zoom: 11,
@@ -49,7 +49,7 @@ void main() {
     });
 
     test('benchmark generatePng Jeju z11 (5 runs)', () async {
-      final cells = _jejuCells();
+      final cells = jejuCells();
       // warm-up
       await LightPollutionTileGenerator.generatePng(
         metadata: metadata,

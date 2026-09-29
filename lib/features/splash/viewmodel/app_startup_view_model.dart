@@ -80,9 +80,8 @@ class AppStartupViewModel extends ChangeNotifier {
   bool get isReady => _isReady;
   String? get errorMessage => _errorMessage;
 
-  /// Windows의 첫 화면은 사진 등록 작업공간이다. 추천 전체 계산과
-  /// 카탈로그 보조 인덱스는 첫 화면을 그리는 데 필요하지 않으므로,
-  /// 모바일과 달리 Splash를 막지 않고 해당 화면이 필요할 때 준비한다.
+  /// Windows에서는 Home 추천을 준비하되, 카탈로그 보조 인덱스와
+  /// 부가 탭 워밍업은 해당 화면이 필요할 때 수행한다.
   bool get _deferSecondaryWorkForWindows =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
@@ -144,12 +143,17 @@ class AppStartupViewModel extends ChangeNotifier {
       );
 
       if (_deferSecondaryWorkForWindows) {
-        // Windows는 첫 진입이 사진 등록이므로 아래 두 작업을 기다릴
-        // 이유가 없다. RecommendationEngine의 전체 Catalog 순회와
-        // 검색 인덱스/장비 chip 구축은 해당 기능을 여는 시점에 수행한다.
-        _tagline = '사진 등록 화면을 준비하는 중...';
+        // Windows도 첫 진입이 Home이므로 추천 계산은 준비한다.
+        // Catalog 검색 인덱스/장비 chip 구축은 해당 탭 진입까지 미룬다.
+        _tagline = '오늘 밤 추천을 준비하는 중...';
         notifyListeners();
         await yieldForSplashAnimation();
+        try {
+          await _homeViewModel.finishDeferredHeavyWork();
+          await yieldForSplashAnimation();
+        } catch (_) {
+          // 실패해도 Home은 진입 — 화면에서 새로고침 가능
+        }
       } else {
         // 모바일 홈은 진입 직후 추천을 표시하므로 기존처럼 준비를 완료한다.
         _tagline = '추천 대상을 계산하는 중...';
@@ -184,7 +188,7 @@ class AppStartupViewModel extends ChangeNotifier {
     _isRunning = false;
     notifyListeners();
 
-    // Windows의 첫 화면은 사진 등록이며 부가 탭은 선택 시 lazy load한다.
+    // Windows의 부가 탭은 선택 시 lazy load한다.
     // 모바일은 기존 워밍업 동작을 그대로 유지한다.
     if (!_deferSecondaryWorkForWindows) {
       unawaited(_warmSecondaryTabs());

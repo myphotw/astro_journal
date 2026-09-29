@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -21,12 +20,14 @@ class LightPollutionTileProvider implements TileProvider {
     required this._metadata,
     LightPollutionTileCache? cache,
     LightPollutionTileDiskCache? diskCache,
+    int maxConcurrent = 1,
+    this._gapBetweenTiles = const Duration(milliseconds: 40),
   })  : _cache = cache ?? LightPollutionTileCache(),
-        _diskCache = diskCache ?? LightPollutionTileDiskCache();
+        _diskCache = diskCache ?? LightPollutionTileDiskCache(),
+        _maxConcurrent = maxConcurrent,
+        assert(maxConcurrent > 0);
 
   static const _tag = 'BORTLE TILE';
-  static const _maxConcurrent = 1;
-  static const _gapBetweenTiles = Duration(milliseconds: 40);
   /// 캐시 키 버전 — 바꾸면 디스크에 남은 이전 알고리즘 타일을 쓰지 않음.
   static const _cacheVersion = 'bilin1';
 
@@ -34,6 +35,8 @@ class LightPollutionTileProvider implements TileProvider {
   BortleMetadata _metadata;
   final LightPollutionTileCache _cache;
   final LightPollutionTileDiskCache _diskCache;
+  final int _maxConcurrent;
+  final Duration _gapBetweenTiles;
   final _inFlight = <String, Future<Tile>>{};
   final _waitQueue = Queue<Completer<void>>();
   var _activeLoads = 0;

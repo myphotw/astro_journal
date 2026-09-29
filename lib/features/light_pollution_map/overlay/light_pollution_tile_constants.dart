@@ -10,6 +10,9 @@ class LightPollutionTileConstants {
   /// Current overlay opacity. Separated for future user slider (0%–100%).
   static double overlayOpacity = defaultOverlayOpacity;
 
+  /// Windows presentation multiplier applied over the pre-alpha Bortle tile.
+  static const double windowsOverlayOpacity = 0.80;
+
   /// Atlas bilinear 샘플 간격. 샘플 사이 픽셀은 화면 공간 bilinear.
   static int samplingStrideForZoom(int zoom) {
     if (zoom <= 7) return 8;

@@ -11,6 +11,7 @@ import '../../features/catalog/viewmodel/catalog_view_model.dart';
 import '../../features/desktop/view/pc_photo_registration_screen.dart';
 import '../../features/gallery/view/gallery_screen.dart';
 import '../../features/gallery/viewmodel/gallery_view_model.dart';
+import '../../features/home/view/pc_home_screen.dart';
 import '../../features/light_pollution_map/view/light_pollution_map_screen.dart';
 import '../../features/light_pollution_map/viewmodel/light_pollution_map_view_model.dart';
 import '../../features/settings/view/settings_screen.dart';
@@ -21,7 +22,7 @@ import '../../features/stats/viewmodel/stats_view_model.dart';
 
 /// Windows 전용 상단 내비게이션 Shell.
 ///
-/// 메뉴 index 1~5는 기존 [AppNavigationNotifier] 계약을 그대로 사용해
+/// 메뉴 index 0~5는 기존 [AppNavigationNotifier] 계약을 그대로 사용해
 /// Catalog/성도 내부의 화면 전환 요청도 모바일과 같은 대상으로 연결한다.
 class PcMainShell extends StatefulWidget {
   const PcMainShell({super.key});
@@ -31,8 +32,9 @@ class PcMainShell extends StatefulWidget {
 }
 
 class _PcMainShellState extends State<PcMainShell> {
-  static const _settingsIndex = 6;
-  static const _screenCount = 7;
+  static const _photoRegistrationIndex = 6;
+  static const _settingsIndex = 7;
+  static const _screenCount = 8;
 
   AppNavigationNotifier? _navigation;
   final _navigatorKeys = List<GlobalKey<NavigatorState>>.generate(
@@ -43,7 +45,7 @@ class _PcMainShellState extends State<PcMainShell> {
   late final _pages = <Widget>[
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[0],
-      child: const PcPhotoRegistrationScreen(),
+      child: const PcHomeScreen(),
     ),
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[1],
@@ -64,6 +66,10 @@ class _PcMainShellState extends State<PcMainShell> {
     ),
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[6],
+      child: const PcPhotoRegistrationScreen(),
+    ),
+    _PcTabNavigator(
+      navigatorKey: _navigatorKeys[7],
       child: const SettingsScreen(),
     ),
   ];
@@ -148,6 +154,7 @@ class _PcMainShellState extends State<PcMainShell> {
                     LightPollutionMapScreen(isActive: index == 3),
                     _pages[4],
                     _pages[5],
+                    _pages[_photoRegistrationIndex],
                     _pages[_settingsIndex],
                   ],
                 );
@@ -167,13 +174,14 @@ class _PcTopNavigation extends StatelessWidget {
   final ValueChanged<int> onSelected;
 
   static const _items = <({int index, String label, IconData icon})>[
-    (index: 0, label: '사진 등록', icon: Icons.add_photo_alternate_outlined),
+    (index: 0, label: '홈', icon: Icons.home_outlined),
+    (index: 6, label: '사진 등록', icon: Icons.add_photo_alternate_outlined),
     (index: 1, label: '천체 카탈로그', icon: Icons.grid_view_outlined),
     (index: 2, label: '갤러리', icon: Icons.photo_library_outlined),
     (index: 3, label: '광해지도', icon: Icons.map_outlined),
     (index: 4, label: '성도', icon: Icons.explore_outlined),
     (index: 5, label: '통계', icon: Icons.bar_chart_outlined),
-    (index: 6, label: '설정', icon: Icons.settings_outlined),
+    (index: 7, label: '설정', icon: Icons.settings_outlined),
   ];
 
   @override
