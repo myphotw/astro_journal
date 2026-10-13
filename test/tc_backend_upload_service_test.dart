@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:astro_journal/data/models/backend_upload_result.dart';
+import 'package:astro_journal/data/models/exif_info.dart';
 import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:astro_journal/services/tc_backend_upload_service.dart';
@@ -49,6 +50,42 @@ void main() {
     final result = await service.uploadRecord(record());
     expect(result.attempted, isFalse);
     expect(calls, 0);
+  });
+
+  test('record CREATE payload maps canonical Gallery general info', () {
+    final service = TcBackendUploadService(settingsService: settings);
+    final payload = service.observationRecordPayload(
+      ShootingRecord(
+        id: 'local-record',
+        celestialObjectId: 'M42',
+        capturedAt: DateTime.utc(2026, 1, 2, 3, 4, 5),
+        createdAt: DateTime.utc(2026, 1, 2),
+        exif: const ExifInfo(
+          filename: 'm42.fit',
+          size: '',
+          date: '',
+          equipment: 'Canonical Draco',
+          equipmentId: '11111111-1111-4111-8111-111111111111',
+          focal: '',
+          fstop: '',
+          exposure: '1분30초',
+          integrationSeconds: 90,
+          iso: '',
+          resolution: '',
+          address: 'Seoul Observatory',
+        ),
+      ),
+      178,
+    );
+
+    expect(payload['equipment_id'], isNull);
+    expect(
+      payload['equipment_ref_id'],
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(payload['integration_seconds'], 90);
+    expect(payload['address'], 'Seoul Observatory');
+    expect(payload, isNot(contains('equipment_name_snapshot')));
   });
 
   test('uploads, polls and creates an observation record', () async {

@@ -90,6 +90,12 @@ class ShootingRecord {
   String? get galleryThumbnailUri => thumbnailUrl ?? photoUri;
   String? get galleryPreviewUri => previewUrl ?? originalUrl ?? photoUri;
 
+  /// 등록 Equipment UUID. 기존 [ExifInfo.equipment] 문자열과는 별개다.
+  String? get equipmentId => exif?.equipmentId;
+
+  /// 서버 canonical 총 적분시간(초). 기존 표시 문자열은 exif에 유지한다.
+  int? get integrationSeconds => exif?.integrationSeconds;
+
   /// Plate Solve 성공 여부 (Gallery 표시용 편의 getter).
   bool get isPlateSolved => plateSolve?.success ?? false;
 

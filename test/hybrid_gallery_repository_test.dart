@@ -249,6 +249,30 @@ void main() {
     },
   );
 
+  test('fresh legacy detail cache missing general info is rehydrated', () async {
+    final legacyPayload = _item('cached', commonFileId: 178).toJson()
+      ..remove('equipment_ref_id')
+      ..remove('equipment_name')
+      ..remove('equipment_name_snapshot')
+      ..remove('equipment_is_active')
+      ..remove('equipment_deleted')
+      ..remove('integration_seconds')
+      ..remove('address');
+    cache.entries['astro:gallery:detail:record-cached'] = GalleryCacheEntry(
+      key: 'astro:gallery:detail:record-cached',
+      payloadJson: jsonEncode(legacyPayload),
+      cachedAt: now,
+    );
+    remote.detail = _item('cached', commonFileId: 178);
+
+    final result = await repository().getById('record-cached');
+
+    expect(remote.detailCalls, 1);
+    expect(result?.equipmentFieldsPresent, isTrue);
+    expect(result?.integrationSecondsPresent, isTrue);
+    expect(result?.addressPresent, isTrue);
+  });
+
   test(
     'remote COMPLETED replaces stale WAITING and survives cache restart',
     () async {
@@ -619,6 +643,9 @@ GalleryItem _item(
   thumbnailUrl: 'https://backend.test/thumbnail/$id',
   previewUrl: 'https://backend.test/preview/$id',
   originalUrl: 'https://backend.test/original/$id',
+  equipmentFieldsPresent: true,
+  integrationSecondsPresent: true,
+  addressPresent: true,
 );
 
 class _FakeCache implements GalleryCacheDataSource {

@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../services/catalog_search_service.dart';
 import '../../services/catalog_capture_projection_service.dart';
 import '../../services/app_logger.dart';
+import '../../services/metadata_format.dart';
 import '../../services/tc_backend_sync_coordinator.dart';
 import '../datasources/gallery_record_link_datasource.dart';
 import '../models/catalog_object.dart';
@@ -264,8 +265,8 @@ class GalleryShootingRecordRepositoryAdapter
   Future<void> update(ShootingRecord record) async {
     final previous = _lastRemoteRecords[record.id];
     if (_isRemoteOnly(record.id)) {
-      // Remote canonical rows still need a durable local projection for fields
-      // not yet present in the ObservationRecord API (integration/equipment).
+      // Remote canonical rows still need a durable local projection for local
+      // EXIF metadata that is not part of the ObservationRecord API.
       // ShootingRecord.toMap intentionally omits transient backend identifiers.
       await _localRepository.save(record);
     } else {
@@ -295,6 +296,23 @@ class GalleryShootingRecordRepositoryAdapter
     }
     if (previous.exif?.lng != record.exif?.lng) {
       fields['longitude'] = record.exif?.lng;
+    }
+    if (previous.capturedAt != record.capturedAt) {
+      fields['captured_at'] = record.capturedAt.toUtc().toIso8601String();
+    }
+    if (previous.celestialObjectId != record.celestialObjectId) {
+      fields['catalog_object_id'] = record.celestialObjectId;
+    }
+    if (previous.equipmentId != record.equipmentId) {
+      fields['equipment_ref_id'] = record.equipmentId;
+    }
+    final previousIntegration = _integrationSeconds(previous);
+    final nextIntegration = _integrationSeconds(record);
+    if (previousIntegration != nextIntegration) {
+      fields['integration_seconds'] = nextIntegration;
+    }
+    if (previous.exif?.address != record.exif?.address) {
+      fields['address'] = record.exif?.address;
     }
     await _queuePatch(record, fields);
     _onRecordsChanged?.call();
@@ -390,6 +408,12 @@ class GalleryShootingRecordRepositoryAdapter
     );
     _requestDrain();
   }
+
+  int? _integrationSeconds(ShootingRecord record) =>
+      record.integrationSeconds ??
+      MetadataFormat.integrationSecondsFromExposure(
+        record.exif?.exposure ?? '',
+      );
 
   void _requestDrain() {
     final coordinator = _syncCoordinator;

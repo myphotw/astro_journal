@@ -433,6 +433,13 @@ class PhotoRegistrationService {
           'latitude': record.exif?.lat,
           'longitude': record.exif?.lng,
           'location_name': record.location ?? record.exif?.locationName,
+          'equipment_id': record.equipmentId == null &&
+                  record.exif?.equipment.trim().isNotEmpty == true
+              ? record.exif!.equipment.trim()
+              : null,
+          'equipment_ref_id': record.equipmentId,
+          'integration_seconds': _integrationSeconds(record),
+          'address': record.exif?.address,
           'memo': record.memo,
           'favorite': record.isFavorite,
           'representative': record.isRepresentative,
@@ -531,7 +538,7 @@ class PhotoRegistrationService {
 
     String? locationName = confirmed.locationName;
 
-    String? address;
+    String? address = confirmed.address;
 
     if (finalLat != null && finalLng != null) {
       try {
@@ -552,6 +559,7 @@ class PhotoRegistrationService {
         AppLogger.error('PhotoRegistration.geocoding', e);
       }
     }
+    address ??= payload.exifInfo.address;
 
     final updatedExif = payload.exifInfo.copyWith(
       targetName: confirmed.targetName?.isNotEmpty == true
@@ -562,6 +570,14 @@ class PhotoRegistrationService {
           ? confirmed.equipment!
           : payload.exifInfo.equipment,
 
+      equipmentId: confirmed.equipmentId ?? payload.exifInfo.equipmentId,
+
+      equipmentNameSnapshot:
+          confirmed.equipment?.isNotEmpty == true &&
+              confirmed.equipmentId != null
+          ? confirmed.equipment
+          : payload.exifInfo.equipmentNameSnapshot,
+
       date: confirmed.capturedAt?.isNotEmpty == true
           ? confirmed.capturedAt!
           : payload.exifInfo.date,
@@ -570,6 +586,17 @@ class PhotoRegistrationService {
           ? confirmed.totalExpSec!
           : payload.exifInfo.exposure,
 
+      integrationSeconds:
+          confirmed.integrationSeconds ??
+          (confirmed.totalExpSec?.isNotEmpty == true
+              ? MetadataFormat.integrationSecondsFromExposure(
+                  confirmed.totalExpSec!,
+                )
+              : payload.exifInfo.integrationSeconds ??
+                    MetadataFormat.integrationSecondsFromExposure(
+                      payload.exifInfo.exposure,
+                    )),
+
       lat: finalLat,
 
       lng: finalLng,
@@ -577,6 +604,7 @@ class PhotoRegistrationService {
       locationName: locationName,
 
       address: address,
+      addressIsCanonical: address != null,
 
       stackNum: confirmed.stackNum ?? payload.exifInfo.stackNum,
 
@@ -634,6 +662,12 @@ class PhotoRegistrationService {
       plateSolve: plateSolve,
     );
   }
+
+  int? _integrationSeconds(ShootingRecord record) =>
+      record.integrationSeconds ??
+      MetadataFormat.integrationSecondsFromExposure(
+        record.exif?.exposure ?? '',
+      );
 
   void _logFinalMetadata(
     PhotoRegistrationPayload payload,
@@ -788,6 +822,12 @@ class ConfirmedMetadata {
 
     this.equipment,
 
+    this.equipmentId,
+
+    this.integrationSeconds,
+
+    this.address,
+
     this.locationName,
 
     this.lat,
@@ -816,6 +856,12 @@ class ConfirmedMetadata {
   final String? capturedAt;
 
   final String? equipment;
+
+  final String? equipmentId;
+
+  final int? integrationSeconds;
+
+  final String? address;
 
   final String? locationName;
 
@@ -858,6 +904,14 @@ class ConfirmedMetadata {
       ),
 
       equipment: exif.equipment.isNotEmpty ? exif.equipment : null,
+
+      equipmentId: exif.equipmentId,
+
+      integrationSeconds:
+          exif.integrationSeconds ??
+          MetadataFormat.integrationSecondsFromExposure(exif.exposure),
+
+      address: exif.address,
 
       lat: exif.lat,
 

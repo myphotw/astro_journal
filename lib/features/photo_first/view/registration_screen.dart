@@ -621,7 +621,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         fstopCtrl: _fstopCtrl,
         focalCtrl: _focalCtrl,
         onCapturedAtChanged: (v) => setState(() => session.capturedAt = v),
-        onEquipmentChanged: (v) => setState(() => session.equipment = v),
+        onEquipmentChanged: (value) => setState(() {
+          session.equipment = value;
+          final matches = _equipmentList
+              .where((equipment) => equipment.name == value)
+              .toList(growable: false);
+          session.equipmentId = matches.length == 1 ? matches.single.id : null;
+        }),
       ),
       RegistrationWizardStep.location => _LocationStep(
         locationNameCtrl: _locationNameCtrl,

@@ -457,7 +457,11 @@ class _PcPhotoRegistrationScreenState extends State<PcPhotoRegistrationScreen> {
                     Row(children: [
                       Expanded(child: MaterialDateTimePickerField(value: session.capturedAt, onChanged: (value) => setState(() => session.capturedAt = value))),
                       const SizedBox(width: AppTheme.spacingSm),
-                      Expanded(child: _Dropdown<String?>(key: ValueKey('equipment-${session.payload.photoId}-${session.equipment}'), label: '장비', value: names.contains(session.equipment) ? session.equipment : null, items: [const DropdownMenuItem(value: null, child: Text('선택 안 함')), ...names.map((name) => DropdownMenuItem(value: name, child: Text(name)))], onChanged: (value) => setState(() => session.equipment = value))),
+                      Expanded(child: _Dropdown<String?>(key: ValueKey('equipment-${session.payload.photoId}-${session.equipment}'), label: '장비', value: names.contains(session.equipment) ? session.equipment : null, items: [const DropdownMenuItem(value: null, child: Text('선택 안 함')), ...names.map((name) => DropdownMenuItem(value: name, child: Text(name)))], onChanged: (value) => setState(() {
+                        session.equipment = value;
+                        final matches = _equipment.where((equipment) => equipment.name == value).toList(growable: false);
+                        session.equipmentId = matches.length == 1 ? matches.single.id : null;
+                      }))),
                     ]),
                     const _Section('관측 위치'),
                     _Dropdown<String?>(key: ValueKey('site-${session.payload.photoId}'), label: '저장 관측지', hint: '직접 입력 또는 기존 관측지 선택', value: null, items: [const DropdownMenuItem(value: null, child: Text('직접 입력')), ..._sites.map((site) => DropdownMenuItem(value: site.id, child: Text(site.name)))], onChanged: _applySite),

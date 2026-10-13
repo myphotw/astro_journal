@@ -113,6 +113,7 @@ class AppProviders {
     final bortleRepository = BortleRepositoryImpl();
     final catalogRepository = CatalogRepositoryImpl();
     late EquipmentViewModel equipmentViewModel;
+    late GalleryViewModel galleryViewModel;
     late Future<void> Function() refreshEquipmentCollection;
     late Future<void> Function() scheduleEquipmentSync;
     final equipmentLocalDataSource = EquipmentLocalDataSource(
@@ -443,10 +444,11 @@ class AppProviders {
       captureProjection: catalogCaptureProjection,
     );
 
-    final galleryViewModel = GalleryViewModel(
+    galleryViewModel = GalleryViewModel(
       galleryShootingRecordRepository,
       catalogRepository,
       catalogSearchService,
+      equipmentRepository: equipmentRepository,
     );
 
     final plateSolveViewModel = PlateSolveViewModel(
@@ -512,7 +514,10 @@ class AppProviders {
     };
 
     equipmentViewModel = EquipmentViewModel(equipmentRepository);
-    refreshEquipmentCollection = equipmentViewModel.load;
+    refreshEquipmentCollection = () async {
+      await equipmentViewModel.load();
+      await galleryViewModel.refreshEquipmentDisplayNames();
+    };
 
     final skyMapViewModel = SkyMapViewModel(
       catalogRepository,

@@ -84,6 +84,7 @@ class RegistrationSession {
   // —— 촬영 정보 (Step 2) ——
   DateTime? capturedAt;
   String? equipment;
+  String? equipmentId;
   int? stackNum;
 
   /// 숫자만 (UI 입력값).
@@ -119,6 +120,7 @@ class RegistrationSession {
     if (equipment == null || equipment!.trim().isEmpty) {
       equipment = exif.equipment.trim().isEmpty ? null : exif.equipment.trim();
     }
+    equipmentId ??= exif.equipmentId;
     if (locationName == null || locationName!.trim().isEmpty) {
       locationName = exif.locationName?.trim();
     }
@@ -202,6 +204,10 @@ class RegistrationSession {
       memo: _v(memo),
       capturedAt: capturedAt?.toIso8601String(),
       equipment: equipment,
+      equipmentId: equipmentId,
+      integrationSeconds: MetadataFormat.integrationSecondsFromMinutesInput(
+        totalExpMinutesDigits ?? '',
+      ),
       locationName: _v(locationName),
       lat: lat,
       lng: lng,

@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:astro_journal/data/datasources/remote_gallery_datasource.dart';
 import 'package:astro_journal/data/models/gallery_observation_projection.dart';
 import 'package:astro_journal/data/models/gallery_item.dart';
+import 'package:astro_journal/data/models/exif_info.dart';
 import 'package:astro_journal/data/models/plate_solve_queue.dart';
+import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -41,10 +43,27 @@ void main() {
     expect(item.latitude, 33.3);
     expect(item.longitude, 126.5);
     expect(item.location, 'Jeju');
+    expect(item.equipmentRefId, '11111111-1111-4111-8111-111111111111');
+    expect(item.equipmentName, 'Canonical Draco');
+    expect(item.equipmentNameSnapshot, 'Original Draco');
+    expect(item.equipmentIsActive, isTrue);
+    expect(item.equipmentDeleted, isFalse);
+    expect(item.integrationSeconds, 0);
+    expect(item.address, 'Jeju-si, Jeju-do');
     expect(item.memo, 'canonical memo');
     expect(item.thumbnailUrl, '/media/thumb/sha-1');
     expect(item.previewUrl, '/media/preview/sha-1');
     expect(item.originalUrl, '/media/original/sha-1');
+
+    final cached = GalleryItem.fromJson(item.toJson());
+    final record = GalleryObservationProjection.fromGalleryItem(
+      cached,
+    ).toShootingRecord();
+    expect(record.equipmentId, item.equipmentRefId);
+    expect(record.exif?.equipment, 'Canonical Draco');
+    expect(record.integrationSeconds, 0);
+    expect(record.exif?.exposure, '0초');
+    expect(record.exif?.address, 'Jeju-si, Jeju-do');
   });
 
   test('loads Astro Gallery detail by record_id', () async {
@@ -72,6 +91,57 @@ void main() {
     expect(requestedPaths, ['/api/astro/gallery/record-1']);
     expect(item.backendRecordId, 'record-1');
     expect(item.plateSolveStatus, PlateSolveQueueStatus.processing);
+  });
+
+  test('deleted Equipment keeps the server name snapshot fallback', () {
+    final json = _astroItemJson()
+      ..['equipment_name'] = null
+      ..['equipment_is_active'] = false
+      ..['equipment_deleted'] = true;
+
+    final record = GalleryObservationProjection.fromGalleryItem(
+      GalleryItem.fromJson(json),
+    ).toShootingRecord();
+
+    expect(record.equipmentId, '11111111-1111-4111-8111-111111111111');
+    expect(record.exif?.equipment, 'Original Draco');
+    expect(record.exif?.equipmentIsActive, isFalse);
+    expect(record.exif?.equipmentDeleted, isTrue);
+  });
+
+  test('canonical null address clears without erasing legacy-only address', () {
+    final json = _astroItemJson()..['address'] = null;
+    final projection = GalleryObservationProjection.fromGalleryItem(
+      GalleryItem.fromJson(json),
+    );
+    ShootingRecord local(bool canonical) => ShootingRecord(
+      id: 'local',
+      celestialObjectId: 'M42',
+      capturedAt: DateTime.utc(2026, 8, 7),
+      createdAt: DateTime.utc(2026, 8, 7),
+      exif: ExifInfo(
+        filename: 'm42.fit',
+        size: '',
+        date: '',
+        equipment: '',
+        focal: '',
+        fstop: '',
+        exposure: '',
+        iso: '',
+        resolution: '',
+        address: 'Legacy address',
+        addressIsCanonical: canonical,
+      ),
+    );
+
+    expect(
+      projection.toShootingRecord(localRecord: local(true)).exif?.address,
+      isNull,
+    );
+    expect(
+      projection.toShootingRecord(localRecord: local(false)).exif?.address,
+      'Legacy address',
+    );
   });
 
   test(
@@ -347,6 +417,13 @@ Map<String, dynamic> _astroItemJson() => {
   'latitude': 33.3,
   'longitude': 126.5,
   'location_name': 'Jeju',
+  'equipment_ref_id': '11111111-1111-4111-8111-111111111111',
+  'equipment_name': 'Canonical Draco',
+  'equipment_name_snapshot': 'Original Draco',
+  'equipment_is_active': true,
+  'equipment_deleted': false,
+  'integration_seconds': 0,
+  'address': 'Jeju-si, Jeju-do',
   'memo': 'canonical memo',
   'favorite': true,
   'representative': true,

@@ -1,4 +1,5 @@
 import '../../core/constants/analysis_status.dart';
+import '../../services/metadata_format.dart';
 import 'exif_info.dart';
 import 'gallery_item.dart';
 import 'plate_solve_queue.dart';
@@ -37,6 +38,16 @@ class GalleryObservationProjection {
     this.location,
     this.latitude,
     this.longitude,
+    this.equipmentRefId,
+    this.equipmentName,
+    this.equipmentNameSnapshot,
+    this.equipmentIsActive,
+    this.equipmentDeleted,
+    this.equipmentFieldsPresent = false,
+    this.integrationSeconds,
+    this.integrationSecondsPresent = false,
+    this.address,
+    this.addressPresent = false,
     this.targetName,
     this.originalFilename,
     this.mimeType,
@@ -60,6 +71,16 @@ class GalleryObservationProjection {
   final String? location;
   final double? latitude;
   final double? longitude;
+  final String? equipmentRefId;
+  final String? equipmentName;
+  final String? equipmentNameSnapshot;
+  final bool? equipmentIsActive;
+  final bool? equipmentDeleted;
+  final bool equipmentFieldsPresent;
+  final int? integrationSeconds;
+  final bool integrationSecondsPresent;
+  final String? address;
+  final bool addressPresent;
   final String? targetName;
   final String syncState;
   final String? originalFilename;
@@ -87,6 +108,16 @@ class GalleryObservationProjection {
     location: item.location,
     latitude: item.latitude,
     longitude: item.longitude,
+    equipmentRefId: item.equipmentRefId,
+    equipmentName: item.equipmentName,
+    equipmentNameSnapshot: item.equipmentNameSnapshot,
+    equipmentIsActive: item.equipmentIsActive,
+    equipmentDeleted: item.equipmentDeleted,
+    equipmentFieldsPresent: item.equipmentFieldsPresent,
+    integrationSeconds: item.integrationSeconds,
+    integrationSecondsPresent: item.integrationSecondsPresent,
+    address: item.address,
+    addressPresent: item.addressPresent,
     targetName:
         resolvedTargetName ??
         item.catalogObjectId.ifNotEmpty ??
@@ -100,22 +131,55 @@ class GalleryObservationProjection {
     final filename = originalFilename ?? localRecord?.originalFilename ?? '';
     final baseExif =
         localRecord?.exif ?? ExifInfo.placeholder(filename: filename);
+    final projectedEquipmentName = equipmentFieldsPresent
+        ? (equipmentName ?? equipmentNameSnapshot ?? baseExif.equipment)
+        : baseExif.equipment;
+    final projectedIntegrationSeconds = integrationSecondsPresent
+        ? integrationSeconds
+        : baseExif.integrationSeconds;
+    final projectedExposure = projectedIntegrationSeconds != null
+        ? MetadataFormat.formatSeconds(projectedIntegrationSeconds.toDouble())
+        : integrationSecondsPresent && baseExif.integrationSeconds != null
+        ? ''
+        : baseExif.exposure;
+    final projectedAddress = addressPresent
+        ? (address ?? (baseExif.addressIsCanonical ? null : baseExif.address))
+        : baseExif.address;
+    final projectedAddressIsCanonical = addressPresent
+        ? address != null ||
+              baseExif.addressIsCanonical ||
+              baseExif.address == null
+        : baseExif.addressIsCanonical;
     final projectedExif = ExifInfo(
       filename: baseExif.filename.isEmpty ? filename : baseExif.filename,
       originalFilename: filename.ifNotEmpty,
       size: baseExif.size,
       date: captureDatetime.toIso8601String(),
       targetName: targetName,
-      equipment: baseExif.equipment,
+      equipment: projectedEquipmentName,
+      equipmentId: equipmentFieldsPresent
+          ? equipmentRefId
+          : baseExif.equipmentId,
+      equipmentNameSnapshot: equipmentFieldsPresent
+          ? equipmentNameSnapshot
+          : baseExif.equipmentNameSnapshot,
+      equipmentIsActive: equipmentFieldsPresent
+          ? equipmentIsActive
+          : baseExif.equipmentIsActive,
+      equipmentDeleted: equipmentFieldsPresent
+          ? equipmentDeleted
+          : baseExif.equipmentDeleted,
       focal: baseExif.focal,
       fstop: baseExif.fstop,
-      exposure: baseExif.exposure,
+      exposure: projectedExposure,
+      integrationSeconds: projectedIntegrationSeconds,
       iso: baseExif.iso,
       resolution: baseExif.resolution,
       lat: latitude,
       lng: longitude,
       locationName: location,
-      address: baseExif.address,
+      address: projectedAddress,
+      addressIsCanonical: projectedAddressIsCanonical,
       stackNum: baseExif.stackNum,
       singleExpSec: baseExif.singleExpSec,
       filter: baseExif.filter,

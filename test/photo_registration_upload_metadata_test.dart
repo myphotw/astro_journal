@@ -110,6 +110,63 @@ void main() {
     },
   );
 
+  test('explicit equipment UUID and integer integration reach CREATE outbox', () async {
+    final outbox = _CapturingOutbox();
+    final records = _MemoryRecords();
+    final service = PhotoRegistrationService(
+      photoService: _FakePhotoService(),
+      geocodingService: GeocodingService(),
+      apiKeyService: ApiKeyService(),
+      exifService: ExifService(),
+      shootingRecordRepository: records,
+      catalogRepository: _MemoryCatalog(),
+      syncOutboxRepository: outbox,
+    );
+
+    await service.registerPhotoRecord(
+      payload: _payload(exifDate: ''),
+      confirmed: const ConfirmedMetadata(
+        equipment: 'Canonical Draco',
+        equipmentId: '11111111-1111-4111-8111-111111111111',
+        totalExpSec: '1분30초',
+        integrationSeconds: 90,
+        address: 'Seoul Observatory',
+      ),
+      celestialObjectId: 'M42',
+    );
+
+    expect(
+      outbox.created?.payload['equipment_ref_id'],
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(outbox.created?.payload['integration_seconds'], 90);
+    expect(outbox.created?.payload['address'], 'Seoul Observatory');
+    expect(records.records.single.equipmentId, isNotNull);
+    expect(records.records.single.exif?.equipment, 'Canonical Draco');
+  });
+
+  test('legacy equipment name is never auto-mapped to a UUID', () async {
+    final outbox = _CapturingOutbox();
+    final service = PhotoRegistrationService(
+      photoService: _FakePhotoService(),
+      geocodingService: GeocodingService(),
+      apiKeyService: ApiKeyService(),
+      exifService: ExifService(),
+      shootingRecordRepository: _MemoryRecords(),
+      catalogRepository: _MemoryCatalog(),
+      syncOutboxRepository: outbox,
+    );
+
+    await service.registerPhotoRecord(
+      payload: _payload(exifDate: ''),
+      confirmed: const ConfirmedMetadata(equipment: 'Canonical Draco'),
+      celestialObjectId: 'M42',
+    );
+
+    expect(outbox.created?.payload['equipment_ref_id'], isNull);
+    expect(outbox.created?.payload['equipment_id'], 'Canonical Draco');
+  });
+
   test(
     'production projection marks M54 captured after ShootingRecord save',
     () async {

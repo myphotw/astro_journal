@@ -33,6 +33,24 @@ class MetadataFormat {
     return formatSeconds(minutes * 60);
   }
 
+  /// UI의 분 입력값을 서버 canonical 정수 초로 변환한다.
+  ///
+  /// 단위 없는 값은 반드시 분으로 해석하며 소수 분은 반올림한다.
+  static int? integrationSecondsFromMinutesInput(String rawMinutes) {
+    final trimmed = rawMinutes.trim();
+    if (trimmed.isEmpty) return null;
+    final minutes = double.tryParse(trimmed);
+    if (minutes == null || minutes < 0) return null;
+    return (minutes * 60).round();
+  }
+
+  /// 기존 EXIF/DB 노출 표시 문자열을 서버 canonical 정수 초로 변환한다.
+  static int? integrationSecondsFromExposure(String exposure) {
+    final seconds = secondsFromDisplay(exposure);
+    if (seconds == null || seconds < 0) return null;
+    return seconds.round();
+  }
+
   /// "4분20초" / "90" / "2h 30m" → 분 입력란용 숫자 문자열.
   ///
   /// 단위 없는 숫자는 이미 분 값으로 간주한다.

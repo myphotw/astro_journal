@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../data/models/backend_upload_result.dart';
 import '../data/models/shooting_record.dart';
+import 'metadata_format.dart';
 import 'tc_backend_settings_service.dart';
 import 'tc_backend_auth_service.dart';
 
@@ -446,6 +447,7 @@ class TcBackendUploadService implements TcBackendUploadStages {
     int commonFileId, {
     String? clientRecordId,
   }) {
+    final legacyEquipmentName = record.exif?.equipment.trim();
     final payload = <String, dynamic>{
       'file_id': commonFileId,
       'catalog_object_id': record.celestialObjectId,
@@ -456,7 +458,18 @@ class TcBackendUploadService implements TcBackendUploadStages {
       'memo': record.memo,
       'favorite': record.isFavorite,
       'representative': record.isRepresentative,
-      'equipment_id': null,
+      'equipment_id': record.equipmentId == null &&
+              legacyEquipmentName != null &&
+              legacyEquipmentName.isNotEmpty
+          ? legacyEquipmentName
+          : null,
+      'equipment_ref_id': record.equipmentId,
+      'integration_seconds':
+          record.integrationSeconds ??
+          MetadataFormat.integrationSecondsFromExposure(
+            record.exif?.exposure ?? '',
+          ),
+      'address': record.exif?.address,
     };
     if (clientRecordId != null) {
       payload['client_record_id'] = clientRecordId;

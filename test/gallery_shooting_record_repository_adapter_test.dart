@@ -631,6 +631,52 @@ void main() {
     });
   });
 
+  test('general info PATCH keeps null distinct from omitted fields', () async {
+    final outbox = _FakeOutbox();
+    final result = harness(
+      snapshot: _remoteSnapshot([
+        _item(
+          'record-1',
+          'sha-1',
+          'M42',
+          capturedAt,
+          equipmentRefId: '11111111-1111-4111-8111-111111111111',
+          equipmentName: 'Old equipment',
+          equipmentNameSnapshot: 'Old equipment',
+          integrationSeconds: 1800,
+          address: 'Old address',
+        ),
+      ]),
+      outbox: outbox,
+    );
+    final record = (await result.adapter.getAll()).single;
+    final updated = record.copyWith(
+      celestialObjectId: 'M13',
+      capturedAt: capturedAt.add(const Duration(hours: 1)),
+      exif: record.exif!.copyWith(
+        equipment: '',
+        clearEquipmentId: true,
+        exposure: '',
+        clearIntegrationSeconds: true,
+        clearAddress: true,
+      ),
+    );
+
+    await result.adapter.update(updated);
+
+    expect(outbox.patches.single.fields, {
+      'captured_at': updated.capturedAt.toUtc().toIso8601String(),
+      'catalog_object_id': 'M13',
+      'equipment_ref_id': null,
+      'integration_seconds': null,
+      'address': null,
+    });
+    expect(
+      outbox.patches.single.fields,
+      isNot(contains('equipment_name_snapshot')),
+    );
+  });
+
   test('remote-only editable metadata survives adapter recreation', () async {
     final result = harness(
       snapshot: _remoteSnapshot([
@@ -812,6 +858,11 @@ GalleryItem _item(
   PlateSolveQueueStatus? plateSolveStatus,
   String? plateSolveJobId,
   PlateSolveResult? plateSolve,
+  String? equipmentRefId,
+  String? equipmentName,
+  String? equipmentNameSnapshot,
+  int? integrationSeconds,
+  String? address,
 }) => GalleryItem(
   backendRecordId: recordId,
   revision: 7,
@@ -829,6 +880,17 @@ GalleryItem _item(
   originalUrl: '/original/$fileId',
   originalFilename: filename,
   location: 'Jeju',
+  equipmentRefId: equipmentRefId,
+  equipmentName: equipmentName,
+  equipmentNameSnapshot: equipmentNameSnapshot,
+  equipmentFieldsPresent:
+      equipmentRefId != null ||
+      equipmentName != null ||
+      equipmentNameSnapshot != null,
+  integrationSeconds: integrationSeconds,
+  integrationSecondsPresent: integrationSeconds != null,
+  address: address,
+  addressPresent: address != null,
   memo: memo,
 );
 

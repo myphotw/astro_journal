@@ -6,11 +6,14 @@ import '../../../core/constants/catalog_sort_order.dart';
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/gallery_object_category.dart';
 import '../../../data/models/catalog_object.dart';
+import '../../../data/models/equipment.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../data/repositories/catalog_repository.dart';
+import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/shooting_record_repository.dart';
 import '../../../services/catalog_object_sorter.dart';
 import '../../../services/catalog_search_service.dart';
+import '../models/gallery_equipment_selection.dart';
 
 enum GallerySortOrder {
   newestFirst,
@@ -64,12 +67,14 @@ class GalleryViewModel extends ChangeNotifier {
   GalleryViewModel(
     this._shootingRecordRepository,
     this._catalogRepository,
-    this._catalogSearchService,
-  );
+    this._catalogSearchService, {
+    EquipmentRepository? equipmentRepository,
+  }) : _equipmentRepository = equipmentRepository;
 
   final ShootingRecordRepository _shootingRecordRepository;
   final CatalogRepository _catalogRepository;
   final CatalogSearchService _catalogSearchService;
+  final EquipmentRepository? _equipmentRepository;
 
   bool _isLoading = false;
   bool _hasLoaded = false;
@@ -363,7 +368,9 @@ class GalleryViewModel extends ChangeNotifier {
     }
 
     try {
-      final records = await _shootingRecordRepository.getAll();
+      final records = await _resolveEquipmentNames(
+        await _shootingRecordRepository.getAll(),
+      );
       final catalogObjects = await _catalogRepository.getAll(listOnly: true);
 
       _catalogMap = {for (final object in catalogObjects) object.id: object};
@@ -391,8 +398,9 @@ class GalleryViewModel extends ChangeNotifier {
     try {
       final detailed = await _shootingRecordRepository.getById(record.id);
       if (detailed == null) return record;
-      _replaceRecord(detailed);
-      return detailed;
+      final resolved = await _resolveEquipmentName(detailed);
+      _replaceRecord(resolved);
+      return resolved;
     } catch (_) {
       return record;
     }
@@ -409,8 +417,9 @@ class GalleryViewModel extends ChangeNotifier {
         detailed = await repository.getById(record.id);
       }
       if (detailed == null) return record;
-      _replaceRecord(detailed);
-      return detailed;
+      final resolved = await _resolveEquipmentName(detailed);
+      _replaceRecord(resolved);
+      return resolved;
     } catch (_) {
       return record;
     }
@@ -601,6 +610,66 @@ class GalleryViewModel extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<void> refreshEquipmentDisplayNames() async {
+    try {
+      final source = _allRecords;
+      final resolved = await _resolveEquipmentNames(source);
+      if (!identical(source, _allRecords) ||
+          _sameEquipmentDisplay(source, resolved)) {
+        return;
+      }
+      _allRecords = resolved;
+      _invalidatePipelineCache();
+      notifyListeners();
+    } catch (_) {
+      // Equipment sync is already durable. A later refresh can update labels.
+    }
+  }
+
+  Future<ShootingRecord> _resolveEquipmentName(ShootingRecord record) async {
+    final repository = _equipmentRepository;
+    final equipmentId = record.equipmentId;
+    if (repository == null || equipmentId == null) return record;
+    final equipment = await repository.getById(equipmentId);
+    return resolveGalleryEquipmentName(
+      record,
+      equipment == null ? const {} : {equipment.id: equipment},
+    );
+  }
+
+  Future<List<ShootingRecord>> _resolveEquipmentNames(
+    List<ShootingRecord> records,
+  ) async {
+    final repository = _equipmentRepository;
+    if (repository == null || records.isEmpty) return records;
+    final equipment = await repository.getAll();
+    final equipmentById = <String, Equipment>{
+      for (final item in equipment) item.id: item,
+    };
+    return [
+      for (final record in records)
+        resolveGalleryEquipmentName(record, equipmentById),
+    ];
+  }
+
+  bool _sameEquipmentDisplay(
+    List<ShootingRecord> before,
+    List<ShootingRecord> after,
+  ) {
+    if (before.length != after.length) return false;
+    for (var index = 0; index < before.length; index++) {
+      final previousExif = before[index].exif;
+      final nextExif = after[index].exif;
+      if (before[index].id != after[index].id ||
+          previousExif?.equipment != nextExif?.equipment ||
+          previousExif?.equipmentIsActive != nextExif?.equipmentIsActive ||
+          previousExif?.equipmentDeleted != nextExif?.equipmentDeleted) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _replaceRecord(ShootingRecord updated) {

@@ -253,6 +253,10 @@ class _Gallery implements GalleryRepository {
       snapshot;
 
   @override
+  Future<int?> getAuthoritativeDeleteRevision(String backendRecordId) async =>
+      null;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

@@ -429,6 +429,11 @@ class HybridGalleryRepository implements GalleryRepository {
     int? revision,
   }) => item.copyWith(
     revision: revision,
+    catalogObjectId: fields['catalog_object_id'] as String?,
+    updateCatalogObjectId: fields.containsKey('catalog_object_id'),
+    capturedAt: fields.containsKey('captured_at')
+        ? _dateTime(fields['captured_at'])
+        : null,
     favorite: fields.containsKey('favorite')
         ? fields['favorite'] as bool?
         : null,
@@ -442,15 +447,47 @@ class HybridGalleryRepository implements GalleryRepository {
     updateLatitude: fields.containsKey('latitude'),
     longitude: (fields['longitude'] as num?)?.toDouble(),
     updateLongitude: fields.containsKey('longitude'),
+    equipmentRefId: fields['equipment_ref_id']?.toString(),
+    updateEquipmentRefId: fields.containsKey('equipment_ref_id'),
+    equipmentName: fields['equipment_name'] as String?,
+    updateEquipmentName:
+        fields.containsKey('equipment_name') ||
+        fields.containsKey('equipment_ref_id'),
+    equipmentNameSnapshot: fields['equipment_name_snapshot'] as String?,
+    updateEquipmentNameSnapshot: fields.containsKey(
+      'equipment_name_snapshot',
+    ),
+    equipmentIsActive: fields['equipment_is_active'] as bool?,
+    updateEquipmentIsActive:
+        fields.containsKey('equipment_is_active') ||
+        fields.containsKey('equipment_ref_id'),
+    equipmentDeleted: fields['equipment_deleted'] as bool?,
+    updateEquipmentDeleted:
+        fields.containsKey('equipment_deleted') ||
+        fields.containsKey('equipment_ref_id'),
+    integrationSeconds: (fields['integration_seconds'] as num?)?.toInt(),
+    updateIntegrationSeconds: fields.containsKey('integration_seconds'),
+    address: fields['address'] as String?,
+    updateAddress: fields.containsKey('address'),
     syncState: revision == null ? 'QUEUED' : 'SYNCED',
   );
+
+  DateTime? _dateTime(Object? value) {
+    if (value is DateTime) return value.toLocal();
+    return DateTime.tryParse(value?.toString() ?? '')?.toLocal();
+  }
 
   bool _isFresh(GalleryCacheEntry? entry, Duration ttl) =>
       entry != null && _now().difference(entry.cachedAt) <= ttl;
 
   bool _isDetailHydrated(GalleryItem? item) {
     if (item?.commonFileId == null) return false;
-    final status = item!.plateSolveStatus;
+    if (!item!.equipmentFieldsPresent ||
+        !item.integrationSecondsPresent ||
+        !item.addressPresent) {
+      return false;
+    }
+    final status = item.plateSolveStatus;
     if (status == null) return true;
     if (item.plateSolveJobId == null) return false;
     if (status != PlateSolveQueueStatus.completed) return true;

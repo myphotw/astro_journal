@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/equipment.dart';
 import '../../../data/models/exif_info.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/models/plate_solve_queue.dart';
@@ -27,9 +28,12 @@ import '../../../services/tc_backend_sync_coordinator.dart';
 import '../../../shared/widgets/integration_minutes_field.dart';
 import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/material_date_time_picker_field.dart';
+import '../../settings/viewmodel/equipment_view_model.dart';
+import '../models/gallery_equipment_selection.dart';
 import '../viewmodel/gallery_detail_view_model.dart';
 import '../viewmodel/gallery_view_model.dart';
 import '../viewmodel/plate_solve_view_model.dart';
+import '../widgets/gallery_equipment_selector.dart';
 import '../widgets/photo_overlay_view.dart';
 
 @visibleForTesting
@@ -133,7 +137,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
 
   // 편집용 상태/컨트롤러
   DateTime? _capturedAt;
-  late TextEditingController _equipmentCtrl;
+  late GalleryEquipmentSelection _equipmentSelection;
   late TextEditingController _exposureCtrl;
   late TextEditingController _memoCtrl;
   late TextEditingController _locationNameCtrl;
@@ -195,13 +199,24 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
     }
     final current = detailVm.currentRecord;
     final latest = galleryVm.recordForId(current.id);
+    final equipmentChanged =
+        latest?.exif?.equipment != current.exif?.equipment ||
+        latest?.exif?.equipmentId != current.exif?.equipmentId ||
+        latest?.exif?.equipmentIsActive != current.exif?.equipmentIsActive ||
+        latest?.exif?.equipmentDeleted != current.exif?.equipmentDeleted;
     if (latest != null &&
         (latest.plateSolveQueueStatus != current.plateSolveQueueStatus ||
             latest.plateSolveJobId != current.plateSolveJobId ||
             latest.plateSolve != current.plateSolve ||
             latest.syncState != current.syncState ||
-            latest.backendRecordId != current.backendRecordId)) {
+            latest.backendRecordId != current.backendRecordId ||
+            equipmentChanged)) {
       detailVm.updateRecord(latest);
+      if (equipmentChanged && !_equipmentSelection.wasExplicitlyChanged) {
+        setState(() {
+          _equipmentSelection = GalleryEquipmentSelection.fromExif(latest.exif);
+        });
+      }
     }
     _liveRefreshController?.synchronize();
   }
@@ -242,8 +257,8 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
   void _initControllers() {
     final exif = _record.exif;
     _capturedAt = _record.capturedAt;
+    _equipmentSelection = GalleryEquipmentSelection.fromExif(exif);
     if (_controllersReady) {
-      _equipmentCtrl.text = exif?.equipment ?? '';
       _exposureCtrl.text = MetadataFormat.minutesNumberFromDisplay(
         exif?.exposure ?? '',
       );
@@ -255,7 +270,6 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       return;
     }
 
-    _equipmentCtrl = TextEditingController(text: exif?.equipment ?? '');
     _exposureCtrl = TextEditingController(
       text: MetadataFormat.minutesNumberFromDisplay(exif?.exposure ?? ''),
     );
@@ -281,7 +295,6 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
     _observedGalleryVm?.removeListener(_onGalleryChanged);
     _pageController?.dispose();
     if (_controllersReady) {
-      _equipmentCtrl.dispose();
       _exposureCtrl.dispose();
       _memoCtrl.dispose();
       _locationNameCtrl.dispose();
@@ -300,6 +313,18 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
     setState(() {
       _editMode = !_editMode;
       _isPhotoZoomed = false;
+    });
+  }
+
+  void _selectEquipment(Equipment equipment) {
+    setState(() {
+      _equipmentSelection = _equipmentSelection.select(equipment);
+    });
+  }
+
+  void _unlinkEquipment() {
+    setState(() {
+      _equipmentSelection = _equipmentSelection.unlink();
     });
   }
 
@@ -344,8 +369,19 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       fstop: existing?.fstop ?? '',
       iso: existing?.iso ?? '',
       resolution: existing?.resolution ?? '',
-      equipment: _equipmentCtrl.text.trim(),
+      equipment: _equipmentSelection.displayName,
+      equipmentId: _equipmentSelection.equipmentId,
+      equipmentNameSnapshot: existing?.equipmentNameSnapshot,
+      equipmentIsActive: _equipmentSelection.wasExplicitlyChanged
+          ? (_equipmentSelection.equipmentId == null ? null : true)
+          : existing?.equipmentIsActive,
+      equipmentDeleted: _equipmentSelection.wasExplicitlyChanged
+          ? (_equipmentSelection.equipmentId == null ? null : false)
+          : existing?.equipmentDeleted,
       exposure: exposure ?? '',
+      integrationSeconds: MetadataFormat.integrationSecondsFromMinutesInput(
+        exposureText,
+      ),
       lat: lat,
       lng: lng,
       locationName: _locationNameCtrl.text.trim().isEmpty
@@ -354,6 +390,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       address: _addressCtrl.text.trim().isEmpty
           ? null
           : _addressCtrl.text.trim(),
+      addressIsCanonical: true,
       stackNum: existing?.stackNum,
       singleExpSec: existing?.singleExpSec,
       filter: existing?.filter,
@@ -439,6 +476,8 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
   Widget build(BuildContext context) {
     final galleryVm = context.watch<GalleryViewModel>();
     final detailVm = context.watch<GalleryDetailViewModel>();
+    final equipment =
+        context.watch<EquipmentViewModel?>()?.equipment ?? const <Equipment>[];
     _record = detailVm.currentRecord;
     final obj = galleryVm.catalogObjectFor(_record.celestialObjectId);
     final pageController = _pageController;
@@ -554,7 +593,10 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
                     onCapturedAtChanged: (value) {
                       setState(() => _capturedAt = value);
                     },
-                    equipmentCtrl: _equipmentCtrl,
+                    equipmentSelection: _equipmentSelection,
+                    equipment: equipment,
+                    onEquipmentSelected: _selectEquipment,
+                    onEquipmentUnlinked: _unlinkEquipment,
                     exposureCtrl: _exposureCtrl,
                     memoCtrl: _memoCtrl,
                     locationNameCtrl: _locationNameCtrl,
@@ -1551,7 +1593,10 @@ class _EditBody extends StatelessWidget {
     required this.obj,
     required this.capturedAt,
     required this.onCapturedAtChanged,
-    required this.equipmentCtrl,
+    required this.equipmentSelection,
+    required this.equipment,
+    required this.onEquipmentSelected,
+    required this.onEquipmentUnlinked,
     required this.exposureCtrl,
     required this.memoCtrl,
     required this.locationNameCtrl,
@@ -1568,7 +1613,10 @@ class _EditBody extends StatelessWidget {
   final dynamic obj;
   final DateTime? capturedAt;
   final ValueChanged<DateTime?> onCapturedAtChanged;
-  final TextEditingController equipmentCtrl;
+  final GalleryEquipmentSelection equipmentSelection;
+  final List<Equipment> equipment;
+  final ValueChanged<Equipment> onEquipmentSelected;
+  final VoidCallback onEquipmentUnlinked;
   final TextEditingController exposureCtrl;
   final TextEditingController memoCtrl;
   final TextEditingController locationNameCtrl;
@@ -1625,9 +1673,16 @@ class _EditBody extends StatelessWidget {
           hintText: '날짜와 시간을 선택하세요',
         ),
 
-        // 장비명
-        _EditSection(title: '장비명'),
-        _EditField(controller: equipmentCtrl, hint: '예: Seestar S30 Pro'),
+        // 촬영 장비
+        _EditSection(title: '촬영 장비'),
+        GalleryEquipmentSelector(
+          selection: equipmentSelection,
+          equipment: equipment,
+          currentIsActive: record.exif?.equipmentIsActive,
+          currentIsDeleted: record.exif?.equipmentDeleted,
+          onSelected: onEquipmentSelected,
+          onUnlink: onEquipmentUnlinked,
+        ),
         const SizedBox(height: 16),
 
         // 총 적분시간

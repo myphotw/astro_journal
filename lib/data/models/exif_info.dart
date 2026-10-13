@@ -4,9 +4,14 @@ class ExifInfo {
     required this.size,
     required this.date,
     required this.equipment,
+    this.equipmentId,
+    this.equipmentNameSnapshot,
+    this.equipmentIsActive,
+    this.equipmentDeleted,
     required this.focal,
     required this.fstop,
     required this.exposure,
+    this.integrationSeconds,
     required this.iso,
     required this.resolution,
     this.originalFilename,
@@ -15,6 +20,7 @@ class ExifInfo {
     this.lng,
     this.locationName,
     this.address,
+    this.addressIsCanonical = false,
     this.stackNum,
     this.singleExpSec,
     this.filter,
@@ -43,6 +49,14 @@ class ExifInfo {
   /// 장비명 (Make + Model 또는 Seestar creator).
   final String equipment;
 
+  /// 서버 Equipment UUID. 기존 장비명 문자열에서 자동으로 추론하지 않는다.
+  final String? equipmentId;
+
+  /// 장비가 삭제/비활성화되어도 과거 촬영정보에 남기는 서버 snapshot.
+  final String? equipmentNameSnapshot;
+  final bool? equipmentIsActive;
+  final bool? equipmentDeleted;
+
   /// 초점거리 (예: "280 mm").
   final String focal;
 
@@ -51,6 +65,9 @@ class ExifInfo {
 
   /// 총 적분시간 (Seestar tot_exp_sec 또는 EXIF ExposureTime).
   final String exposure;
+
+  /// 서버 canonical 총 적분시간. UI 문자열과 별도로 정수 초를 보존한다.
+  final int? integrationSeconds;
 
   /// ISO (예: "ISO 1600").
   final String iso;
@@ -66,6 +83,9 @@ class ExifInfo {
 
   /// Geocoding으로 조회한 전체 주소.
   final String? address;
+
+  /// address가 서버 일반정보에서 내려왔거나 서버 전송 대상으로 확정됐는지 여부.
+  final bool addressIsCanonical;
 
   /// 스택 수 (MakerNote 또는 파일명에서 추출).
   final int? stackNum;
@@ -134,15 +154,21 @@ class ExifInfo {
       'date': date,
       'targetName': targetName,
       'equipment': equipment,
+      'equipmentId': equipmentId,
+      'equipmentNameSnapshot': equipmentNameSnapshot,
+      'equipmentIsActive': equipmentIsActive,
+      'equipmentDeleted': equipmentDeleted,
       'focal': focal,
       'fstop': fstop,
       'exposure': exposure,
+      'integrationSeconds': integrationSeconds,
       'iso': iso,
       'resolution': resolution,
       'lat': lat,
       'lng': lng,
       'locationName': locationName,
       'address': address,
+      'addressIsCanonical': addressIsCanonical,
       'stackNum': stackNum,
       'singleExpSec': singleExpSec,
       'filter': filter,
@@ -165,15 +191,21 @@ class ExifInfo {
       date: json['date'] as String? ?? '',
       targetName: json['targetName'] as String?,
       equipment: json['equipment'] as String? ?? '',
+      equipmentId: json['equipmentId'] as String?,
+      equipmentNameSnapshot: json['equipmentNameSnapshot'] as String?,
+      equipmentIsActive: json['equipmentIsActive'] as bool?,
+      equipmentDeleted: json['equipmentDeleted'] as bool?,
       focal: json['focal'] as String? ?? '',
       fstop: json['fstop'] as String? ?? '',
       exposure: json['exposure'] as String? ?? '',
+      integrationSeconds: (json['integrationSeconds'] as num?)?.toInt(),
       iso: json['iso'] as String? ?? '',
       resolution: json['resolution'] as String? ?? '',
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
       locationName: json['locationName'] as String?,
       address: json['address'] as String?,
+      addressIsCanonical: json['addressIsCanonical'] as bool? ?? false,
       stackNum: (json['stackNum'] as num?)?.toInt(),
       singleExpSec: json['singleExpSec'] as String?,
       filter: json['filter'] as String?,
@@ -193,15 +225,27 @@ class ExifInfo {
     String? date,
     String? targetName,
     String? equipment,
+    String? equipmentId,
+    bool clearEquipmentId = false,
+    String? equipmentNameSnapshot,
+    bool clearEquipmentNameSnapshot = false,
+    bool? equipmentIsActive,
+    bool clearEquipmentIsActive = false,
+    bool? equipmentDeleted,
+    bool clearEquipmentDeleted = false,
     String? focal,
     String? fstop,
     String? exposure,
+    int? integrationSeconds,
+    bool clearIntegrationSeconds = false,
     String? iso,
     String? resolution,
     double? lat,
     double? lng,
     String? locationName,
     String? address,
+    bool clearAddress = false,
+    bool? addressIsCanonical,
     int? stackNum,
     String? singleExpSec,
     String? filter,
@@ -219,15 +263,29 @@ class ExifInfo {
       date: date ?? this.date,
       targetName: targetName ?? this.targetName,
       equipment: equipment ?? this.equipment,
+      equipmentId: clearEquipmentId ? null : (equipmentId ?? this.equipmentId),
+      equipmentNameSnapshot: clearEquipmentNameSnapshot
+          ? null
+          : (equipmentNameSnapshot ?? this.equipmentNameSnapshot),
+      equipmentIsActive: clearEquipmentIsActive
+          ? null
+          : (equipmentIsActive ?? this.equipmentIsActive),
+      equipmentDeleted: clearEquipmentDeleted
+          ? null
+          : (equipmentDeleted ?? this.equipmentDeleted),
       focal: focal ?? this.focal,
       fstop: fstop ?? this.fstop,
       exposure: exposure ?? this.exposure,
+      integrationSeconds: clearIntegrationSeconds
+          ? null
+          : (integrationSeconds ?? this.integrationSeconds),
       iso: iso ?? this.iso,
       resolution: resolution ?? this.resolution,
       lat: lat ?? this.lat,
       lng: lng ?? this.lng,
       locationName: locationName ?? this.locationName,
-      address: address ?? this.address,
+      address: clearAddress ? null : (address ?? this.address),
+      addressIsCanonical: addressIsCanonical ?? this.addressIsCanonical,
       stackNum: stackNum ?? this.stackNum,
       singleExpSec: singleExpSec ?? this.singleExpSec,
       filter: filter ?? this.filter,

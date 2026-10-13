@@ -54,6 +54,7 @@ class _MetadataReviewScreenState extends State<MetadataReviewScreen> {
   DateTime? _capturedAt;
   List<Equipment> _equipmentList = const [];
   String? _selectedEquipmentName;
+  String? _selectedEquipmentId;
 
   final ValueNotifier<String?> _geocodedLocation = ValueNotifier<String?>(null);
   final ValueNotifier<bool> _isGeocoding = ValueNotifier<bool>(false);
@@ -89,6 +90,7 @@ class _MetadataReviewScreenState extends State<MetadataReviewScreen> {
     _capturedAt = MaterialDateTimePickerField.tryParse(exif.date);
     _selectedEquipmentName =
         exif.equipment.trim().isEmpty ? null : exif.equipment.trim();
+    _selectedEquipmentId = exif.equipmentId;
     _locationNameCtrl = TextEditingController(
       text: exif.locationName?.trim() ?? '',
     );
@@ -119,6 +121,10 @@ class _MetadataReviewScreenState extends State<MetadataReviewScreen> {
     if (!mounted) return;
     setState(() {
       _equipmentList = list;
+      if (_selectedEquipmentId != null) {
+        final matches = list.where((e) => e.id == _selectedEquipmentId);
+        if (matches.isNotEmpty) _selectedEquipmentName = matches.first.name;
+      }
       if (_selectedEquipmentName != null &&
           !list.any((e) => e.name == _selectedEquipmentName)) {
         // EXIF 장비명이 등록 목록에 없으면 드롭다운에 임시로 유지
@@ -212,6 +218,10 @@ class _MetadataReviewScreenState extends State<MetadataReviewScreen> {
         memo: _v(_memoCtrl.text),
         capturedAt: _capturedAt?.toIso8601String(),
         equipment: _selectedEquipmentName,
+        equipmentId: _selectedEquipmentId,
+        integrationSeconds: MetadataFormat.integrationSecondsFromMinutesInput(
+          _totalExpSecCtrl.text,
+        ),
         locationName: _v(_locationNameCtrl.text),
         lat: lat,
         lng: lng,
@@ -560,7 +570,15 @@ class _MetadataReviewScreenState extends State<MetadataReviewScreen> {
             ),
           ),
         ],
-        onChanged: (value) => setState(() => _selectedEquipmentName = value),
+        onChanged: (value) => setState(() {
+          _selectedEquipmentName = value;
+          final matches = _equipmentList
+              .where((equipment) => equipment.name == value)
+              .toList(growable: false);
+          _selectedEquipmentId = matches.length == 1
+              ? matches.single.id
+              : null;
+        }),
       ),
     );
   }
