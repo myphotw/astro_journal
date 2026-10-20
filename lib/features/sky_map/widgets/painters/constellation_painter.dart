@@ -4,33 +4,30 @@ import '../../../../data/models/sky_map_render_object.dart';
 
 /// Layer: Constellation Line — 연결선 + 별자리 이름 라벨.
 class ConstellationPainter extends CustomPainter {
-  ConstellationPainter({required this.constellations});
+  ConstellationPainter({required this.constellations, this.occupiedLabels});
 
   final List<SkyMapConstellationRender> constellations;
+  final List<Rect>? occupiedLabels;
 
   /// 배경(#080B14) 대비를 높인 밝은 청록 — 별보다 덜 눈에 띄게 유지.
-  static const _lineColor = Color(0xFF9BE7FF);
-  static const _labelColor = Color(0xFFB8F0FF);
+  static const _lineColor = Color(0xFF78B9C9);
+  static const _labelColor = Color(0xFF9DD7E3);
 
   static TextStyle get labelStyle => const TextStyle(
-        color: _labelColor,
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        shadows: [
-          Shadow(
-            color: Color(0xCC000000),
-            blurRadius: 4,
-            offset: Offset(0, 1),
-          ),
-        ],
-      );
+    color: _labelColor,
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    shadows: [
+      Shadow(color: Color(0xCC000000), blurRadius: 4, offset: Offset(0, 1)),
+    ],
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
     final linePaint = Paint()
-      ..color = _lineColor.withValues(alpha: 0.88)
-      ..strokeWidth = 1.8
+      ..color = _lineColor.withValues(alpha: 0.48)
+      ..strokeWidth = 1.05
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
@@ -42,15 +39,19 @@ class ConstellationPainter extends CustomPainter {
           linePaint,
         );
       }
-      if (c.segments.isEmpty) continue;
+      if (c.segments.isEmpty || !c.showLabel) continue;
       final painter = TextPainter(
         text: TextSpan(text: c.name, style: labelStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      painter.paint(
-        canvas,
-        Offset(c.labelX - painter.width / 2, c.labelY - painter.height / 2),
+      final offset = Offset(
+        c.labelX - painter.width / 2,
+        c.labelY - painter.height / 2,
       );
+      final bounds = (offset & painter.size).inflate(3);
+      if (!(Offset.zero & size).overlaps(bounds)) continue;
+      painter.paint(canvas, offset);
+      occupiedLabels?.add(bounds);
     }
   }
 

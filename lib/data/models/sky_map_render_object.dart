@@ -6,8 +6,7 @@ import 'catalog_object.dart';
 
 /// 성도 Canvas 렌더용 Catalog 천체 (크기 포함).
 ///
-/// 좌표·크기는 [SkyMapProjectionService]가 계산하며,
-/// CustomPaint는 이 값만 사용한다.
+/// 좌표·크기는 활성 성도 투영 계층이 계산하며 CustomPaint는 이 값만 사용한다.
 class SkyMapRenderObject {
   const SkyMapRenderObject({
     required this.catalogId,
@@ -138,6 +137,7 @@ class SkyMapConstellationRender {
     required this.labelY,
     required this.labelWidth,
     required this.labelHeight,
+    this.showLabel = true,
   });
 
   final String id;
@@ -147,13 +147,14 @@ class SkyMapConstellationRender {
   final double labelY;
   final double labelWidth;
   final double labelHeight;
+  final bool showLabel;
 
   /// 별자리 이름 라벨 히트 영역 (터치 여유 포함).
   Rect get labelHitRect => Rect.fromCenter(
-        center: Offset(labelX, labelY),
-        width: labelWidth + 20,
-        height: labelHeight + 16,
-      );
+    center: Offset(labelX, labelY),
+    width: labelWidth + 20,
+    height: labelHeight + 16,
+  );
 }
 
 /// 픽셀 좌표 쌍 (View/Paint 계층에서 Offset으로 변환).
@@ -221,8 +222,8 @@ class SkyMapSearchResult {
   final CatalogObject? catalogObject;
 
   String get kindLabel => switch (kind) {
-        SkyMapSearchKind.catalog => '천체',
-        SkyMapSearchKind.star => '별',
-        SkyMapSearchKind.constellation => '별자리',
-      };
+    SkyMapSearchKind.catalog => '천체',
+    SkyMapSearchKind.star => '별',
+    SkyMapSearchKind.constellation => '별자리',
+  };
 }

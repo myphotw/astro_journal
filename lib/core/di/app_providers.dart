@@ -522,6 +522,7 @@ class AppProviders {
     final skyMapViewModel = SkyMapViewModel(
       catalogRepository,
       equipmentRepository,
+      activeObservationSiteViewModel,
     );
 
     final appNavigationNotifier = AppNavigationNotifier();

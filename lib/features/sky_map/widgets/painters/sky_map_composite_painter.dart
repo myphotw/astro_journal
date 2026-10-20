@@ -24,6 +24,9 @@ class SkyMapCompositePainter extends CustomPainter {
     required this.showConstellations,
     required this.showStars,
     required this.showLabels,
+    required this.centerAltitudeDeg,
+    required this.centerAzimuthDeg,
+    required this.viewHeightDeg,
   });
 
   final List<SkyMapConstellationRender> constellations;
@@ -34,23 +37,40 @@ class SkyMapCompositePainter extends CustomPainter {
   final bool showConstellations;
   final bool showStars;
   final bool showLabels;
+  final double centerAltitudeDeg;
+  final double centerAzimuthDeg;
+  final double viewHeightDeg;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const SkyMapBackgroundPainter().paint(canvas, size);
+    SkyMapBackgroundPainter(
+      centerAltitudeDeg: centerAltitudeDeg,
+      centerAzimuthDeg: centerAzimuthDeg,
+      viewHeightDeg: viewHeightDeg,
+    ).paint(canvas, size);
+
+    final occupiedLabels = <Rect>[];
 
     if (showConstellations && constellations.isNotEmpty) {
-      ConstellationPainter(constellations: constellations).paint(canvas, size);
+      ConstellationPainter(
+        constellations: constellations,
+        occupiedLabels: occupiedLabels,
+      ).paint(canvas, size);
     }
 
     if (showStars && stars.isNotEmpty) {
-      StarPainter(stars: stars, showLabels: showLabels).paint(canvas, size);
+      StarPainter(
+        stars: stars,
+        showLabels: showLabels,
+        occupiedLabels: occupiedLabels,
+      ).paint(canvas, size);
     }
 
     CatalogObjectPainter(
       objects: objects,
       selectedId: selectedId,
       showLabels: showLabels,
+      occupiedLabels: occupiedLabels,
     ).paint(canvas, size);
 
     if (fovCorners.length == 4) {
@@ -67,6 +87,9 @@ class SkyMapCompositePainter extends CustomPainter {
         oldDelegate.fovCorners != fovCorners ||
         oldDelegate.showConstellations != showConstellations ||
         oldDelegate.showStars != showStars ||
-        oldDelegate.showLabels != showLabels;
+        oldDelegate.showLabels != showLabels ||
+        oldDelegate.centerAltitudeDeg != centerAltitudeDeg ||
+        oldDelegate.centerAzimuthDeg != centerAzimuthDeg ||
+        oldDelegate.viewHeightDeg != viewHeightDeg;
   }
 }

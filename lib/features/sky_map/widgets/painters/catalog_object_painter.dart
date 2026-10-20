@@ -13,11 +13,13 @@ class CatalogObjectPainter extends CustomPainter {
     required this.objects,
     required this.selectedId,
     required this.showLabels,
+    this.occupiedLabels,
   });
 
   final List<SkyMapRenderObject> objects;
   final String? selectedId;
   final bool showLabels;
+  final List<Rect>? occupiedLabels;
 
   @visibleForTesting
   static Color labelColorFor(SkyMapRenderObject object, bool selected) {
@@ -76,16 +78,52 @@ class CatalogObjectPainter extends CustomPainter {
           text: TextSpan(text: obj.displayName, style: style),
           textDirection: TextDirection.ltr,
         )..layout();
-        final dy = math.max(obj.renderHeight / 2, 6) + 4;
-        painter.paint(
-          canvas,
+        final distance = math.max(obj.renderHeight / 2, 6) + 4;
+        final candidates = <Offset>[
           Offset(
             center.dx - painter.width / 2,
-            center.dy - dy - painter.height,
+            center.dy - distance - painter.height,
           ),
-        );
+          Offset(center.dx + distance, center.dy - painter.height / 2),
+          Offset(center.dx - painter.width / 2, center.dy + distance),
+          Offset(
+            center.dx - distance - painter.width,
+            center.dy - painter.height / 2,
+          ),
+        ];
+        Offset? labelOffset;
+        Rect? labelBounds;
+        for (final candidate in candidates) {
+          final bounds = (candidate & painter.size).inflate(2);
+          if (_canPlaceLabel(bounds, size, force: selected)) {
+            labelOffset = candidate;
+            labelBounds = bounds;
+            break;
+          }
+        }
+        if (labelOffset != null && labelBounds != null) {
+          if (selected) {
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                labelBounds.inflate(2),
+                const Radius.circular(4),
+              ),
+              Paint()..color = const Color(0xB3050912),
+            );
+          }
+          painter.paint(canvas, labelOffset);
+          occupiedLabels?.add(labelBounds);
+        }
       }
     }
+  }
+
+  bool _canPlaceLabel(Rect bounds, Size size, {required bool force}) {
+    if (!(Offset.zero & size).overlaps(bounds)) return false;
+    if (force) return true;
+    final occupied = occupiedLabels;
+    if (occupied == null) return true;
+    return !occupied.any((rect) => rect.overlaps(bounds));
   }
 
   void _drawExtent(

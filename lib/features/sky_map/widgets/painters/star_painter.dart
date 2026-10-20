@@ -8,10 +8,12 @@ class StarPainter extends CustomPainter {
   StarPainter({
     required this.stars,
     required this.showLabels,
+    this.occupiedLabels,
   });
 
   final List<SkyMapStarRender> stars;
   final bool showLabels;
+  final List<Rect>? occupiedLabels;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -24,9 +26,9 @@ class StarPainter extends CustomPainter {
     for (final star in stars) {
       final center = Offset(star.screenX, star.screenY);
       final glow = Paint()
-        ..color = Colors.white.withValues(alpha: 0.18)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-      canvas.drawCircle(center, star.markerRadius + 3, glow);
+        ..color = Colors.white.withValues(alpha: 0.12)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.8);
+      canvas.drawCircle(center, star.markerRadius + 1.2, glow);
       canvas.drawCircle(
         center,
         star.markerRadius,
@@ -38,15 +40,24 @@ class StarPainter extends CustomPainter {
           text: TextSpan(text: star.name, style: labelStyle),
           textDirection: TextDirection.ltr,
         )..layout();
-        painter.paint(
-          canvas,
-          Offset(
-            center.dx - painter.width / 2,
-            center.dy - star.markerRadius - painter.height - 2,
-          ),
+        final offset = Offset(
+          center.dx - painter.width / 2,
+          center.dy - star.markerRadius - painter.height - 2,
         );
+        final bounds = (offset & painter.size).inflate(2);
+        if (_canPlaceLabel(bounds, size)) {
+          painter.paint(canvas, offset);
+          occupiedLabels?.add(bounds);
+        }
       }
     }
+  }
+
+  bool _canPlaceLabel(Rect bounds, Size size) {
+    if (!(Offset.zero & size).overlaps(bounds)) return false;
+    final occupied = occupiedLabels;
+    if (occupied == null) return true;
+    return !occupied.any((rect) => rect.overlaps(bounds));
   }
 
   @override

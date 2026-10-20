@@ -26,3 +26,27 @@ From the project root run:
 The helper validates both required values without printing them, runs `flutter pub get`, injects the backend token through a temporary Dart-define file, builds the release APK, removes the temporary file, and prints the APK path and size.
 
 Release builds fail fast when either required value is absent. `flutter analyze` and `flutter test` remain credential-free.
+
+## Fixed release package locations
+
+Run these commands from the project root:
+
+```powershell
+.\build.ps1 android
+.\build.ps1 windows
+.\build.ps1 all
+```
+
+The wrapper uses `scripts/build_app.ps1` for the existing credential checks and
+build-time injection. It publishes only after a successful Release build. The
+Android APK is `dist/android/AstroJournal.apk`. The complete Windows package
+is in `dist/windows/`, with `AstroJournal.exe` alongside its DLLs and
+`data/` directory. Keep that entire Windows folder together when copying it.
+The previous package is retained if the build fails. `dist/` is ignored by Git.
+
+On Windows, the app database lives in the user's application support directory
+(`%APPDATA%/com.example/astro_journal/databases/` for the current Windows
+runner metadata), outside the release package. Existing development databases
+created under the former working-directory-based `.dart_tool/sqflite_common_ffi/databases/`
+path must be backed up and copied to the new location before first launch.
+Do not delete the original database.

@@ -15,6 +15,7 @@ import '../../../data/models/observation_site.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_repository.dart';
+import '../../../services/metadata_format.dart';
 import '../../catalog/viewmodel/catalog_view_model.dart';
 import '../../gallery/viewmodel/gallery_view_model.dart';
 import '../../home/viewmodel/home_view_model.dart';
@@ -61,6 +62,8 @@ class _PcPhotoRegistrationScreenState extends State<PcPhotoRegistrationScreen> {
   var _homeDropActive = false;
   var _queueDropActive = false;
   var _previewDropActive = false;
+  var _updatingControllers = false;
+  String? _lastAutoIntegration;
 
   RegistrationSession? get _session => _sessions.isEmpty ? null : _sessions[_selectedIndex];
   Iterable<TextEditingController> get _controllers => [
@@ -74,11 +77,17 @@ class _PcPhotoRegistrationScreenState extends State<PcPhotoRegistrationScreen> {
     for (final controller in _controllers) {
       controller.addListener(_syncCurrentSession);
     }
+    _stack.addListener(_recalculateIntegration);
+    _singleExposure.addListener(_recalculateIntegration);
+    _integration.addListener(_trackManualIntegrationChange);
     unawaited(_loadFormOptions());
   }
 
   @override
   void dispose() {
+    _stack.removeListener(_recalculateIntegration);
+    _singleExposure.removeListener(_recalculateIntegration);
+    _integration.removeListener(_trackManualIntegrationChange);
     for (final controller in _controllers) {
       controller
         ..removeListener(_syncCurrentSession)
@@ -225,20 +234,28 @@ class _PcPhotoRegistrationScreenState extends State<PcPhotoRegistrationScreen> {
   void _syncControllersFromSession() {
     final session = _session;
     if (session == null) return;
-    _stack.text = session.stackNum?.toString() ?? '';
-    _singleExposure.text = session.singleExpSecDigits ?? '';
-    _integration.text = session.totalExpMinutesDigits ?? '';
-    _filter.text = session.filter ?? '';
-    _iso.text = session.isoDigits ?? '';
-    _fStop.text = session.fstopDigits ?? '';
-    _focalLength.text = session.focalDigits ?? '';
-    _locationName.text = session.locationName ?? '';
-    _latitude.text = session.lat?.toStringAsFixed(6) ?? '';
-    _longitude.text = session.lng?.toStringAsFixed(6) ?? '';
-    _memo.text = session.memo ?? '';
+    _updatingControllers = true;
+    try {
+      _stack.text = session.stackNum?.toString() ?? '';
+      _singleExposure.text = session.singleExpSecDigits ?? '';
+      _integration.text = session.totalExpMinutesDigits ?? '';
+      _filter.text = session.filter ?? '';
+      _iso.text = session.isoDigits ?? '';
+      _fStop.text = session.fstopDigits ?? '';
+      _focalLength.text = session.focalDigits ?? '';
+      _locationName.text = session.locationName ?? '';
+      _latitude.text = session.lat?.toStringAsFixed(6) ?? '';
+      _longitude.text = session.lng?.toStringAsFixed(6) ?? '';
+      _memo.text = session.memo ?? '';
+      _lastAutoIntegration = null;
+    } finally {
+      _updatingControllers = false;
+    }
+    _recalculateIntegration();
   }
 
   void _syncCurrentSession() {
+    if (_updatingControllers) return;
     final session = _session;
     if (session == null) return;
     session.stackNum = int.tryParse(_stack.text.trim());
@@ -252,6 +269,34 @@ class _PcPhotoRegistrationScreenState extends State<PcPhotoRegistrationScreen> {
     session.lat = double.tryParse(_latitude.text.trim());
     session.lng = double.tryParse(_longitude.text.trim());
     session.memo = _memo.text.trim();
+  }
+
+  void _recalculateIntegration() {
+    if (_updatingControllers) return;
+    final calculated = MetadataFormat.integrationMinutesFromStackAndExposure(
+      stackCount: _stack.text,
+      singleExposureSeconds: _singleExposure.text,
+    );
+    if (calculated == null) {
+      if (_lastAutoIntegration != null &&
+          _integration.text == _lastAutoIntegration) {
+        _lastAutoIntegration = null;
+        _integration.clear();
+      }
+      return;
+    }
+    _lastAutoIntegration = calculated;
+    if (_integration.text != calculated) {
+      _integration.text = calculated;
+    }
+  }
+
+  void _trackManualIntegrationChange() {
+    if (_updatingControllers) return;
+    if (_lastAutoIntegration != null &&
+        _integration.text != _lastAutoIntegration) {
+      _lastAutoIntegration = null;
+    }
   }
 
   Future<void> _registerAll() async {
@@ -477,10 +522,10 @@ class _PcPhotoRegistrationScreenState extends State<PcPhotoRegistrationScreen> {
                       const SizedBox(width: AppTheme.spacingSm),
                       Expanded(child: _Field(controller: _singleExposure, label: '1장 노출', hint: '20', suffix: '초', numeric: true)),
                     ]),
-                    Row(children: [
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Expanded(child: IntegrationMinutesField(controller: _integration, label: '총 적산시간', hintText: '30')),
                       const SizedBox(width: AppTheme.spacingSm),
-                      Expanded(child: _Field(controller: _filter, label: '필터', hint: 'LP, LRGB, None')),
+                      Expanded(child: _Field(controller: _filter, label: '필터', hint: 'LP, LRGB, None', alignWithIntegrationHelper: true)),
                     ]),
                     Row(children: [
                       Expanded(child: _Field(controller: _iso, label: 'ISO', hint: '200', numeric: true)),
@@ -520,7 +565,6 @@ class _PcPhotoRegistrationScreenState extends State<PcPhotoRegistrationScreen> {
     });
   }
 }
-
 class _DropSurface extends StatelessWidget {
   const _DropSurface({required this.active, required this.child});
   final bool active;
@@ -637,7 +681,7 @@ class _Dropdown<T> extends StatelessWidget {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.controller, required this.label, required this.hint, this.suffix, this.prefix, this.numeric = false, this.maxLines = 1});
+  const _Field({required this.controller, required this.label, required this.hint, this.suffix, this.prefix, this.numeric = false, this.maxLines = 1, this.alignWithIntegrationHelper = false});
   final TextEditingController controller;
   final String label;
   final String hint;
@@ -645,6 +689,31 @@ class _Field extends StatelessWidget {
   final String? prefix;
   final bool numeric;
   final int maxLines;
+  final bool alignWithIntegrationHelper;
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: AppTheme.spacingSm), child: TextField(controller: controller, keyboardType: numeric ? const TextInputType.numberWithOptions(decimal: true, signed: true) : TextInputType.text, maxLines: maxLines, decoration: InputDecoration(labelText: label, hintText: hint, suffixText: suffix, prefixText: prefix, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8))));
+  Widget build(BuildContext context) {
+    final field = TextField(
+      controller: controller,
+      keyboardType: numeric ? const TextInputType.numberWithOptions(decimal: true, signed: true) : TextInputType.text,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        suffixText: suffix,
+        prefixText: prefix,
+        border: const OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: alignWithIntegrationHelper ? 12 : 10, vertical: alignWithIntegrationHelper ? 10 : 8),
+      ),
+    );
+    if (!alignWithIntegrationHelper) {
+      return Padding(padding: const EdgeInsets.only(bottom: AppTheme.spacingSm), child: field);
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [field, const SizedBox(height: 4), const Text(' ', style: TextStyle(fontSize: 12))],
+      ),
+    );
+  }
 }

@@ -1,4 +1,6 @@
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/core/constants/equipment_kind.dart';
+import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/core/constants/object_type.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
@@ -7,6 +9,7 @@ import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/features/sky_map/viewmodel/sky_map_view_model.dart';
+import 'package:astro_journal/features/sky_map/widgets/sky_map_object_detail_sheet.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_object_symbol.dart';
 import 'package:astro_journal/features/sky_map/widgets/painters/catalog_object_painter.dart';
 import 'package:astro_journal/core/theme/app_colors.dart';
@@ -326,6 +329,102 @@ void main() {
       expect(render.labelHitRect.contains(const Offset(100, 80)), isTrue);
       expect(render.labelHitRect.contains(const Offset(200, 200)), isFalse);
     });
+
+    test('V2에서도 검색·선택·필터·히트·장비 FOV 계약을 유지한다', () async {
+      final object = _obj(
+        id: 'M42',
+        number: 42,
+        constellation: '오리온자리',
+        type: '발광성운',
+        captured: true,
+        commonName: '오리온대성운',
+      );
+      const equipment = Equipment(
+        id: 'scope-1',
+        name: 'Wide scope',
+        kind: EquipmentKind.smartTelescope,
+        purpose: EquipmentPurpose.imaging,
+        fovWidthDegrees: 2,
+        fovHeightDegrees: 1,
+      );
+      final vm = SkyMapViewModel(
+        _FakeCatalogRepository([object]),
+        _FakeEquipmentRepository([equipment]),
+        null,
+        () => DateTime.utc(2026, 1, 15, 12),
+      );
+      await vm.load();
+      vm.updateCanvasSize(const Size(800, 800));
+
+      final result = vm.searchResults('M42').single;
+      expect(result.catalogObject?.id, 'M42');
+      expect(result.catalogObject?.captured, isTrue);
+
+      vm.selectObject(object);
+      final render = vm.selectedRenderObject;
+      expect(render?.catalogId, 'M42');
+      expect(
+        vm.hitTest(Offset(render!.screenX, render.screenY))?.catalogId,
+        'M42',
+      );
+
+      vm.showFovForEquipment(equipment);
+      expect(vm.showFovOverlay, isTrue);
+      expect(vm.fovCorners, hasLength(4));
+      expect(vm.filters.catalogs, contains(CatalogType.messier));
+      vm.dispose();
+    });
+
+    testWidgets('V2에서도 대상 상세정보와 촬영 장비가 표시된다', (tester) async {
+      final object = _obj(
+        id: 'M42',
+        number: 42,
+        constellation: '오리온자리',
+        type: '발광성운',
+        captured: true,
+        commonName: '오리온대성운',
+      );
+      const equipment = Equipment(
+        id: 'scope-1',
+        name: 'Wide scope',
+        kind: EquipmentKind.smartTelescope,
+        purpose: EquipmentPurpose.imaging,
+        fovWidthDegrees: 2,
+        fovHeightDegrees: 1,
+      );
+      final vm = SkyMapViewModel(
+        _FakeCatalogRepository([object]),
+        _FakeEquipmentRepository([equipment]),
+        null,
+        () => DateTime.utc(2026, 1, 15, 12),
+      );
+      await vm.load();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showSkyMapObjectDetailSheet(
+                context: context,
+                viewModel: vm,
+                object: object,
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('M42'), findsOneWidget);
+      expect(find.text('오리온대성운'), findsOneWidget);
+      expect(find.text('촬영 기록'), findsOneWidget);
+      expect(find.text('있음'), findsOneWidget);
+      expect(find.text('Wide scope'), findsOneWidget);
+      expect(find.text(equipment.fovLabel), findsOneWidget);
+      vm.dispose();
+    });
   });
 }
 
@@ -335,6 +434,7 @@ CatalogObject _obj({
   required String constellation,
   required String type,
   required bool captured,
+  String? commonName,
   CatalogType catalogType = CatalogType.messier,
 }) {
   return CatalogObject(
@@ -342,6 +442,7 @@ CatalogObject _obj({
     number: number,
     catalog: catalogType,
     name: id,
+    commonName: commonName,
     type: type,
     objectType: type,
     constellation: constellation,
@@ -404,8 +505,12 @@ class _FakeCatalogRepository implements CatalogRepository {
 }
 
 class _FakeEquipmentRepository implements EquipmentRepository {
+  _FakeEquipmentRepository([this.equipment = const []]);
+
+  final List<Equipment> equipment;
+
   @override
-  Future<List<Equipment>> getAll({bool activeOnly = false}) async => const [];
+  Future<List<Equipment>> getAll({bool activeOnly = false}) async => equipment;
 
   @override
   Future<Equipment?> getById(String id) async => null;

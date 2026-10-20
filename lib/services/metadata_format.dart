@@ -44,6 +44,30 @@ class MetadataFormat {
     return (minutes * 60).round();
   }
 
+  /// 스택 수와 1장 노출시간(초) 입력으로 총 적산시간의 분 입력값을 만든다.
+  ///
+  /// 저장 시 다시 초로 환산해도 원래 계산값이 유지되도록 최대 6자리의
+  /// 소수부를 보존한다. 비어 있거나 유효하지 않은 입력은 null이다.
+  static String? integrationMinutesFromStackAndExposure({
+    required String stackCount,
+    required String singleExposureSeconds,
+  }) {
+    final count = int.tryParse(stackCount.trim());
+    final seconds = double.tryParse(singleExposureSeconds.trim());
+    if (count == null || count < 0 || seconds == null || seconds < 0) {
+      return null;
+    }
+    final totalMinutes = count * seconds / 60;
+    if (!totalMinutes.isFinite) return null;
+    if (totalMinutes == totalMinutes.roundToDouble()) {
+      return '${totalMinutes.round()}';
+    }
+    return totalMinutes
+        .toStringAsFixed(6)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
+
   /// 기존 EXIF/DB 노출 표시 문자열을 서버 canonical 정수 초로 변환한다.
   static int? integrationSecondsFromExposure(String exposure) {
     final seconds = secondsFromDisplay(exposure);

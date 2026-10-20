@@ -22,13 +22,18 @@ Future<void> initSqflite() async {
   }
 }
 
-/// FFI 팩토리의 getDatabasesPath()는 Android에서 유효하지 않은 경로를
-/// 반환하므로, 네이티브 sqflite와 동일한 `<dataDir>/databases` 경로를
-/// path_provider로 직접 계산한다. (기존 설치 데이터 유지)
+/// FFI 팩토리의 getDatabasesPath() 대신 Android에서는 기존 설치 DB 경로를,
+/// Windows에서는 작업 디렉터리와 무관한 앱 지원 디렉터리를 사용한다.
 Future<String> getAppDatabasesPath() async {
   if (!kIsWeb && Platform.isAndroid) {
     final docsDir = await getApplicationDocumentsDirectory();
     final databasesDir = Directory(p.join(docsDir.parent.path, 'databases'));
+    await databasesDir.create(recursive: true);
+    return databasesDir.path;
+  }
+  if (!kIsWeb && Platform.isWindows) {
+    final supportDir = await getApplicationSupportDirectory();
+    final databasesDir = Directory(p.join(supportDir.path, 'databases'));
     await databasesDir.create(recursive: true);
     return databasesDir.path;
   }

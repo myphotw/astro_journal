@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
@@ -19,7 +19,9 @@ import '../../../data/sky_map/sky_map_star_names_ko.dart';
 import '../../../services/celestial_position_service.dart';
 import '../../../services/equipment/fov_framing_engine.dart';
 import '../../../services/sky_map_angular_size.dart';
+import '../../../services/sky_map_horizontal_projection_service.dart';
 import '../../../services/sky_map_projection_service.dart';
+import '../../observation_site/viewmodel/active_observation_site_view_model.dart';
 import '../widgets/sky_map_object_symbol.dart';
 
 /// 별자리 BottomSheet용 Catalog 필터 (다중 선택, '전체' 없음).
@@ -61,9 +63,7 @@ class SkyMapFilters {
   /// 초기 표시는 Messier만. NGC/IC/Sh2는 필터로 켠다.
   /// 종류 필터는 범례(은하·산개·구상·성운·행성상)와 동일.
   const SkyMapFilters({
-    this.catalogs = const {
-      CatalogType.messier,
-    },
+    this.catalogs = const {CatalogType.messier},
     this.objectTypes = const {
       SkyMapObjectTypeFilter.galaxy,
       SkyMapObjectTypeFilter.openCluster,
@@ -146,17 +146,26 @@ class SkyMapFramingAdvice {
 class SkyMapViewModel extends ChangeNotifier {
   SkyMapViewModel(
     this._catalogRepository,
-    this._equipmentRepository,
-  );
+    this._equipmentRepository, [
+    this._activeObservationSiteViewModel,
+    DateTime Function()? now,
+  ]) : _now = now ?? DateTime.now {
+    _activeObservationSiteViewModel?.addListener(_handleObservationSiteChange);
+    _observationTime = _roundedToMinute(_now());
+  }
 
   final CatalogRepository _catalogRepository;
   final EquipmentRepository _equipmentRepository;
+  final ActiveObservationSiteViewModel? _activeObservationSiteViewModel;
+  final DateTime Function() _now;
 
-  static const double minViewHeightDeg = 4;
-  static const double maxViewHeightDeg = 180;
-  static const double defaultViewHeightDeg = 90;
-  static const double defaultCenterRaDeg = 80;
-  static const double defaultCenterDecDeg = 20;
+  static const double minViewHeightDeg =
+      SkyMapHorizontalProjectionService.minViewHeightDeg;
+  static const double maxViewHeightDeg =
+      SkyMapHorizontalProjectionService.maxViewHeightDeg;
+  static const double defaultViewHeightDeg = 180;
+  static const double defaultCenterAzimuthDeg = 180;
+  static const double defaultCenterAltitudeDeg = 90;
 
   bool _isLoading = false;
   bool _hasLoaded = false;
@@ -168,10 +177,15 @@ class SkyMapViewModel extends ChangeNotifier {
   SkyMapFilters _filters = const SkyMapFilters();
   String _searchQuery = '';
 
-  double _centerRaDeg = defaultCenterRaDeg;
-  double _centerDecDeg = defaultCenterDecDeg;
+  double _centerAzimuthDeg = defaultCenterAzimuthDeg;
+  double _centerAltitudeDeg = defaultCenterAltitudeDeg;
   double _viewHeightDeg = defaultViewHeightDeg;
   Size _canvasSize = Size.zero;
+  late DateTime _observationTime;
+  Timer? _clockTimer;
+
+  final Map<String, AltAz> _catalogAltAz = {};
+  final Map<String, AltAz> _starAltAz = {};
 
   CatalogObject? _selectedObject;
   FovPreview? _fovPreview;
@@ -186,9 +200,15 @@ class SkyMapViewModel extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   SkyMapFilters get filters => _filters;
   String get searchQuery => _searchQuery;
-  double get centerRaDeg => _centerRaDeg;
-  double get centerDecDeg => _centerDecDeg;
+  double get centerAzimuthDeg => _centerAzimuthDeg;
+  double get centerAltitudeDeg => _centerAltitudeDeg;
   double get viewHeightDeg => _viewHeightDeg;
+  DateTime get observationTime => _observationTime;
+  bool get hasObserverLocation =>
+      _activeObservationSiteViewModel?.active.latitude != null &&
+      _activeObservationSiteViewModel?.active.longitude != null;
+  String get observerLabel =>
+      _activeObservationSiteViewModel?.active.displayName ?? '위치 미설정';
   Size get canvasSize => _canvasSize;
   CatalogObject? get selectedObject => _selectedObject;
   FovPreview? get fovPreview => _fovPreview;
@@ -198,9 +218,50 @@ class SkyMapViewModel extends ChangeNotifier {
   List<SkyMapStarRender> get visibleStars => List.unmodifiable(_visibleStars);
   List<SkyMapConstellationRender> get visibleConstellations =>
       List.unmodifiable(_visibleConstellations);
-  List<Equipment> get imagingEquipment => _equipment
-      .where((e) => e.isActive && e.hasFov)
-      .toList(growable: false);
+  List<Equipment> get imagingEquipment =>
+      _equipment.where((e) => e.isActive && e.hasFov).toList(growable: false);
+
+  double get _observerLatitude =>
+      _activeObservationSiteViewModel?.active.latitude ?? 0;
+  double get _observerLongitude =>
+      _activeObservationSiteViewModel?.active.longitude ?? 0;
+  bool get _showBelowHorizon => _centerAltitudeDeg < 0;
+
+  static DateTime _roundedToMinute(DateTime value) => value.isUtc
+      ? DateTime.utc(
+          value.year,
+          value.month,
+          value.day,
+          value.hour,
+          value.minute,
+        )
+      : DateTime(value.year, value.month, value.day, value.hour, value.minute);
+
+  void _handleObservationSiteChange() {
+    _refreshHorizontalCoordinates();
+    _rebuildVisible();
+    notifyListeners();
+  }
+
+  void _startClock() {
+    _clockTimer ??= Timer.periodic(const Duration(minutes: 1), (_) {
+      final next = _roundedToMinute(_now());
+      if (next == _observationTime) return;
+      _observationTime = next;
+      _refreshHorizontalCoordinates();
+      _rebuildVisible();
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    _activeObservationSiteViewModel?.removeListener(
+      _handleObservationSiteChange,
+    );
+    super.dispose();
+  }
 
   SkyMapRenderObject? get selectedRenderObject {
     final selected = _selectedObject;
@@ -218,15 +279,13 @@ class SkyMapViewModel extends ChangeNotifier {
       return const [];
     }
     if (_canvasSize == Size.zero || !fov.isValid) return const [];
-    final raHours = CelestialPositionService.parseRaHours(selected.ra);
-    final dec = CelestialPositionService.parseDecDeg(selected.dec);
-    if (raHours == null || dec == null) return const [];
-    final ra = raHours * 15;
-    return SkyMapProjectionService.projectFovCorners(
-      objectRaDeg: ra,
-      objectDecDeg: dec,
-      centerRaDeg: _centerRaDeg,
-      centerDecDeg: _centerDecDeg,
+    final target = _catalogAltAz[selected.id] ?? _altAzForObject(selected);
+    if (target == null) return const [];
+    return SkyMapHorizontalProjectionService.projectFovCorners(
+      objectAltitudeDeg: target.altitude,
+      objectAzimuthDeg: target.azimuth,
+      centerAltitudeDeg: _centerAltitudeDeg,
+      centerAzimuthDeg: _centerAzimuthDeg,
       fovWidthDeg: fov.widthDegrees,
       fovHeightDeg: fov.heightDegrees,
       rotationDeg: fov.rotationDegrees,
@@ -262,6 +321,9 @@ class SkyMapViewModel extends ChangeNotifier {
 
       _equipment = await _equipmentRepository.getAll(activeOnly: true);
       _hasLoaded = true;
+      _observationTime = _roundedToMinute(_now());
+      _refreshHorizontalCoordinates();
+      _startClock();
       _rebuildVisible();
     } catch (e) {
       _errorMessage = e.toString();
@@ -327,36 +389,24 @@ class SkyMapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 세로 시야가 전천(±90°)을 덮으면 적위 pan 불필요 → 0으로 고정.
-  double get _maxCenterDecDeg =>
-      math.max(0.0, 90.0 - _viewHeightDeg / 2);
-
   bool _visibleRebuildScheduled = false;
 
   void panByPixels(Offset delta) {
     if (_canvasSize == Size.zero) return;
-    final dpp = SkyMapProjectionService.degreesPerPixel(
+    final next = SkyMapHorizontalProjectionService.panCenter(
+      delta: delta,
+      centerAltitudeDeg: _centerAltitudeDeg,
+      centerAzimuthDeg: _centerAzimuthDeg,
       canvasSize: _canvasSize,
       viewHeightDeg: _viewHeightDeg,
     );
-    // plate carrée: RA도 Dec와 동일 °/px (cosDec 없음 → 남북 드래그 시 줌 착시 방지)
-    _centerRaDeg = (_centerRaDeg - delta.dx * dpp) % 360;
-    if (_centerRaDeg < 0) _centerRaDeg += 360;
-
-    final maxDec = _maxCenterDecDeg;
-    if (maxDec <= 0) {
-      // 한 화면에 남북 전천이 들어오면 상하 이동 고정
-      _centerDecDeg = 0;
-    } else if (delta.dy != 0) {
-      _centerDecDeg = (_centerDecDeg + delta.dy * dpp).clamp(-maxDec, maxDec);
-    }
+    _centerAltitudeDeg = next.altitudeDeg;
+    _centerAzimuthDeg = next.azimuthDeg;
     _scheduleVisibleRebuild();
   }
 
   void setViewHeightDeg(double degrees) {
     _viewHeightDeg = degrees.clamp(minViewHeightDeg, maxViewHeightDeg);
-    final maxDec = _maxCenterDecDeg;
-    _centerDecDeg = maxDec <= 0 ? 0.0 : _centerDecDeg.clamp(-maxDec, maxDec);
     _scheduleVisibleRebuild();
   }
 
@@ -373,8 +423,8 @@ class SkyMapViewModel extends ChangeNotifier {
   }
 
   void resetView() {
-    _centerRaDeg = defaultCenterRaDeg;
-    _centerDecDeg = defaultCenterDecDeg;
+    _centerAzimuthDeg = defaultCenterAzimuthDeg;
+    _centerAltitudeDeg = defaultCenterAltitudeDeg;
     _viewHeightDeg = defaultViewHeightDeg;
     _rebuildVisible();
     notifyListeners();
@@ -383,14 +433,13 @@ class SkyMapViewModel extends ChangeNotifier {
   void selectObject(CatalogObject? object) {
     _selectedObject = object;
     if (object != null) {
-      final raHours = CelestialPositionService.parseRaHours(object.ra);
-      final decDeg = CelestialPositionService.parseDecDeg(object.dec);
-      if (raHours == null || decDeg == null) {
+      final target = _catalogAltAz[object.id] ?? _altAzForObject(object);
+      if (target == null) {
         notifyListeners();
         return;
       }
-      _centerRaDeg = raHours * 15;
-      _centerDecDeg = decDeg;
+      _centerAltitudeDeg = target.altitude;
+      _centerAzimuthDeg = target.azimuth;
       final major = object.majorAxis;
       final axes = SkyMapAngularSize.resolveArcmin(object);
       final sizeMajor = axes?.major ?? major;
@@ -422,16 +471,19 @@ class SkyMapViewModel extends ChangeNotifier {
     }
 
     final objectTypes = Set<SkyMapObjectTypeFilter>.from(_filters.objectTypes);
-    final needed =
-        SkyMapObjectTypeFilter.forObjectType(object.resolvedObjectType);
+    final needed = SkyMapObjectTypeFilter.forObjectType(
+      object.resolvedObjectType,
+    );
     if (needed != null && !objectTypes.contains(needed)) {
       objectTypes.add(needed);
       changed = true;
     }
 
     if (changed) {
-      _filters =
-          _filters.copyWith(catalogs: catalogs, objectTypes: objectTypes);
+      _filters = _filters.copyWith(
+        catalogs: catalogs,
+        objectTypes: objectTypes,
+      );
     }
   }
 
@@ -442,8 +494,10 @@ class SkyMapViewModel extends ChangeNotifier {
       final dx = obj.screenX - position.dx;
       final dy = obj.screenY - position.dy;
       final dist = math.sqrt(dx * dx + dy * dy);
-      final hitRadius =
-          math.max(math.max(obj.renderWidth, obj.renderHeight) / 2, 18);
+      final hitRadius = math.max(
+        math.max(obj.renderWidth, obj.renderHeight) / 2,
+        18,
+      );
       if (dist <= hitRadius && dist < bestDist) {
         bestDist = dist;
         best = obj;
@@ -455,7 +509,7 @@ class SkyMapViewModel extends ChangeNotifier {
   /// 별자리 이름 라벨만 히트 (연결선은 대상 아님).
   SkyMapConstellationRender? hitTestConstellationLabel(Offset position) {
     for (final c in _visibleConstellations) {
-      if (c.labelHitRect.contains(position)) return c;
+      if (c.showLabel && c.labelHitRect.contains(position)) return c;
     }
     return null;
   }
@@ -477,20 +531,21 @@ class SkyMapViewModel extends ChangeNotifier {
         objectTypes ?? SkyMapObjectTypeFilter.legendFilters.toSet();
 
     final list = _constellationCatalogObjects
-        .where(
-          (o) => ConstellationNames.normalize(o.constellation) == target,
-        )
+        .where((o) => ConstellationNames.normalize(o.constellation) == target)
         .where((o) => catalogFilters.any((f) => f.matches(o)))
         .where((o) {
-          final type = SkyMapObjectTypeFilter.forObjectType(o.resolvedObjectType);
+          final type = SkyMapObjectTypeFilter.forObjectType(
+            o.resolvedObjectType,
+          );
           // 범례에 없는 유형은 통과(희귀)
           if (type == null) return true;
           return typeFilters.contains(type);
         })
         .toList();
     list.sort((a, b) {
-      final typeCmp =
-          a.resolvedObjectType.label.compareTo(b.resolvedObjectType.label);
+      final typeCmp = a.resolvedObjectType.label.compareTo(
+        b.resolvedObjectType.label,
+      );
       if (typeCmp != 0) return typeCmp;
       return a.displayName.compareTo(b.displayName);
     });
@@ -561,8 +616,8 @@ class SkyMapViewModel extends ChangeNotifier {
     );
 
     final tips = <String>[];
-    final isLandscapePreferred = coverage.bestAngleDegrees < 45 ||
-        coverage.bestAngleDegrees > 135;
+    final isLandscapePreferred =
+        coverage.bestAngleDegrees < 45 || coverage.bestAngleDegrees > 135;
     if (major >= minor) {
       tips.add(isLandscapePreferred ? '가로 방향 촬영' : '세로 방향 촬영');
     } else {
@@ -595,8 +650,7 @@ class SkyMapViewModel extends ChangeNotifier {
     final results = <SkyMapSearchResult>[];
 
     for (final figure in SkyMapConstellationCatalog.constellations) {
-      final hay =
-          '${figure.name} ${figure.nameEn} ${figure.id}'.toLowerCase();
+      final hay = '${figure.name} ${figure.nameEn} ${figure.id}'.toLowerCase();
       if (!hay.contains(q)) continue;
       final center = _constellationCenter(figure);
       if (center == null) continue;
@@ -672,20 +726,17 @@ class SkyMapViewModel extends ChangeNotifier {
     required double decDeg,
     double? preferredViewHeightDeg,
   }) {
-    _centerRaDeg = raDeg % 360;
-    if (_centerRaDeg < 0) _centerRaDeg += 360;
-    final maxDec = _maxCenterDecDeg;
-    _centerDecDeg =
-        maxDec <= 0 ? 0.0 : decDeg.clamp(-maxDec, maxDec);
+    final target = _altAzForEquatorial(raDeg: raDeg, decDeg: decDeg);
+    _centerAltitudeDeg = target.altitude;
+    _centerAzimuthDeg = target.azimuth;
     if (preferredViewHeightDeg != null) {
-      _viewHeightDeg =
-          preferredViewHeightDeg.clamp(minViewHeightDeg, maxViewHeightDeg);
+      _viewHeightDeg = preferredViewHeightDeg.clamp(
+        minViewHeightDeg,
+        maxViewHeightDeg,
+      );
     } else if (_viewHeightDeg > 60) {
       _viewHeightDeg = 45;
     }
-    final maxDecAfter = _maxCenterDecDeg;
-    _centerDecDeg =
-        maxDecAfter <= 0 ? 0.0 : _centerDecDeg.clamp(-maxDecAfter, maxDecAfter);
     _rebuildVisible();
     notifyListeners();
   }
@@ -711,6 +762,44 @@ class SkyMapViewModel extends ChangeNotifier {
     return (ra, sumDec / stars.length);
   }
 
+  AltAz _altAzForEquatorial({required double raDeg, required double decDeg}) =>
+      CelestialPositionService.computeAltAz(
+        raHours: raDeg / 15,
+        decDeg: decDeg,
+        latDeg: _observerLatitude,
+        lonDeg: _observerLongitude,
+        time: _observationTime,
+      );
+
+  AltAz? _altAzForObject(CatalogObject object) {
+    final raHours = CelestialPositionService.parseRaHours(object.ra);
+    final decDeg = CelestialPositionService.parseDecDeg(object.dec);
+    if (raHours == null || decDeg == null) return null;
+    return CelestialPositionService.computeAltAz(
+      raHours: raHours,
+      decDeg: decDeg,
+      latDeg: _observerLatitude,
+      lonDeg: _observerLongitude,
+      time: _observationTime,
+    );
+  }
+
+  void _refreshHorizontalCoordinates() {
+    _catalogAltAz.clear();
+    for (final object in _deepSkyObjects) {
+      final altAz = _altAzForObject(object);
+      if (altAz != null) _catalogAltAz[object.id] = altAz;
+    }
+
+    _starAltAz.clear();
+    for (final star in SkyMapConstellationCatalog.stars) {
+      _starAltAz[star.id] = _altAzForEquatorial(
+        raDeg: star.raDeg,
+        decDeg: star.decDeg,
+      );
+    }
+  }
+
   void _rebuildVisible() {
     if (_canvasSize == Size.zero) {
       _visibleObjects = const [];
@@ -732,9 +821,8 @@ class SkyMapViewModel extends ChangeNotifier {
     for (final obj in _deepSkyObjects) {
       if (!_filters.matches(obj)) continue;
       if (query.isNotEmpty) {
-        final hay =
-            '${obj.displayName} ${obj.displayCommonName} ${obj.name}'
-                .toLowerCase();
+        final hay = '${obj.displayName} ${obj.displayCommonName} ${obj.name}'
+            .toLowerCase();
         if (!hay.contains(query)) continue;
       }
 
@@ -742,23 +830,41 @@ class SkyMapViewModel extends ChangeNotifier {
       final dec = CelestialPositionService.parseDecDeg(obj.dec);
       if (raHours == null || dec == null) continue;
       final ra = raHours * 15;
+      final altAz = _catalogAltAz[obj.id] ?? _altAzForObject(obj);
+      if (altAz == null) continue;
+      if (!_showBelowHorizon && altAz.altitude < 0) continue;
       final axes = SkyMapAngularSize.resolveArcmin(obj);
-      final projected = SkyMapProjectionService.projectWithSize(
-        raDeg: ra,
-        decDeg: dec,
-        centerRaDeg: _centerRaDeg,
-        centerDecDeg: _centerDecDeg,
+      final projected = SkyMapHorizontalProjectionService.project(
+        altitudeDeg: altAz.altitude,
+        azimuthDeg: altAz.azimuth,
+        centerAltitudeDeg: _centerAltitudeDeg,
+        centerAzimuthDeg: _centerAzimuthDeg,
         canvasSize: _canvasSize,
         viewHeightDeg: _viewHeightDeg,
-        majorArcmin: axes?.major,
-        minorArcmin: axes?.minor,
       );
+      final rawMajor = axes?.major ?? 0;
+      final rawMinor = axes?.minor ?? rawMajor;
+      final major = math.max(
+        rawMajor,
+        SkyMapProjectionService.minDisplayArcmin,
+      );
+      final minor = math.max(
+        rawMinor > 0 ? rawMinor : major,
+        SkyMapProjectionService.minDisplayArcmin,
+      );
+      final projectedSize =
+          SkyMapHorizontalProjectionService.projectAngularSize(
+            majorArcmin: major,
+            minorArcmin: minor,
+            canvasSize: _canvasSize,
+            viewHeightDeg: _viewHeightDeg,
+          );
 
-      final half = math.max(projected.renderWidth, projected.renderHeight) / 2;
-      if (projected.screenX < -margin - half ||
-          projected.screenY < -margin - half ||
-          projected.screenX > _canvasSize.width + margin + half ||
-          projected.screenY > _canvasSize.height + margin + half) {
+      final half = math.max(projectedSize.width, projectedSize.height) / 2;
+      if (projected.pixel.dx < -margin - half ||
+          projected.pixel.dy < -margin - half ||
+          projected.pixel.dx > _canvasSize.width + margin + half ||
+          projected.pixel.dy > _canvasSize.height + margin + half) {
         continue;
       }
 
@@ -771,10 +877,10 @@ class SkyMapViewModel extends ChangeNotifier {
           catalog: obj.catalog,
           raDeg: ra,
           decDeg: dec,
-          screenX: projected.screenX,
-          screenY: projected.screenY,
-          renderWidth: projected.renderWidth,
-          renderHeight: projected.renderHeight,
+          screenX: projected.pixel.dx,
+          screenY: projected.pixel.dy,
+          renderWidth: projectedSize.width,
+          renderHeight: projectedSize.height,
           magnitude: double.tryParse(obj.magnitude),
           sizeMajorArcmin: axes?.major ?? obj.majorAxis,
           sizeMinorArcmin: axes?.minor ?? obj.minorAxis,
@@ -815,14 +921,19 @@ class SkyMapViewModel extends ChangeNotifier {
     for (final star in SkyMapConstellationCatalog.stars) {
       if (star.magnitude > SkyMapFilters.brightStarMagLimit) continue;
 
-      final pixel = SkyMapProjectionService.project(
-        raDeg: star.raDeg,
-        decDeg: star.decDeg,
-        centerRaDeg: _centerRaDeg,
-        centerDecDeg: _centerDecDeg,
+      final altAz =
+          _starAltAz[star.id] ??
+          _altAzForEquatorial(raDeg: star.raDeg, decDeg: star.decDeg);
+      if (!_showBelowHorizon && altAz.altitude < 0) continue;
+      final projected = SkyMapHorizontalProjectionService.project(
+        altitudeDeg: altAz.altitude,
+        azimuthDeg: altAz.azimuth,
+        centerAltitudeDeg: _centerAltitudeDeg,
+        centerAzimuthDeg: _centerAzimuthDeg,
         canvasSize: _canvasSize,
         viewHeightDeg: _viewHeightDeg,
       );
+      final pixel = projected.pixel;
       if (pixel.dx < -margin ||
           pixel.dy < -margin ||
           pixel.dx > _canvasSize.width + margin ||
@@ -856,6 +967,7 @@ class SkyMapViewModel extends ChangeNotifier {
     }
 
     final result = <SkyMapConstellationRender>[];
+    final occupiedLabels = <Rect>[];
     for (final figure in SkyMapConstellationCatalog.constellations) {
       final segments = <(SkyMapPoint, SkyMapPoint)>[];
       final labelPoints = <SkyMapPoint>[];
@@ -864,30 +976,40 @@ class SkyMapViewModel extends ChangeNotifier {
         final from = SkyMapConstellationCatalog.starsById[line.startStarId];
         final to = SkyMapConstellationCatalog.starsById[line.endStarId];
         if (from == null || to == null) continue;
+        final fromAltAz =
+            _starAltAz[from.id] ??
+            _altAzForEquatorial(raDeg: from.raDeg, decDeg: from.decDeg);
+        final toAltAz =
+            _starAltAz[to.id] ??
+            _altAzForEquatorial(raDeg: to.raDeg, decDeg: to.decDeg);
+        if (!_showBelowHorizon &&
+            (fromAltAz.altitude < 0 || toAltAz.altitude < 0)) {
+          continue;
+        }
 
-        final a = SkyMapProjectionService.project(
-          raDeg: from.raDeg,
-          decDeg: from.decDeg,
-          centerRaDeg: _centerRaDeg,
-          centerDecDeg: _centerDecDeg,
+        final a = SkyMapHorizontalProjectionService.project(
+          altitudeDeg: fromAltAz.altitude,
+          azimuthDeg: fromAltAz.azimuth,
+          centerAltitudeDeg: _centerAltitudeDeg,
+          centerAzimuthDeg: _centerAzimuthDeg,
           canvasSize: _canvasSize,
           viewHeightDeg: _viewHeightDeg,
-        );
-        final b = SkyMapProjectionService.project(
-          raDeg: to.raDeg,
-          decDeg: to.decDeg,
-          centerRaDeg: _centerRaDeg,
-          centerDecDeg: _centerDecDeg,
+        ).pixel;
+        final b = SkyMapHorizontalProjectionService.project(
+          altitudeDeg: toAltAz.altitude,
+          azimuthDeg: toAltAz.azimuth,
+          centerAltitudeDeg: _centerAltitudeDeg,
+          centerAzimuthDeg: _centerAzimuthDeg,
           canvasSize: _canvasSize,
           viewHeightDeg: _viewHeightDeg,
-        );
+        ).pixel;
 
-        // RA 0/360 wrap 투영 아티팩트(화면을 가로지르는 가짜 직선) 제거
-        if (!SkyMapProjectionService.shouldDrawConstellationSegment(
-          raADeg: from.raDeg,
-          decADeg: from.decDeg,
-          raBDeg: to.raDeg,
-          decBDeg: to.decDeg,
+        // 구면 각거리와 화면 chord를 함께 검사해 방위각 wrap 아티팩트를 제거한다.
+        if (!SkyMapHorizontalProjectionService.shouldDrawConstellationSegment(
+          altitudeADeg: fromAltAz.altitude,
+          azimuthADeg: fromAltAz.azimuth,
+          altitudeBDeg: toAltAz.altitude,
+          azimuthBDeg: toAltAz.azimuth,
           projectedA: a,
           projectedB: b,
           canvasSize: _canvasSize,
@@ -898,10 +1020,7 @@ class SkyMapViewModel extends ChangeNotifier {
 
         if (!_segmentNearView(a, b)) continue;
 
-        segments.add((
-          (x: a.dx, y: a.dy),
-          (x: b.dx, y: b.dy),
-        ));
+        segments.add(((x: a.dx, y: a.dy), (x: b.dx, y: b.dy)));
         labelPoints.add((x: (a.dx + b.dx) / 2, y: (a.dy + b.dy) / 2));
       }
 
@@ -928,6 +1047,16 @@ class SkyMapViewModel extends ChangeNotifier {
         textDirection: TextDirection.ltr,
       )..layout();
 
+      final labelBounds = Rect.fromCenter(
+        center: Offset(lx, ly),
+        width: labelPainter.width + 20,
+        height: labelPainter.height + 16,
+      );
+      final showLabel =
+          (Offset.zero & _canvasSize).overlaps(labelBounds) &&
+          !occupiedLabels.any((bounds) => bounds.overlaps(labelBounds));
+      if (showLabel) occupiedLabels.add(labelBounds);
+
       result.add(
         SkyMapConstellationRender(
           id: figure.id,
@@ -937,6 +1066,7 @@ class SkyMapViewModel extends ChangeNotifier {
           labelY: ly,
           labelWidth: labelPainter.width,
           labelHeight: labelPainter.height,
+          showLabel: showLabel,
         ),
       );
     }
