@@ -71,6 +71,44 @@ void main() {
       expect((atZero - atFullTurn).distance, closeTo(0, 1e-8));
     });
 
+    test('negative altitudes project and unproject without remapping', () {
+      final projected = SkyMapHorizontalProjectionService.project(
+        altitudeDeg: -25,
+        azimuthDeg: 135,
+        centerAltitudeDeg: 10,
+        centerAzimuthDeg: 150,
+        canvasSize: canvas,
+        viewHeightDeg: 100,
+      );
+      final restored = SkyMapHorizontalProjectionService.unproject(
+        pixel: projected.pixel,
+        centerAltitudeDeg: 10,
+        centerAzimuthDeg: 150,
+        canvasSize: canvas,
+        viewHeightDeg: 100,
+      );
+
+      expect(restored.altitudeDeg, closeTo(-25, 1e-8));
+      expect(restored.azimuthDeg, closeTo(135, 1e-8));
+    });
+
+    test('screen position stays continuous while crossing the horizon', () {
+      Offset at(double altitude) => SkyMapHorizontalProjectionService.project(
+        altitudeDeg: altitude,
+        azimuthDeg: 170,
+        centerAltitudeDeg: 15,
+        centerAzimuthDeg: 180,
+        canvasSize: canvas,
+        viewHeightDeg: 80,
+      ).pixel;
+
+      final belowStep = (at(0) - at(-0.01)).distance;
+      final aboveStep = (at(0.01) - at(0)).distance;
+
+      expect(belowStep, closeTo(aboveStep, 1e-5));
+      expect(belowStep, lessThan(0.2));
+    });
+
     test('zoom uses one continuous projection without a mode boundary', () {
       Offset at(double fov) => SkyMapHorizontalProjectionService.project(
         altitudeDeg: 40,

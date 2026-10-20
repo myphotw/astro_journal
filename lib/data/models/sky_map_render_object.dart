@@ -15,6 +15,7 @@ class SkyMapRenderObject {
     required this.catalog,
     required this.raDeg,
     required this.decDeg,
+    required this.altitudeDeg,
     required this.screenX,
     required this.screenY,
     required this.renderWidth,
@@ -37,6 +38,7 @@ class SkyMapRenderObject {
   final CatalogType catalog;
   final double raDeg;
   final double decDeg;
+  final double altitudeDeg;
   final double screenX;
   final double screenY;
   final double renderWidth;
@@ -112,6 +114,7 @@ class SkyMapStarRender {
     required this.raDeg,
     required this.decDeg,
     required this.magnitude,
+    required this.altitudeDeg,
     required this.screenX,
     required this.screenY,
     required this.markerRadius,
@@ -122,6 +125,7 @@ class SkyMapStarRender {
   final double raDeg;
   final double decDeg;
   final double magnitude;
+  final double altitudeDeg;
   final double screenX;
   final double screenY;
   final double markerRadius;
@@ -137,6 +141,7 @@ class SkyMapConstellationRender {
     required this.labelY,
     required this.labelWidth,
     required this.labelHeight,
+    required this.labelAltitudeDeg,
     this.showLabel = true,
   });
 
@@ -147,6 +152,7 @@ class SkyMapConstellationRender {
   final double labelY;
   final double labelWidth;
   final double labelHeight;
+  final double labelAltitudeDeg;
   final bool showLabel;
 
   /// 별자리 이름 라벨 히트 영역 (터치 여유 포함).
@@ -158,7 +164,7 @@ class SkyMapConstellationRender {
 }
 
 /// 픽셀 좌표 쌍 (View/Paint 계층에서 Offset으로 변환).
-typedef SkyMapPoint = ({double x, double y});
+typedef SkyMapPoint = ({double x, double y, double altitudeDeg});
 
 /// 장비 FOV Overlay 미리보기 상태.
 class FovPreview {

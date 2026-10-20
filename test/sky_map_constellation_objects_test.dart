@@ -12,7 +12,8 @@ import 'package:astro_journal/features/sky_map/viewmodel/sky_map_view_model.dart
 import 'package:astro_journal/features/sky_map/widgets/sky_map_object_detail_sheet.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_object_symbol.dart';
 import 'package:astro_journal/features/sky_map/widgets/painters/catalog_object_painter.dart';
-import 'package:astro_journal/core/theme/app_colors.dart';
+import 'package:astro_journal/features/sky_map/widgets/sky_map_visual_style.dart';
+import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,6 +49,7 @@ void main() {
         catalog: CatalogType.messier,
         raDeg: 0,
         decDeg: 0,
+        altitudeDeg: 10,
         screenX: 0,
         screenY: 0,
         renderWidth: 10,
@@ -76,7 +78,7 @@ void main() {
     });
   });
 
-  test('Messier label alone uses the amber high-contrast token', () {
+  test('catalog labels use the shared object-type color hierarchy', () {
     final messier = SkyMapRenderObject(
       catalogId: 'M42',
       name: 'M42',
@@ -84,6 +86,7 @@ void main() {
       catalog: CatalogType.messier,
       raDeg: 0,
       decDeg: 0,
+      altitudeDeg: 10,
       screenX: 0,
       screenY: 0,
       renderWidth: 10,
@@ -96,6 +99,20 @@ void main() {
       catalog: CatalogType.ngc,
       raDeg: 0,
       decDeg: 0,
+      altitudeDeg: 10,
+      screenX: 0,
+      screenY: 0,
+      renderWidth: 10,
+      renderHeight: 10,
+    );
+    final galaxy = SkyMapRenderObject(
+      catalogId: 'M31',
+      name: 'M31',
+      objectType: ObjectType.galaxy,
+      catalog: CatalogType.messier,
+      raDeg: 0,
+      decDeg: 0,
+      altitudeDeg: 10,
       screenX: 0,
       screenY: 0,
       renderWidth: 10,
@@ -104,20 +121,47 @@ void main() {
 
     expect(
       CatalogObjectPainter.labelColorFor(messier, false),
-      AppColors.skyMapMessierLabel,
+      SkyMapVisualStyle.nebula.withValues(alpha: 0.92),
     );
     expect(
       CatalogObjectPainter.labelColorFor(messier, true),
-      AppColors.skyMapMessierLabel,
+      SkyMapVisualStyle.nebula,
     );
     expect(
       CatalogObjectPainter.labelColorFor(ngc, false),
-      AppColors.textPrimary.withValues(alpha: 0.9),
+      SkyMapVisualStyle.nebula.withValues(alpha: 0.92),
     );
     expect(
-      CatalogObjectPainter.labelColorFor(ngc, true),
-      CatalogType.ngc.accentColor,
+      CatalogObjectPainter.labelColorFor(galaxy, true),
+      SkyMapVisualStyle.galaxy,
     );
+  });
+
+  testWidgets('symbol legend is compact and expands without narrow overflow', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(width: 180, child: SkyMapSymbolLegend()),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('천체 기호'), findsOneWidget);
+    expect(find.text('은하'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('sky-map-symbol-legend-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('은하'), findsOneWidget);
+    expect(find.text('성운'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   group('SkyMapViewModel.objectsInConstellation', () {
@@ -325,6 +369,7 @@ void main() {
         labelY: 80,
         labelWidth: 80,
         labelHeight: 16,
+        labelAltitudeDeg: 20,
       );
       expect(render.labelHitRect.contains(const Offset(100, 80)), isTrue);
       expect(render.labelHitRect.contains(const Offset(200, 200)), isFalse);
@@ -372,6 +417,56 @@ void main() {
       expect(vm.showFovOverlay, isTrue);
       expect(vm.fovCorners, hasLength(4));
       expect(vm.filters.catalogs, contains(CatalogType.messier));
+      vm.dispose();
+    });
+
+    test('지평선 아래 천체도 전천 화면에 남고 선택할 수 있다', () async {
+      final time = DateTime.utc(2026, 1, 15, 12);
+      final raHour = List<int>.generate(24, (index) => index).firstWhere((ra) {
+        final altitude = CelestialPositionService.computeAltAz(
+          raHours: ra.toDouble(),
+          decDeg: 0,
+          latDeg: 0,
+          lonDeg: 0,
+          time: time,
+        ).altitude;
+        return altitude < -5 && altitude > -15;
+      });
+      final object = _obj(
+        id: 'M900',
+        number: 900,
+        constellation: '테스트자리',
+        type: '은하',
+        captured: false,
+        ra: '${raHour}h0m',
+      );
+      final vm = SkyMapViewModel(
+        _FakeCatalogRepository([object]),
+        _FakeEquipmentRepository(),
+        null,
+        () => time,
+      );
+      await vm.load();
+      vm.updateCanvasSize(const Size(1000, 800));
+
+      final render = vm.visibleObjects.single;
+      expect(render.altitudeDeg, lessThan(0));
+      expect(render.screenX, inInclusiveRange(0, 1000));
+      expect(render.screenY, inInclusiveRange(0, 800));
+      expect(
+        vm.hitTest(Offset(render.screenX, render.screenY))?.catalogId,
+        object.id,
+      );
+      expect(vm.visibleStars.any((star) => star.altitudeDeg < 0), isTrue);
+      expect(
+        vm.visibleConstellations.any(
+          (constellation) => constellation.segments.any(
+            (segment) =>
+                segment.$1.altitudeDeg < 0 || segment.$2.altitudeDeg < 0,
+          ),
+        ),
+        isTrue,
+      );
       vm.dispose();
     });
 
@@ -435,6 +530,8 @@ CatalogObject _obj({
   required String type,
   required bool captured,
   String? commonName,
+  String ra = '0h0m',
+  String dec = '+0d0m',
   CatalogType catalogType = CatalogType.messier,
 }) {
   return CatalogObject(
@@ -446,8 +543,8 @@ CatalogObject _obj({
     type: type,
     objectType: type,
     constellation: constellation,
-    ra: '0h0m',
-    dec: '+0d0m',
+    ra: ra,
+    dec: dec,
     magnitude: '5',
     captured: captured,
   );

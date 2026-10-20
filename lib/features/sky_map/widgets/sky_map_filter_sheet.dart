@@ -65,8 +65,9 @@ Future<void> showSkyMapFilterSheet({
                         FilterChip(
                           label: Text(type.label),
                           selected: filters.catalogs.contains(type),
-                          selectedColor:
-                              type.accentColor.withValues(alpha: 0.25),
+                          selectedColor: type.accentColor.withValues(
+                            alpha: 0.25,
+                          ),
                           checkmarkColor: type.accentColor,
                           labelStyle: TextStyle(
                             color: filters.catalogs.contains(type)
@@ -100,8 +101,9 @@ Future<void> showSkyMapFilterSheet({
                           ),
                           label: Text(type.label),
                           selected: filters.objectTypes.contains(type),
-                          selectedColor:
-                              AppColors.messier.withValues(alpha: 0.25),
+                          selectedColor: AppColors.messier.withValues(
+                            alpha: 0.25,
+                          ),
                           checkmarkColor: AppColors.messier,
                           labelStyle: TextStyle(
                             color: filters.objectTypes.contains(type)
@@ -113,6 +115,23 @@ Future<void> showSkyMapFilterSheet({
                     ],
                   ),
                   const SizedBox(height: 16),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      '은하수',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
+                    subtitle: const Text(
+                      'COBE/DIRBE 실제 천구 밝기 자료',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    value: filters.showMilkyWay,
+                    activeThumbColor: AppColors.milky,
+                    onChanged: viewModel.setShowMilkyWay,
+                  ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text(

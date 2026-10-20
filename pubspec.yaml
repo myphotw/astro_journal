@@ -151,6 +151,7 @@ flutter:
     - assets/catalog/search_cross_catalog.json
     - assets/catalog/display_name_dictionary.json
     - assets/catalog/thumbnails/
+    - assets/sky_map/mellinger_stellarium_visible_1024.png
     - assets/database/bortle.db
     - assets/database/catalog_seed.db
     - assets/icon/app_icon.png

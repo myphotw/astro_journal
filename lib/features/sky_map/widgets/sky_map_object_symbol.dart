@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/object_type.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../../data/models/sky_map_render_object.dart';
+import 'sky_map_visual_style.dart';
 
 /// 성도·별자리 목록용 천체 종류 심볼.
 enum SkyMapObjectSymbolKind {
@@ -124,16 +124,17 @@ abstract final class SkyMapObjectSymbolPainter {
     required Color color,
     double size = 10,
     bool selected = false,
+    double opacity = 1,
   }) {
     final stroke = Paint()
-      ..color = color.withValues(alpha: selected ? 1.0 : 0.95)
+      ..color = color.withValues(alpha: (selected ? 1.0 : 0.95) * opacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = selected ? 1.8 : 1.4;
     // 채움 심볼은 색만으로도 구분되도록 불투명도를 높인다.
     final solidFill = Paint()
-      ..color = color.withValues(alpha: selected ? 0.92 : 0.78);
+      ..color = color.withValues(alpha: (selected ? 0.92 : 0.78) * opacity);
     final lightFill = Paint()
-      ..color = color.withValues(alpha: selected ? 0.28 : 0.14);
+      ..color = color.withValues(alpha: (selected ? 0.28 : 0.14) * opacity);
 
     switch (kind) {
       case SkyMapObjectSymbolKind.galaxy:
@@ -228,8 +229,15 @@ class _SymbolPainter extends CustomPainter {
 }
 
 /// 성도 좌상단 천체 종류 심볼 범례.
-class SkyMapSymbolLegend extends StatelessWidget {
+class SkyMapSymbolLegend extends StatefulWidget {
   const SkyMapSymbolLegend({super.key});
+
+  @override
+  State<SkyMapSymbolLegend> createState() => _SkyMapSymbolLegendState();
+}
+
+class _SkyMapSymbolLegendState extends State<SkyMapSymbolLegend> {
+  bool _expanded = false;
 
   static const _entries = <(SkyMapObjectSymbolKind, String)>[
     (SkyMapObjectSymbolKind.galaxy, '은하'),
@@ -241,45 +249,90 @@ class SkyMapSymbolLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const symbolColor = Color(0xFF9BE7FF);
-    return IgnorePointer(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0x33FFFFFF)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < _entries.length; i++) ...[
-              if (i > 0) const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SkyMapObjectSymbol(
-                    kind: _entries[i].$1,
-                    color: symbolColor,
-                    size: 13,
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    _entries[i].$2,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
+    return Material(
+      key: const ValueKey('sky-map-symbol-legend'),
+      color: SkyMapVisualStyle.background.withValues(alpha: 0.88),
+      borderRadius: BorderRadius.circular(7),
+      child: InkWell(
+        key: const ValueKey('sky-map-symbol-legend-toggle'),
+        borderRadius: BorderRadius.circular(7),
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.category_outlined,
+                      color: SkyMapVisualStyle.coordinateLabel,
+                      size: 15,
                     ),
-                  ),
+                    const SizedBox(width: 5),
+                    const Text(
+                      '천체 기호',
+                      style: TextStyle(
+                        color: SkyMapVisualStyle.coordinateLabel,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      color: SkyMapVisualStyle.constellationLabel,
+                      size: 16,
+                    ),
+                  ],
+                ),
+                if (_expanded) ...[
+                  const SizedBox(height: 6),
+                  for (var i = 0; i < _entries.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 3),
+                    _legendEntry(_entries[i].$1, _entries[i].$2),
+                  ],
                 ],
-              ),
-            ],
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+
+  Widget _legendEntry(SkyMapObjectSymbolKind kind, String label) {
+    final color = _colorForKind(kind);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SkyMapObjectSymbol(kind: kind, color: color, size: 12),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: color.withValues(alpha: 0.95),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            height: 1.1,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _colorForKind(SkyMapObjectSymbolKind kind) => switch (kind) {
+    SkyMapObjectSymbolKind.galaxy => SkyMapVisualStyle.galaxy,
+    SkyMapObjectSymbolKind.openCluster => SkyMapVisualStyle.openCluster,
+    SkyMapObjectSymbolKind.globularCluster => SkyMapVisualStyle.globularCluster,
+    SkyMapObjectSymbolKind.nebula => SkyMapVisualStyle.nebula,
+    SkyMapObjectSymbolKind.planetaryNebula => SkyMapVisualStyle.planetaryNebula,
+    SkyMapObjectSymbolKind.point => SkyMapVisualStyle.pointObject,
+  };
 }

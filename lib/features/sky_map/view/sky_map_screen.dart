@@ -13,6 +13,7 @@ import '../widgets/sky_map_constellation_objects_sheet.dart';
 import '../widgets/sky_map_filter_sheet.dart';
 import '../widgets/sky_map_object_detail_sheet.dart';
 import '../widgets/sky_map_object_symbol.dart';
+import '../widgets/sky_map_time_control.dart';
 
 /// Catalog 기반 성도 / Target Planner.
 class SkyMapScreen extends StatefulWidget {
@@ -133,6 +134,14 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
             if (_showSearchResults) _buildSearchResults(vm),
             Expanded(child: ClipRect(child: _buildCanvas(vm))),
             _buildBottomPanel(vm),
+            SkyMapTimeControl(
+              observationDate: vm.observationDate,
+              observationTime: vm.observationTime,
+              timeline: vm.nightTimeline,
+              onDateChanged: vm.setObservationDate,
+              onTimelineMinutesChanged: vm.setObservationTimelineMinutes,
+              onNowPressed: vm.resetObservationTime,
+            ),
           ],
         ),
       ),
@@ -399,6 +408,10 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
                       centerAltitudeDeg: vm.centerAltitudeDeg,
                       centerAzimuthDeg: vm.centerAzimuthDeg,
                       viewHeightDeg: vm.viewHeightDeg,
+                      sunAltitudeDeg: vm.sunAltitudeDeg,
+                      sunAzimuthDeg: vm.sunAzimuthDeg,
+                      milkyWay: vm.milkyWay,
+                      showMilkyWay: vm.filters.showMilkyWay,
                     ),
                   ),
                 ),

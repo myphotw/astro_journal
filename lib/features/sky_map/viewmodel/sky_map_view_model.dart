@@ -20,7 +20,10 @@ import '../../../services/celestial_position_service.dart';
 import '../../../services/equipment/fov_framing_engine.dart';
 import '../../../services/sky_map_angular_size.dart';
 import '../../../services/sky_map_horizontal_projection_service.dart';
+import '../../../services/sky_map_milky_way_service.dart';
+import '../../../services/sky_map_night_timeline_service.dart';
 import '../../../services/sky_map_projection_service.dart';
+import '../../../services/sky_map_sun_position_service.dart';
 import '../../observation_site/viewmodel/active_observation_site_view_model.dart';
 import '../widgets/sky_map_object_symbol.dart';
 
@@ -73,12 +76,14 @@ class SkyMapFilters {
     },
     this.showConstellations = true,
     this.showBrightStars = true,
+    this.showMilkyWay = true,
   });
 
   final Set<CatalogType> catalogs;
   final Set<SkyMapObjectTypeFilter> objectTypes;
   final bool showConstellations;
   final bool showBrightStars;
+  final bool showMilkyWay;
 
   static const supportedCatalogs = <CatalogType>[
     CatalogType.messier,
@@ -121,12 +126,14 @@ class SkyMapFilters {
     Set<SkyMapObjectTypeFilter>? objectTypes,
     bool? showConstellations,
     bool? showBrightStars,
+    bool? showMilkyWay,
   }) {
     return SkyMapFilters(
       catalogs: catalogs ?? this.catalogs,
       objectTypes: objectTypes ?? this.objectTypes,
       showConstellations: showConstellations ?? this.showConstellations,
       showBrightStars: showBrightStars ?? this.showBrightStars,
+      showMilkyWay: showMilkyWay ?? this.showMilkyWay,
     );
   }
 }
@@ -152,12 +159,19 @@ class SkyMapViewModel extends ChangeNotifier {
   ]) : _now = now ?? DateTime.now {
     _activeObservationSiteViewModel?.addListener(_handleObservationSiteChange);
     _observationTime = _roundedToMinute(_now());
+    _observationDate = _nightTimelineService.observationDateFor(
+      _observationTime,
+    );
+    _nightTimeline = _calculateNightTimeline(includeTime: _observationTime);
   }
 
   final CatalogRepository _catalogRepository;
   final EquipmentRepository _equipmentRepository;
   final ActiveObservationSiteViewModel? _activeObservationSiteViewModel;
   final DateTime Function() _now;
+  final SkyMapMilkyWayService _milkyWayService = const SkyMapMilkyWayService();
+  final SkyMapNightTimelineService _nightTimelineService =
+      const SkyMapNightTimelineService();
 
   static const double minViewHeightDeg =
       SkyMapHorizontalProjectionService.minViewHeightDeg;
@@ -182,10 +196,20 @@ class SkyMapViewModel extends ChangeNotifier {
   double _viewHeightDeg = defaultViewHeightDeg;
   Size _canvasSize = Size.zero;
   late DateTime _observationTime;
+  late DateTime _observationDate;
+  late SkyMapNightTimeline _nightTimeline;
+  bool _isFollowingCurrentTime = true;
+  double _sunAltitudeDeg = -90;
+  double _sunAzimuthDeg = 0;
   Timer? _clockTimer;
+  bool _observationRefreshScheduled = false;
+  bool _disposed = false;
 
   final Map<String, AltAz> _catalogAltAz = {};
   final Map<String, AltAz> _starAltAz = {};
+  SkyMapMilkyWayModel? _milkyWayModel;
+  SkyMapMilkyWayHorizontalMesh _milkyWay =
+      const SkyMapMilkyWayHorizontalMesh.empty();
 
   CatalogObject? _selectedObject;
   FovPreview? _fovPreview;
@@ -204,6 +228,13 @@ class SkyMapViewModel extends ChangeNotifier {
   double get centerAltitudeDeg => _centerAltitudeDeg;
   double get viewHeightDeg => _viewHeightDeg;
   DateTime get observationTime => _observationTime;
+  DateTime get observationDate => _observationDate;
+  SkyMapNightTimeline get nightTimeline => _nightTimeline;
+  bool get isFollowingCurrentTime => _isFollowingCurrentTime;
+  int get observationMinutes =>
+      _observationTime.hour * 60 + _observationTime.minute;
+  double get sunAltitudeDeg => _sunAltitudeDeg;
+  double get sunAzimuthDeg => _sunAzimuthDeg;
   bool get hasObserverLocation =>
       _activeObservationSiteViewModel?.active.latitude != null &&
       _activeObservationSiteViewModel?.active.longitude != null;
@@ -218,6 +249,7 @@ class SkyMapViewModel extends ChangeNotifier {
   List<SkyMapStarRender> get visibleStars => List.unmodifiable(_visibleStars);
   List<SkyMapConstellationRender> get visibleConstellations =>
       List.unmodifiable(_visibleConstellations);
+  SkyMapMilkyWayHorizontalMesh get milkyWay => _milkyWay;
   List<Equipment> get imagingEquipment =>
       _equipment.where((e) => e.isActive && e.hasFov).toList(growable: false);
 
@@ -225,8 +257,6 @@ class SkyMapViewModel extends ChangeNotifier {
       _activeObservationSiteViewModel?.active.latitude ?? 0;
   double get _observerLongitude =>
       _activeObservationSiteViewModel?.active.longitude ?? 0;
-  bool get _showBelowHorizon => _centerAltitudeDeg < 0;
-
   static DateTime _roundedToMinute(DateTime value) => value.isUtc
       ? DateTime.utc(
           value.year,
@@ -238,6 +268,7 @@ class SkyMapViewModel extends ChangeNotifier {
       : DateTime(value.year, value.month, value.day, value.hour, value.minute);
 
   void _handleObservationSiteChange() {
+    _nightTimeline = _calculateNightTimeline(includeTime: _observationTime);
     _refreshHorizontalCoordinates();
     _rebuildVisible();
     notifyListeners();
@@ -245,9 +276,19 @@ class SkyMapViewModel extends ChangeNotifier {
 
   void _startClock() {
     _clockTimer ??= Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!_isFollowingCurrentTime) return;
       final next = _roundedToMinute(_now());
       if (next == _observationTime) return;
       _observationTime = next;
+      final nextObservationDate = _nightTimelineService.observationDateFor(
+        next,
+      );
+      if (nextObservationDate != _observationDate ||
+          next.isBefore(_nightTimeline.start) ||
+          next.isAfter(_nightTimeline.end)) {
+        _observationDate = nextObservationDate;
+        _nightTimeline = _calculateNightTimeline(includeTime: next);
+      }
       _refreshHorizontalCoordinates();
       _rebuildVisible();
       notifyListeners();
@@ -256,11 +297,86 @@ class SkyMapViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _clockTimer?.cancel();
     _activeObservationSiteViewModel?.removeListener(
       _handleObservationSiteChange,
     );
     super.dispose();
+  }
+
+  /// 성도의 단일 관측 시각을 변경한다.
+  ///
+  /// UI는 시스템 로컬 wall-clock을 표시하고, 천문 계산 서비스가 내부에서
+  /// UTC 절대 시각으로 변환한다. 수동 변경 뒤에는 매분 현재 시각을 따라가는
+  /// 자동 시계를 멈춰 사용자가 고른 시각을 보존한다.
+  void setObservationTime(DateTime value) {
+    _setObservationTime(_roundedToMinute(value), followCurrent: false);
+  }
+
+  void setObservationDate(DateTime date) {
+    final relativeMinutes = _observationTime
+        .difference(_nightTimeline.midnight)
+        .inMinutes;
+    _observationDate = _dateOnlyLike(date, _observationTime.isUtc);
+    _nightTimeline = _calculateNightTimeline();
+    final next = _nightTimeline.midnight.add(
+      Duration(minutes: relativeMinutes),
+    );
+    if (next.isBefore(_nightTimeline.start) ||
+        next.isAfter(_nightTimeline.end)) {
+      _nightTimeline = _calculateNightTimeline(includeTime: next);
+    }
+    _setObservationTime(next, followCurrent: false);
+  }
+
+  void setObservationTimelineMinutes(int minutes) {
+    final next = _nightTimeline.timeAtOffset(minutes);
+    _setObservationTime(next, followCurrent: false);
+  }
+
+  void resetObservationTime() {
+    final now = _roundedToMinute(_now());
+    _observationDate = _nightTimelineService.observationDateFor(now);
+    _nightTimeline = _calculateNightTimeline(includeTime: now);
+    _setObservationTime(now, followCurrent: true);
+  }
+
+  SkyMapNightTimeline _calculateNightTimeline({DateTime? includeTime}) =>
+      _nightTimelineService.calculate(
+        observationDate: _observationDate,
+        latitudeDeg: _observerLatitude,
+        longitudeDeg: _observerLongitude,
+        includeTime: includeTime,
+      );
+
+  static DateTime _dateOnlyLike(DateTime value, bool utc) => utc
+      ? DateTime.utc(value.year, value.month, value.day)
+      : DateTime(value.year, value.month, value.day);
+
+  void _setObservationTime(DateTime next, {required bool followCurrent}) {
+    if (next == _observationTime && followCurrent == _isFollowingCurrentTime) {
+      return;
+    }
+    _observationTime = next;
+    _isFollowingCurrentTime = followCurrent;
+    // 날짜/시간 텍스트는 즉시 갱신하고, 연속 Slider 입력의 천문 계산은
+    // 프레임당 한 번으로 합쳐 마지막 관측 시각만 반영한다.
+    notifyListeners();
+    _scheduleObservationRefresh();
+  }
+
+  void _scheduleObservationRefresh() {
+    if (_observationRefreshScheduled) return;
+    _observationRefreshScheduled = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _observationRefreshScheduled = false;
+      if (_disposed) return;
+      _refreshHorizontalCoordinates();
+      _rebuildVisible();
+      notifyListeners();
+    });
+    SchedulerBinding.instance.scheduleFrame();
   }
 
   SkyMapRenderObject? get selectedRenderObject {
@@ -320,8 +436,18 @@ class SkyMapViewModel extends ChangeNotifier {
           .toList(growable: false);
 
       _equipment = await _equipmentRepository.getAll(activeOnly: true);
+      try {
+        _milkyWayModel = await _milkyWayService.load();
+      } catch (_) {
+        // 은하수 보조 자산이 누락돼도 기존 성도 탐색 기능은 계속 제공한다.
+        _milkyWayModel = null;
+      }
       _hasLoaded = true;
       _observationTime = _roundedToMinute(_now());
+      _observationDate = _nightTimelineService.observationDateFor(
+        _observationTime,
+      );
+      _nightTimeline = _calculateNightTimeline(includeTime: _observationTime);
       _refreshHorizontalCoordinates();
       _startClock();
       _rebuildVisible();
@@ -374,6 +500,13 @@ class SkyMapViewModel extends ChangeNotifier {
 
   void setShowBrightStars(bool value) {
     setFilters(_filters.copyWith(showBrightStars: value));
+  }
+
+  void setShowMilkyWay(bool value) {
+    if (_filters.showMilkyWay == value) return;
+    _filters = _filters.copyWith(showMilkyWay: value);
+    _refreshMilkyWayCoordinates();
+    notifyListeners();
   }
 
   void setSearchQuery(String query) {
@@ -785,8 +918,16 @@ class SkyMapViewModel extends ChangeNotifier {
   }
 
   void _refreshHorizontalCoordinates() {
+    final sunPosition = SkyMapSunPositionService.position(
+      time: _observationTime,
+      latitudeDeg: _observerLatitude,
+      longitudeDeg: _observerLongitude,
+    );
+    _sunAltitudeDeg = sunPosition.altitude;
+    _sunAzimuthDeg = sunPosition.azimuth;
+    _refreshMilkyWayCoordinates();
     _catalogAltAz.clear();
-    for (final object in _deepSkyObjects) {
+    for (final object in _deepSkyObjects.where(_filters.matches)) {
       final altAz = _altAzForObject(object);
       if (altAz != null) _catalogAltAz[object.id] = altAz;
     }
@@ -798,6 +939,18 @@ class SkyMapViewModel extends ChangeNotifier {
         decDeg: star.decDeg,
       );
     }
+  }
+
+  void _refreshMilkyWayCoordinates() {
+    final milkyWayModel = _milkyWayModel;
+    _milkyWay = _filters.showMilkyWay && milkyWayModel != null
+        ? _milkyWayService.toHorizontal(
+            model: milkyWayModel,
+            time: _observationTime,
+            latitudeDeg: _observerLatitude,
+            longitudeDeg: _observerLongitude,
+          )
+        : const SkyMapMilkyWayHorizontalMesh.empty();
   }
 
   void _rebuildVisible() {
@@ -832,7 +985,6 @@ class SkyMapViewModel extends ChangeNotifier {
       final ra = raHours * 15;
       final altAz = _catalogAltAz[obj.id] ?? _altAzForObject(obj);
       if (altAz == null) continue;
-      if (!_showBelowHorizon && altAz.altitude < 0) continue;
       final axes = SkyMapAngularSize.resolveArcmin(obj);
       final projected = SkyMapHorizontalProjectionService.project(
         altitudeDeg: altAz.altitude,
@@ -877,6 +1029,7 @@ class SkyMapViewModel extends ChangeNotifier {
           catalog: obj.catalog,
           raDeg: ra,
           decDeg: dec,
+          altitudeDeg: altAz.altitude,
           screenX: projected.pixel.dx,
           screenY: projected.pixel.dy,
           renderWidth: projectedSize.width,
@@ -924,7 +1077,6 @@ class SkyMapViewModel extends ChangeNotifier {
       final altAz =
           _starAltAz[star.id] ??
           _altAzForEquatorial(raDeg: star.raDeg, decDeg: star.decDeg);
-      if (!_showBelowHorizon && altAz.altitude < 0) continue;
       final projected = SkyMapHorizontalProjectionService.project(
         altitudeDeg: altAz.altitude,
         azimuthDeg: altAz.azimuth,
@@ -951,6 +1103,7 @@ class SkyMapViewModel extends ChangeNotifier {
           raDeg: star.raDeg,
           decDeg: star.decDeg,
           magnitude: star.magnitude,
+          altitudeDeg: altAz.altitude,
           screenX: pixel.dx,
           screenY: pixel.dy,
           markerRadius: _starRadius(star.magnitude),
@@ -982,11 +1135,6 @@ class SkyMapViewModel extends ChangeNotifier {
         final toAltAz =
             _starAltAz[to.id] ??
             _altAzForEquatorial(raDeg: to.raDeg, decDeg: to.decDeg);
-        if (!_showBelowHorizon &&
-            (fromAltAz.altitude < 0 || toAltAz.altitude < 0)) {
-          continue;
-        }
-
         final a = SkyMapHorizontalProjectionService.project(
           altitudeDeg: fromAltAz.altitude,
           azimuthDeg: fromAltAz.azimuth,
@@ -1020,19 +1168,29 @@ class SkyMapViewModel extends ChangeNotifier {
 
         if (!_segmentNearView(a, b)) continue;
 
-        segments.add(((x: a.dx, y: a.dy), (x: b.dx, y: b.dy)));
-        labelPoints.add((x: (a.dx + b.dx) / 2, y: (a.dy + b.dy) / 2));
+        segments.add((
+          (x: a.dx, y: a.dy, altitudeDeg: fromAltAz.altitude),
+          (x: b.dx, y: b.dy, altitudeDeg: toAltAz.altitude),
+        ));
+        labelPoints.add((
+          x: (a.dx + b.dx) / 2,
+          y: (a.dy + b.dy) / 2,
+          altitudeDeg: (fromAltAz.altitude + toAltAz.altitude) / 2,
+        ));
       }
 
       if (segments.isEmpty) continue;
       var lx = 0.0;
       var ly = 0.0;
+      var labelAltitude = 0.0;
       for (final p in labelPoints) {
         lx += p.x;
         ly += p.y;
+        labelAltitude += p.altitudeDeg;
       }
       lx /= labelPoints.length;
       ly /= labelPoints.length;
+      labelAltitude /= labelPoints.length;
 
       // ConstellationPainter.labelStyle 과 동일 규격 (히트 영역용)
       final labelPainter = TextPainter(
@@ -1066,6 +1224,7 @@ class SkyMapViewModel extends ChangeNotifier {
           labelY: ly,
           labelWidth: labelPainter.width,
           labelHeight: labelPainter.height,
+          labelAltitudeDeg: labelAltitude,
           showLabel: showLabel,
         ),
       );
@@ -1087,9 +1246,9 @@ class SkyMapViewModel extends ChangeNotifier {
   }
 
   double _starRadius(double mag) {
-    if (mag <= 0) return 5.5;
-    if (mag <= 1) return 4.5;
-    if (mag <= 2) return 3.5;
-    return 2.8;
+    if (mag <= 0) return 3.4;
+    if (mag <= 1) return 2.8;
+    if (mag <= 2) return 2.1;
+    return 1.55;
   }
 }

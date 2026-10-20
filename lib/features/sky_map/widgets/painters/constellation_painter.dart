@@ -1,24 +1,26 @@
 import 'package:flutter/material.dart';
 
 import '../../../../data/models/sky_map_render_object.dart';
+import '../sky_map_visual_style.dart';
 
 /// Layer: Constellation Line — 연결선 + 별자리 이름 라벨.
 class ConstellationPainter extends CustomPainter {
-  ConstellationPainter({required this.constellations, this.occupiedLabels});
+  ConstellationPainter({
+    required this.constellations,
+    required this.viewHeightDeg,
+    this.occupiedLabels,
+  });
 
   final List<SkyMapConstellationRender> constellations;
+  final double viewHeightDeg;
   final List<Rect>? occupiedLabels;
 
-  /// 배경(#080B14) 대비를 높인 밝은 청록 — 별보다 덜 눈에 띄게 유지.
-  static const _lineColor = Color(0xFF78B9C9);
-  static const _labelColor = Color(0xFF9DD7E3);
-
-  static TextStyle get labelStyle => const TextStyle(
-    color: _labelColor,
-    fontSize: 13,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.4,
-    shadows: [
+  TextStyle get labelStyle => TextStyle(
+    color: SkyMapVisualStyle.constellationLabel.withValues(alpha: 0.88),
+    fontSize: viewHeightDeg <= 40 ? 13 : (viewHeightDeg <= 100 ? 12 : 11),
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.35,
+    shadows: const [
       Shadow(color: Color(0xCC000000), blurRadius: 4, offset: Offset(0, 1)),
     ],
   );
@@ -26,22 +28,56 @@ class ConstellationPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final linePaint = Paint()
-      ..color = _lineColor.withValues(alpha: 0.48)
-      ..strokeWidth = 1.05
+      ..color = SkyMapVisualStyle.constellationLine.withValues(alpha: 0.62)
+      ..strokeWidth = viewHeightDeg <= 45 ? 1.0 : 0.8
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
     for (final c in constellations) {
       for (final segment in c.segments) {
-        canvas.drawLine(
-          Offset(segment.$1.x, segment.$1.y),
-          Offset(segment.$2.x, segment.$2.y),
-          linePaint,
+        final start = Offset(segment.$1.x, segment.$1.y);
+        final end = Offset(segment.$2.x, segment.$2.y);
+        final startVisibility = SkyMapVisualStyle.visibilityForAltitude(
+          segment.$1.altitudeDeg,
         );
+        final endVisibility = SkyMapVisualStyle.visibilityForAltitude(
+          segment.$2.altitudeDeg,
+        );
+        final segmentBounds = Rect.fromPoints(start, end);
+        final segmentPaint = Paint()
+          ..strokeWidth = linePaint.strokeWidth
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round;
+        if (segmentBounds.width < 0.01 && segmentBounds.height < 0.01) {
+          segmentPaint.color = SkyMapVisualStyle.constellationLine.withValues(
+            alpha: 0.31 * (startVisibility + endVisibility),
+          );
+        } else {
+          segmentPaint.shader = LinearGradient(
+            colors: [
+              SkyMapVisualStyle.constellationLine.withValues(
+                alpha: 0.62 * startVisibility,
+              ),
+              SkyMapVisualStyle.constellationLine.withValues(
+                alpha: 0.62 * endVisibility,
+              ),
+            ],
+          ).createShader(segmentBounds);
+        }
+        canvas.drawLine(start, end, segmentPaint);
       }
       if (c.segments.isEmpty || !c.showLabel) continue;
       final painter = TextPainter(
-        text: TextSpan(text: c.name, style: labelStyle),
+        text: TextSpan(
+          text: c.name,
+          style: labelStyle.copyWith(
+            color: labelStyle.color?.withValues(
+              alpha: SkyMapVisualStyle.visibilityForAltitude(
+                c.labelAltitudeDeg,
+              ),
+            ),
+          ),
+        ),
         textDirection: TextDirection.ltr,
       )..layout();
       final offset = Offset(
@@ -57,6 +93,7 @@ class ConstellationPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ConstellationPainter oldDelegate) {
-    return oldDelegate.constellations != constellations;
+    return oldDelegate.constellations != constellations ||
+        oldDelegate.viewHeightDeg != viewHeightDeg;
   }
 }

@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/catalog_type.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/sky_map_render_object.dart';
 import '../sky_map_object_symbol.dart';
+import '../sky_map_visual_style.dart';
 
 /// Layer 4: Catalog 천체 — 각크기 범위(원/타원) + 종류별 심볼.
 class CatalogObjectPainter extends CustomPainter {
@@ -13,41 +13,42 @@ class CatalogObjectPainter extends CustomPainter {
     required this.objects,
     required this.selectedId,
     required this.showLabels,
+    required this.viewHeightDeg,
     this.occupiedLabels,
   });
 
   final List<SkyMapRenderObject> objects;
   final String? selectedId;
   final bool showLabels;
+  final double viewHeightDeg;
   final List<Rect>? occupiedLabels;
 
   @visibleForTesting
   static Color labelColorFor(SkyMapRenderObject object, bool selected) {
-    if (object.catalog == CatalogType.messier) {
-      return AppColors.skyMapMessierLabel;
-    }
-    return selected
-        ? object.catalog.accentColor
-        : AppColors.textPrimary.withValues(alpha: 0.9);
+    final color = SkyMapVisualStyle.objectColor(object.shapeKind);
+    return selected ? color : color.withValues(alpha: 0.92);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final obj in objects) {
       final selected = obj.catalogId == selectedId;
-      final color = obj.catalog.accentColor;
+      final color = SkyMapVisualStyle.objectColor(obj.shapeKind);
       final center = Offset(obj.screenX, obj.screenY);
+      final visibility = SkyMapVisualStyle.visibilityForAltitude(
+        obj.altitudeDeg,
+      );
 
       if (selected) {
         canvas.drawCircle(
           center,
           math.max(obj.renderWidth, obj.renderHeight) / 2 + 10,
-          Paint()..color = color.withValues(alpha: 0.15),
+          Paint()..color = color.withValues(alpha: 0.15 * visibility),
         );
       }
 
       // 1) 천체 범위(각크기) — 기존처럼 유지
-      _drawExtent(canvas, obj, color, selected);
+      _drawExtent(canvas, obj, color, selected, visibility);
 
       // 2) 종류별 심볼 (중심에 고정 크기)
       final symbolSize = math
@@ -60,14 +61,14 @@ class CatalogObjectPainter extends CustomPainter {
         color: color,
         size: symbolSize,
         selected: selected,
+        opacity: visibility,
       );
 
-      final shouldLabel =
-          selected ||
-          (showLabels &&
-              (obj.catalog == CatalogType.messier ||
-                  obj.renderWidth >= 28 ||
-                  (obj.magnitude != null && obj.magnitude! <= 8)));
+      if (obj.captured) {
+        _drawCapturedMarker(canvas, center, color, symbolSize, visibility);
+      }
+
+      final shouldLabel = selected || (showLabels && _shouldLabel(obj));
       if (shouldLabel) {
         final style = TextStyle(
           color: labelColorFor(obj, selected),
@@ -75,7 +76,12 @@ class CatalogObjectPainter extends CustomPainter {
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
         );
         final painter = TextPainter(
-          text: TextSpan(text: obj.displayName, style: style),
+          text: TextSpan(
+            text: obj.displayName,
+            style: style.copyWith(
+              color: style.color?.withValues(alpha: visibility),
+            ),
+          ),
           textDirection: TextDirection.ltr,
         )..layout();
         final distance = math.max(obj.renderHeight / 2, 6) + 4;
@@ -108,7 +114,10 @@ class CatalogObjectPainter extends CustomPainter {
                 labelBounds.inflate(2),
                 const Radius.circular(4),
               ),
-              Paint()..color = const Color(0xB3050912),
+              Paint()
+                ..color = const Color(
+                  0xFF050912,
+                ).withValues(alpha: 0.7 * visibility),
             );
           }
           painter.paint(canvas, labelOffset);
@@ -116,6 +125,43 @@ class CatalogObjectPainter extends CustomPainter {
         }
       }
     }
+  }
+
+  bool _shouldLabel(SkyMapRenderObject object) {
+    final magnitude = object.magnitude ?? 99;
+    if (viewHeightDeg <= 25) {
+      return object.catalog == CatalogType.messier ||
+          object.renderWidth >= 18 ||
+          magnitude <= 10;
+    }
+    if (viewHeightDeg <= 60) {
+      return object.catalog == CatalogType.messier ||
+          object.renderWidth >= 24 ||
+          magnitude <= 8;
+    }
+    return (object.catalog == CatalogType.messier && magnitude <= 7) ||
+        object.renderWidth >= 36;
+  }
+
+  void _drawCapturedMarker(
+    Canvas canvas,
+    Offset center,
+    Color color,
+    double symbolSize,
+    double visibility,
+  ) {
+    final radius = symbolSize * 0.72;
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.9 * visibility)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi * 0.9,
+      math.pi * 1.55,
+      false,
+      paint,
+    );
   }
 
   bool _canPlaceLabel(Rect bounds, Size size, {required bool force}) {
@@ -131,14 +177,15 @@ class CatalogObjectPainter extends CustomPainter {
     SkyMapRenderObject obj,
     Color color,
     bool selected,
+    double visibility,
   ) {
     final center = Offset(obj.screenX, obj.screenY);
     final stroke = Paint()
-      ..color = color.withValues(alpha: selected ? 0.85 : 0.62)
+      ..color = color.withValues(alpha: (selected ? 0.85 : 0.62) * visibility)
       ..style = PaintingStyle.stroke
       ..strokeWidth = selected ? 1.6 : 1.25;
     final fill = Paint()
-      ..color = color.withValues(alpha: selected ? 0.18 : 0.10);
+      ..color = color.withValues(alpha: (selected ? 0.18 : 0.10) * visibility);
 
     if (obj.shapeKind == SkyMapShapeKind.galaxy) {
       final rect = Rect.fromCenter(
@@ -166,6 +213,7 @@ class CatalogObjectPainter extends CustomPainter {
   bool shouldRepaint(covariant CatalogObjectPainter oldDelegate) {
     return oldDelegate.objects != objects ||
         oldDelegate.selectedId != selectedId ||
-        oldDelegate.showLabels != showLabels;
+        oldDelegate.showLabels != showLabels ||
+        oldDelegate.viewHeightDeg != viewHeightDeg;
   }
 }

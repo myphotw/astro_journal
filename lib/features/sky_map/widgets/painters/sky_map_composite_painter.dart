@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../../../../data/models/sky_map_render_object.dart';
+import '../../../../services/sky_map_milky_way_service.dart';
 import 'catalog_object_painter.dart';
 import 'constellation_painter.dart';
 import 'fov_painter.dart';
+import 'milky_way_painter.dart';
 import 'sky_map_background_painter.dart';
 import 'star_painter.dart';
 
 /// Sky Map Layer 합성 (아래 → 위).
 ///
-/// 1. Background
-/// 2. Constellation Line
-/// 3. Bright Star
-/// 4. Catalog Object Shape
-/// 5. FOV Overlay
+/// 1. Atmosphere / ground
+/// 2. Milky Way
+/// 3. Alt/Az grid and coordinate labels
+/// 4. Constellation Line
+/// 5. Bright Star
+/// 6. Catalog Object Shape
+/// 7. FOV Overlay
 class SkyMapCompositePainter extends CustomPainter {
   SkyMapCompositePainter({
     required this.constellations,
@@ -27,6 +31,10 @@ class SkyMapCompositePainter extends CustomPainter {
     required this.centerAltitudeDeg,
     required this.centerAzimuthDeg,
     required this.viewHeightDeg,
+    required this.sunAltitudeDeg,
+    required this.sunAzimuthDeg,
+    this.milkyWay = const SkyMapMilkyWayHorizontalMesh.empty(),
+    this.showMilkyWay = true,
   });
 
   final List<SkyMapConstellationRender> constellations;
@@ -40,20 +48,41 @@ class SkyMapCompositePainter extends CustomPainter {
   final double centerAltitudeDeg;
   final double centerAzimuthDeg;
   final double viewHeightDeg;
+  final double sunAltitudeDeg;
+  final double sunAzimuthDeg;
+  final SkyMapMilkyWayHorizontalMesh milkyWay;
+  final bool showMilkyWay;
 
   @override
   void paint(Canvas canvas, Size size) {
-    SkyMapBackgroundPainter(
+    final occupiedLabels = <Rect>[];
+
+    final background = SkyMapBackgroundPainter(
       centerAltitudeDeg: centerAltitudeDeg,
       centerAzimuthDeg: centerAzimuthDeg,
       viewHeightDeg: viewHeightDeg,
-    ).paint(canvas, size);
+      sunAltitudeDeg: sunAltitudeDeg,
+      sunAzimuthDeg: sunAzimuthDeg,
+      occupiedLabels: occupiedLabels,
+    );
+    background.paintAtmosphereLayer(canvas, size);
 
-    final occupiedLabels = <Rect>[];
+    if (showMilkyWay && !milkyWay.isEmpty) {
+      MilkyWayPainter(
+        mesh: milkyWay,
+        centerAltitudeDeg: centerAltitudeDeg,
+        centerAzimuthDeg: centerAzimuthDeg,
+        viewHeightDeg: viewHeightDeg,
+        sunAltitudeDeg: sunAltitudeDeg,
+      ).paint(canvas, size);
+    }
+
+    background.paintCoordinateLayer(canvas, size);
 
     if (showConstellations && constellations.isNotEmpty) {
       ConstellationPainter(
         constellations: constellations,
+        viewHeightDeg: viewHeightDeg,
         occupiedLabels: occupiedLabels,
       ).paint(canvas, size);
     }
@@ -62,6 +91,7 @@ class SkyMapCompositePainter extends CustomPainter {
       StarPainter(
         stars: stars,
         showLabels: showLabels,
+        viewHeightDeg: viewHeightDeg,
         occupiedLabels: occupiedLabels,
       ).paint(canvas, size);
     }
@@ -70,6 +100,7 @@ class SkyMapCompositePainter extends CustomPainter {
       objects: objects,
       selectedId: selectedId,
       showLabels: showLabels,
+      viewHeightDeg: viewHeightDeg,
       occupiedLabels: occupiedLabels,
     ).paint(canvas, size);
 
@@ -90,6 +121,10 @@ class SkyMapCompositePainter extends CustomPainter {
         oldDelegate.showLabels != showLabels ||
         oldDelegate.centerAltitudeDeg != centerAltitudeDeg ||
         oldDelegate.centerAzimuthDeg != centerAzimuthDeg ||
-        oldDelegate.viewHeightDeg != viewHeightDeg;
+        oldDelegate.viewHeightDeg != viewHeightDeg ||
+        oldDelegate.sunAltitudeDeg != sunAltitudeDeg ||
+        oldDelegate.sunAzimuthDeg != sunAzimuthDeg ||
+        oldDelegate.milkyWay != milkyWay ||
+        oldDelegate.showMilkyWay != showMilkyWay;
   }
 }
