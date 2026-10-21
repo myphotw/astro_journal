@@ -24,16 +24,61 @@ class CatalogImportService {
 
   static Future<void> importAllIfNeeded() async {
     final prefs = await SharedPreferences.getInstance();
+    final db = await AppDatabase.instance;
+    await _importAllIfNeeded(
+      db: db,
+      prefs: prefs,
+      importPipeline: _runImportPipeline,
+    );
+  }
+
+  static Future<void> _runImportPipeline(Database db) async {
+    await _loadIdRemap();
+    await _remapShootingRecords(db);
+    await _importCatalog(db);
+  }
+
+  static Future<bool> _importAllIfNeeded({
+    required Database db,
+    required SharedPreferences prefs,
+    required Future<void> Function(Database db) importPipeline,
+  }) async {
     final stored = prefs.getInt(_prefsKey) ?? 0;
-    if (stored == DatabaseConstants.catalogDataVersion) {
-      return;
+    if (stored == DatabaseConstants.catalogDataVersion &&
+        await _hasUsableCatalogData(db)) {
+      return false;
     }
 
-    await _loadIdRemap();
-    await _remapShootingRecords();
-    await _importCatalog();
+    await importPipeline(db);
     await prefs.setInt(_prefsKey, DatabaseConstants.catalogDataVersion);
+    return true;
   }
+
+  static Future<bool> _hasUsableCatalogData(Database db) async {
+    final rows = await db.query(
+      DatabaseConstants.tableCelestialObjects,
+      columns: const [DatabaseConstants.colId],
+      where: '${DatabaseConstants.colIsPrimaryCatalog} = ?',
+      whereArgs: const [1],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  @visibleForTesting
+  static Future<bool> importAllIfNeededForTesting({
+    required Database db,
+    required SharedPreferences prefs,
+    Future<void> Function(Database db)? importPipeline,
+  }) => _importAllIfNeeded(
+    db: db,
+    prefs: prefs,
+    importPipeline: importPipeline ?? _runImportPipeline,
+  );
+
+  @visibleForTesting
+  static Future<bool> hasUsableCatalogDataForTesting(Database db) =>
+      _hasUsableCatalogData(db);
 
   static Future<void> _loadIdRemap() async {
     if (_idRemap != null) return;
@@ -48,8 +93,7 @@ class CatalogImportService {
     }
   }
 
-  static Future<void> _remapShootingRecords() async {
-    final db = await AppDatabase.instance;
+  static Future<void> _remapShootingRecords(Database db) async {
     final remap = _idRemap ?? {};
     if (remap.isEmpty) return;
 
@@ -78,8 +122,7 @@ class CatalogImportService {
     Map<String, String> remap,
   ) => _remapShootingRecordsInDb(db, remap);
 
-  static Future<void> _importCatalog() async {
-    final db = await AppDatabase.instance;
+  static Future<void> _importCatalog(Database db) async {
     await CatalogSeedImportService.importFromSeed(db);
     // Upsert는 삭제를 하지 않으므로 암흑성운·재분류를 한 번 더 적용한다.
     await CatalogObjectTypeMigration.apply(
