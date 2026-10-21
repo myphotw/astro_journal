@@ -28,6 +28,9 @@ abstract final class SkyMapVisualStyle {
   static const globularCluster = Color(0xFF79CDB6);
   static const planetaryNebula = Color(0xFFAF9BF0);
   static const pointObject = Color(0xFFCBD8E8);
+  static const sun = Color(0xFFFFD166);
+  static const moon = Color(0xFFF1F4E8);
+  static const planet = Color(0xFF75D5E8);
 
   static const _astronomicalTwilight = Color(0xFF152843);
   static const _nauticalTwilight = Color(0xFF24496F);
@@ -35,6 +38,9 @@ abstract final class SkyMapVisualStyle {
   static const _daylight = Color(0xFF78ADD0);
 
   static Color objectColor(SkyMapShapeKind kind) => switch (kind) {
+    SkyMapShapeKind.sun => sun,
+    SkyMapShapeKind.moon => moon,
+    SkyMapShapeKind.planet => planet,
     SkyMapShapeKind.galaxy => galaxy,
     SkyMapShapeKind.openCluster => openCluster,
     SkyMapShapeKind.globularCluster => globularCluster,

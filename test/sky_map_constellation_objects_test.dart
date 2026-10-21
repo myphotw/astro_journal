@@ -420,7 +420,7 @@ void main() {
       vm.dispose();
     });
 
-    test('지평선 아래 천체도 전천 화면에 남고 선택할 수 있다', () async {
+    testWidgets('지평선 아래 천체도 전천 화면에 남고 선택할 수 있다', (tester) async {
       final time = DateTime.utc(2026, 1, 15, 12);
       final raHour = List<int>.generate(24, (index) => index).firstWhere((ra) {
         final altitude = CelestialPositionService.computeAltAz(
@@ -447,6 +447,8 @@ void main() {
         () => time,
       );
       await vm.load();
+      vm.setViewHeightDeg(SkyMapViewModel.maxViewHeightDeg);
+      await tester.pump();
       vm.updateCanvasSize(const Size(1000, 800));
 
       final render = vm.visibleObjects.single;

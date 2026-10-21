@@ -12,6 +12,7 @@ import '../../../data/models/equipment.dart';
 import '../../../data/models/fov_box.dart';
 import '../../../data/models/sky_map_constellation.dart';
 import '../../../data/models/sky_map_render_object.dart';
+import '../../../data/models/site_horizon_profile.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/sky_map/sky_map_constellation_catalog.dart';
@@ -24,6 +25,7 @@ import '../../../services/sky_map_milky_way_service.dart';
 import '../../../services/sky_map_night_timeline_service.dart';
 import '../../../services/sky_map_projection_service.dart';
 import '../../../services/sky_map_sun_position_service.dart';
+import '../../../services/solar_system_ephemeris_service.dart';
 import '../../observation_site/viewmodel/active_observation_site_view_model.dart';
 import '../widgets/sky_map_object_symbol.dart';
 
@@ -77,6 +79,8 @@ class SkyMapFilters {
     this.showConstellations = true,
     this.showBrightStars = true,
     this.showMilkyWay = true,
+    this.showSolarSystem = true,
+    this.showObservationSiteHorizon = true,
   });
 
   final Set<CatalogType> catalogs;
@@ -84,6 +88,8 @@ class SkyMapFilters {
   final bool showConstellations;
   final bool showBrightStars;
   final bool showMilkyWay;
+  final bool showSolarSystem;
+  final bool showObservationSiteHorizon;
 
   static const supportedCatalogs = <CatalogType>[
     CatalogType.messier,
@@ -127,6 +133,8 @@ class SkyMapFilters {
     bool? showConstellations,
     bool? showBrightStars,
     bool? showMilkyWay,
+    bool? showSolarSystem,
+    bool? showObservationSiteHorizon,
   }) {
     return SkyMapFilters(
       catalogs: catalogs ?? this.catalogs,
@@ -134,6 +142,9 @@ class SkyMapFilters {
       showConstellations: showConstellations ?? this.showConstellations,
       showBrightStars: showBrightStars ?? this.showBrightStars,
       showMilkyWay: showMilkyWay ?? this.showMilkyWay,
+      showSolarSystem: showSolarSystem ?? this.showSolarSystem,
+      showObservationSiteHorizon:
+          showObservationSiteHorizon ?? this.showObservationSiteHorizon,
     );
   }
 }
@@ -172,20 +183,28 @@ class SkyMapViewModel extends ChangeNotifier {
   final SkyMapMilkyWayService _milkyWayService = const SkyMapMilkyWayService();
   final SkyMapNightTimelineService _nightTimelineService =
       const SkyMapNightTimelineService();
+  final SolarSystemEphemerisService _solarSystemEphemerisService =
+      SolarSystemEphemerisService();
 
   static const double minViewHeightDeg =
       SkyMapHorizontalProjectionService.minViewHeightDeg;
   static const double maxViewHeightDeg =
       SkyMapHorizontalProjectionService.maxViewHeightDeg;
-  static const double defaultViewHeightDeg = 180;
+  // 일반 방향 시야의 초기 화면은 천정과 지평선 아래 일부를 함께 담되,
+  // 중앙 방위각의 실제 지평선이 화면 하단 12.5% 지점에 오도록 한다.
+  // 투영의 세로 각도/픽셀 비율을 사용하므로 화면 종횡비와 무관하다.
+  static const double defaultHorizonScreenFraction = 0.875;
+  static const double defaultViewHeightDeg = 120;
   static const double defaultCenterAzimuthDeg = 180;
-  static const double defaultCenterAltitudeDeg = 90;
+  static const double defaultCenterAltitudeDeg =
+      defaultViewHeightDeg * (defaultHorizonScreenFraction - 0.5);
 
   bool _isLoading = false;
   bool _hasLoaded = false;
   String? _errorMessage;
 
   List<CatalogObject> _deepSkyObjects = [];
+  List<CatalogObject> _solarSystemObjects = [];
   List<CatalogObject> _constellationCatalogObjects = [];
   List<Equipment> _equipment = [];
   SkyMapFilters _filters = const SkyMapFilters();
@@ -206,6 +225,7 @@ class SkyMapViewModel extends ChangeNotifier {
   bool _disposed = false;
 
   final Map<String, AltAz> _catalogAltAz = {};
+  final Map<String, SolarSystemPosition> _solarSystemPositions = {};
   final Map<String, AltAz> _starAltAz = {};
   SkyMapMilkyWayModel? _milkyWayModel;
   SkyMapMilkyWayHorizontalMesh _milkyWay =
@@ -249,7 +269,16 @@ class SkyMapViewModel extends ChangeNotifier {
   List<SkyMapStarRender> get visibleStars => List.unmodifiable(_visibleStars);
   List<SkyMapConstellationRender> get visibleConstellations =>
       List.unmodifiable(_visibleConstellations);
+  List<CatalogObject> get solarSystemObjects =>
+      List.unmodifiable(_solarSystemObjects);
+  Map<String, SolarSystemPosition> get solarSystemPositions =>
+      Map.unmodifiable(_solarSystemPositions);
+  SolarSystemPosition? solarSystemPositionFor(String catalogId) =>
+      _solarSystemPositions[catalogId];
   SkyMapMilkyWayHorizontalMesh get milkyWay => _milkyWay;
+  SiteHorizonProfile get observationSiteHorizonProfile =>
+      _activeObservationSiteViewModel?.active.horizonProfile ??
+      const SiteHorizonProfile();
   List<Equipment> get imagingEquipment =>
       _equipment.where((e) => e.isActive && e.hasFov).toList(growable: false);
 
@@ -335,6 +364,20 @@ class SkyMapViewModel extends ChangeNotifier {
     _setObservationTime(next, followCurrent: false);
   }
 
+  /// Slider drag 중의 연속 위치를 실제 관측 시각으로 반영한다.
+  void setObservationTimelinePosition(double minutes) {
+    final next = _nightTimeline.timeAtPosition(minutes);
+    _setObservationTime(next, followCurrent: false);
+  }
+
+  /// Slider drag 종료 시 가장 가까운 10분 단위로 관측 시각을 확정한다.
+  void finishObservationTimelinePosition(double minutes) {
+    final snappedMinutes = ((minutes / 10).round() * 10)
+        .clamp(0, _nightTimeline.totalMinutes)
+        .toInt();
+    setObservationTimelineMinutes(snappedMinutes);
+  }
+
   void resetObservationTime() {
     final now = _roundedToMinute(_now());
     _observationDate = _nightTimelineService.observationDateFor(now);
@@ -395,7 +438,10 @@ class SkyMapViewModel extends ChangeNotifier {
       return const [];
     }
     if (_canvasSize == Size.zero || !fov.isValid) return const [];
-    final target = _catalogAltAz[selected.id] ?? _altAzForObject(selected);
+    final target =
+        _solarSystemPositions[selected.id]?.altAz ??
+        _catalogAltAz[selected.id] ??
+        _altAzForObject(selected);
     if (target == null) return const [];
     return SkyMapHorizontalProjectionService.projectFovCorners(
       objectAltitudeDeg: target.altitude,
@@ -424,6 +470,14 @@ class SkyMapViewModel extends ChangeNotifier {
             (o) =>
                 o.isPrimaryCatalog &&
                 SkyMapFilters.supportedCatalogs.contains(o.catalog),
+          )
+          .toList(growable: false);
+
+      _solarSystemObjects = all
+          .where(
+            (object) =>
+                object.catalog == CatalogType.solar &&
+                SolarSystemBody.fromCatalogId(object.id) != null,
           )
           .toList(growable: false);
 
@@ -509,6 +563,14 @@ class SkyMapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setShowSolarSystem(bool value) {
+    setFilters(_filters.copyWith(showSolarSystem: value));
+  }
+
+  void setShowObservationSiteHorizon(bool value) {
+    setFilters(_filters.copyWith(showObservationSiteHorizon: value));
+  }
+
   void setSearchQuery(String query) {
     _searchQuery = query.trim();
     _rebuildVisible();
@@ -566,7 +628,11 @@ class SkyMapViewModel extends ChangeNotifier {
   void selectObject(CatalogObject? object) {
     _selectedObject = object;
     if (object != null) {
-      final target = _catalogAltAz[object.id] ?? _altAzForObject(object);
+      _ensureObjectVisibleInFilters(object);
+      final target =
+          _solarSystemPositions[object.id]?.altAz ??
+          _catalogAltAz[object.id] ??
+          _altAzForObject(object);
       if (target == null) {
         notifyListeners();
         return;
@@ -596,6 +662,11 @@ class SkyMapViewModel extends ChangeNotifier {
 
   void _ensureObjectVisibleInFilters(CatalogObject object) {
     var changed = false;
+    var showSolarSystem = _filters.showSolarSystem;
+    if (object.catalog == CatalogType.solar && !showSolarSystem) {
+      showSolarSystem = true;
+      changed = true;
+    }
     final catalogs = Set<CatalogType>.from(_filters.catalogs);
     if (SkyMapFilters.supportedCatalogs.contains(object.catalog) &&
         !catalogs.contains(object.catalog)) {
@@ -616,6 +687,7 @@ class SkyMapViewModel extends ChangeNotifier {
       _filters = _filters.copyWith(
         catalogs: catalogs,
         objectTypes: objectTypes,
+        showSolarSystem: showSolarSystem,
       );
     }
   }
@@ -782,6 +854,30 @@ class SkyMapViewModel extends ChangeNotifier {
 
     final results = <SkyMapSearchResult>[];
 
+    for (final obj in _solarSystemObjects) {
+      final position = _solarSystemPositions[obj.id];
+      if (position == null) continue;
+      final hay = <String>[
+        obj.displayName,
+        obj.displayCommonName,
+        obj.name,
+        ...obj.displayAliases,
+      ].join(' ').toLowerCase();
+      if (!hay.contains(q)) continue;
+      results.add(
+        SkyMapSearchResult(
+          kind: SkyMapSearchKind.catalog,
+          id: obj.id,
+          title: obj.displayName,
+          subtitle: '${obj.displayType} · 현재 관측 시각 위치',
+          raDeg: position.raDeg,
+          decDeg: position.decDeg,
+          catalogObject: obj,
+        ),
+      );
+      if (results.length >= 40) return results;
+    }
+
     for (final figure in SkyMapConstellationCatalog.constellations) {
       final hay = '${figure.name} ${figure.nameEn} ${figure.id}'.toLowerCase();
       if (!hay.contains(q)) continue;
@@ -905,6 +1001,8 @@ class SkyMapViewModel extends ChangeNotifier {
       );
 
   AltAz? _altAzForObject(CatalogObject object) {
+    final solarSystem = _solarSystemPositions[object.id];
+    if (solarSystem != null) return solarSystem.altAz;
     final raHours = CelestialPositionService.parseRaHours(object.ra);
     final decDeg = CelestialPositionService.parseDecDeg(object.dec);
     if (raHours == null || decDeg == null) return null;
@@ -925,6 +1023,21 @@ class SkyMapViewModel extends ChangeNotifier {
     );
     _sunAltitudeDeg = sunPosition.altitude;
     _sunAzimuthDeg = sunPosition.azimuth;
+    _solarSystemPositions.clear();
+    try {
+      _solarSystemPositions.addEntries(
+        _solarSystemEphemerisService
+            .positions(
+              time: _observationTime,
+              latitudeDeg: _observerLatitude,
+              longitudeDeg: _observerLongitude,
+            )
+            .map((position) => MapEntry(position.body.catalogId, position)),
+      );
+    } on RangeError {
+      // 기존 성도 날짜 범위(1900~2200)는 유지한다. 천체력 계약 범위 밖에서는
+      // 태양계 마커만 생략하고 별·심원천체·배경은 계속 표시한다.
+    }
     _refreshMilkyWayCoordinates();
     _catalogAltAz.clear();
     for (final object in _deepSkyObjects.where(_filters.matches)) {
@@ -1044,6 +1157,57 @@ class SkyMapViewModel extends ChangeNotifier {
           source: obj,
         ),
       );
+    }
+
+    if (_filters.showSolarSystem) {
+      for (final obj in _solarSystemObjects) {
+        final position = _solarSystemPositions[obj.id];
+        if (position == null) continue;
+        if (query.isNotEmpty) {
+          final hay = <String>[
+            obj.displayName,
+            obj.displayCommonName,
+            obj.name,
+            ...obj.displayAliases,
+          ].join(' ').toLowerCase();
+          if (!hay.contains(query)) continue;
+        }
+        final projected = SkyMapHorizontalProjectionService.project(
+          altitudeDeg: position.altAz.altitude,
+          azimuthDeg: position.altAz.azimuth,
+          centerAltitudeDeg: _centerAltitudeDeg,
+          centerAzimuthDeg: _centerAzimuthDeg,
+          canvasSize: _canvasSize,
+          viewHeightDeg: _viewHeightDeg,
+        );
+        if (projected.pixel.dx < -margin ||
+            projected.pixel.dy < -margin ||
+            projected.pixel.dx > _canvasSize.width + margin ||
+            projected.pixel.dy > _canvasSize.height + margin) {
+          continue;
+        }
+        result.add(
+          SkyMapRenderObject(
+            catalogId: obj.id,
+            name: obj.displayName,
+            commonName: obj.commonName,
+            objectType: obj.resolvedObjectType,
+            catalog: obj.catalog,
+            raDeg: position.raDeg,
+            decDeg: position.decDeg,
+            altitudeDeg: position.altAz.altitude,
+            screenX: projected.pixel.dx,
+            screenY: projected.pixel.dy,
+            renderWidth: 18,
+            renderHeight: 18,
+            magnitude: double.tryParse(obj.magnitude),
+            raLabel: _formatRa(position.raDeg),
+            decLabel: _formatDec(position.decDeg),
+            captured: obj.captured,
+            source: obj,
+          ),
+        );
+      }
     }
 
     if (result.length > 600 && _viewHeightDeg > 50) {
@@ -1250,5 +1414,26 @@ class SkyMapViewModel extends ChangeNotifier {
     if (mag <= 1) return 2.8;
     if (mag <= 2) return 2.1;
     return 1.55;
+  }
+
+  static String _formatRa(double raDeg) {
+    final totalSeconds = (raDeg / 15 * 3600).round() % (24 * 3600);
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}h '
+        '${minutes.toString().padLeft(2, '0')}m '
+        '${seconds.toString().padLeft(2, '0')}s';
+  }
+
+  static String _formatDec(double decDeg) {
+    final sign = decDeg < 0 ? '-' : '+';
+    final totalSeconds = (decDeg.abs() * 3600).round();
+    final degrees = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '$sign${degrees.toString().padLeft(2, '0')}° '
+        '${minutes.toString().padLeft(2, '0')}′ '
+        '${seconds.toString().padLeft(2, '0')}″';
   }
 }

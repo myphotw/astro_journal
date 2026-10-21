@@ -53,6 +53,22 @@ class ActiveObservationSiteViewModel extends ChangeNotifier {
     await contextInvalidator?.invalidate(ObservationContextChange.activeSite);
   }
 
+  /// 좌표 취득이 끝난 현재 위치를 한 번에 활성화한다.
+  ///
+  /// 위치 권한 또는 좌표 취득이 실패한 경우 호출하지 않으면 기존의 유효한
+  /// 관측지 선택이 그대로 유지된다.
+  Future<void> selectCurrentLocationAt({
+    required double latitude,
+    required double longitude,
+  }) async {
+    _active = ActiveObservationSite.currentLocation(
+      latitude: latitude,
+      longitude: longitude,
+    );
+    notifyListeners();
+    await contextInvalidator?.invalidate(ObservationContextChange.activeSite);
+  }
+
   Future<void> selectSavedSite(ObservationSite site) async {
     final usedAt = DateTime.now();
     await _repository.markLastUsed(site.id, usedAt);

@@ -148,4 +148,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(selectedCurrent, 1);
   });
+
+  testWidgets('compact selector keeps registered sites and checked selection', (
+    tester,
+  ) async {
+    final sites = [
+      ObservationSite(
+        id: 'home',
+        name: '이름이 아주 긴 집 베란다 관측지',
+        latitude: 37.5,
+        longitude: 127,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      ),
+      ObservationSite(
+        id: 'gurye',
+        name: '구례 관측지',
+        latitude: 35.2,
+        longitude: 127.5,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      ),
+    ];
+    final viewModel = ActiveObservationSiteViewModel(_Repository(sites));
+    await viewModel.load();
+    await viewModel.selectSavedSite(sites.first);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            child: ActiveObservationSiteSelector(
+              viewModel: viewModel,
+              onSelectCurrentLocation: () async {},
+              onSelectSite: (id) async {
+                await viewModel.selectSavedSite(
+                  sites.singleWhere((site) => site.id == id),
+                );
+              },
+              onOpenDetail: () {},
+              onManageSites: () {},
+              embedded: true,
+              compact: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('관측지'), findsNothing);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('active-observation-site-card')))
+          .height,
+      44,
+    );
+    final selectedName = tester.widget<Text>(
+      find.text('이름이 아주 긴 집 베란다 관측지').first,
+    );
+    expect(selectedName.overflow, TextOverflow.ellipsis);
+
+    await tester.tap(find.byKey(const Key('active-observation-site-selector')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('observation-site-option-home')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('observation-site-option-gurye')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('구례 관측지').last);
+    await tester.pumpAndSettle();
+    expect(viewModel.active.selectedSiteId, 'gurye');
+  });
 }

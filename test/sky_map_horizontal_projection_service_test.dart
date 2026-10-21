@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:astro_journal/features/sky_map/viewmodel/sky_map_view_model.dart';
 import 'package:astro_journal/services/celestial_position_service.dart';
 import 'package:astro_journal/services/sky_map_horizontal_projection_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,25 @@ void main() {
   const canvas = Size(800, 800);
 
   group('SkyMapHorizontalProjectionService', () {
+    test('initial directional view places the horizon near the lower edge', () {
+      for (final size in const [Size(1280, 720), Size(360, 640)]) {
+        final horizon = SkyMapHorizontalProjectionService.project(
+          altitudeDeg: 0,
+          azimuthDeg: SkyMapViewModel.defaultCenterAzimuthDeg,
+          centerAltitudeDeg: SkyMapViewModel.defaultCenterAltitudeDeg,
+          centerAzimuthDeg: SkyMapViewModel.defaultCenterAzimuthDeg,
+          canvasSize: size,
+          viewHeightDeg: SkyMapViewModel.defaultViewHeightDeg,
+        ).pixel;
+
+        expect(horizon.dx, closeTo(size.width / 2, 1e-8));
+        expect(
+          horizon.dy / size.height,
+          closeTo(SkyMapViewModel.defaultHorizonScreenFraction, 1e-8),
+        );
+      }
+    });
+
     test('projects shared RA/Dec Alt/Az result to the screen center', () {
       final altAz = CelestialPositionService.computeAltAz(
         raHours: 5.5,

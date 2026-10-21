@@ -22,6 +22,11 @@ void main() {
         (azimuth: 180.0, label: '남'),
         (azimuth: 270.0, label: '서'),
       ]);
+      expect(SkyMapBackgroundPainter.cardinalFontSize, 20);
+      expect(
+        SkyMapBackgroundPainter.cardinalLabelColor,
+        const Color(0xFFFFF8E7),
+      );
     });
 
     test('object types retain distinct palette colors', () {

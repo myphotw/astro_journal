@@ -8,6 +8,9 @@ import 'sky_map_visual_style.dart';
 
 /// 성도·별자리 목록용 천체 종류 심볼.
 enum SkyMapObjectSymbolKind {
+  sun,
+  moon,
+  planet,
   galaxy,
   openCluster,
   globularCluster,
@@ -108,6 +111,9 @@ class SkyMapObjectSymbol extends StatelessWidget {
 abstract final class SkyMapObjectSymbolPainter {
   static SkyMapObjectSymbolKind kindFor(SkyMapShapeKind shape) {
     return switch (shape) {
+      SkyMapShapeKind.sun => SkyMapObjectSymbolKind.sun,
+      SkyMapShapeKind.moon => SkyMapObjectSymbolKind.moon,
+      SkyMapShapeKind.planet => SkyMapObjectSymbolKind.planet,
       SkyMapShapeKind.galaxy => SkyMapObjectSymbolKind.galaxy,
       SkyMapShapeKind.openCluster => SkyMapObjectSymbolKind.openCluster,
       SkyMapShapeKind.globularCluster => SkyMapObjectSymbolKind.globularCluster,
@@ -137,6 +143,44 @@ abstract final class SkyMapObjectSymbolPainter {
       ..color = color.withValues(alpha: (selected ? 0.28 : 0.14) * opacity);
 
     switch (kind) {
+      case SkyMapObjectSymbolKind.sun:
+        final rayPaint = Paint()
+          ..color = stroke.color
+          ..strokeWidth = stroke.strokeWidth
+          ..strokeCap = StrokeCap.round;
+        final rayInner = size * 0.42;
+        final rayOuter = size * 0.60;
+        for (var index = 0; index < 8; index++) {
+          final angle = index * math.pi / 4;
+          canvas.drawLine(
+            center + Offset(math.cos(angle), math.sin(angle)) * rayInner,
+            center + Offset(math.cos(angle), math.sin(angle)) * rayOuter,
+            rayPaint,
+          );
+        }
+        canvas.drawCircle(center, size * 0.30, solidFill);
+        canvas.drawCircle(center, size * 0.30, stroke);
+      case SkyMapObjectSymbolKind.moon:
+        final radius = size * 0.38;
+        canvas.drawCircle(center, radius, solidFill);
+        canvas.drawCircle(
+          center + Offset(radius * 0.48, -radius * 0.08),
+          radius * 0.92,
+          Paint()
+            ..color = const Color(0xFF0B1221).withValues(alpha: 0.84 * opacity),
+        );
+        canvas.drawCircle(center, radius, stroke);
+      case SkyMapObjectSymbolKind.planet:
+        final radius = size * 0.28;
+        canvas.drawCircle(center, radius, solidFill);
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: center,
+            width: size * 0.92,
+            height: size * 0.34,
+          ),
+          stroke,
+        );
       case SkyMapObjectSymbolKind.galaxy:
         // 채워진 타원
         final rect = Rect.fromCenter(
@@ -240,6 +284,9 @@ class _SkyMapSymbolLegendState extends State<SkyMapSymbolLegend> {
   bool _expanded = false;
 
   static const _entries = <(SkyMapObjectSymbolKind, String)>[
+    (SkyMapObjectSymbolKind.sun, '태양'),
+    (SkyMapObjectSymbolKind.moon, '달'),
+    (SkyMapObjectSymbolKind.planet, '행성'),
     (SkyMapObjectSymbolKind.galaxy, '은하'),
     (SkyMapObjectSymbolKind.openCluster, '산개성단'),
     (SkyMapObjectSymbolKind.globularCluster, '구상성단'),
@@ -328,6 +375,9 @@ class _SkyMapSymbolLegendState extends State<SkyMapSymbolLegend> {
   }
 
   Color _colorForKind(SkyMapObjectSymbolKind kind) => switch (kind) {
+    SkyMapObjectSymbolKind.sun => SkyMapVisualStyle.sun,
+    SkyMapObjectSymbolKind.moon => SkyMapVisualStyle.moon,
+    SkyMapObjectSymbolKind.planet => SkyMapVisualStyle.planet,
     SkyMapObjectSymbolKind.galaxy => SkyMapVisualStyle.galaxy,
     SkyMapObjectSymbolKind.openCluster => SkyMapVisualStyle.openCluster,
     SkyMapObjectSymbolKind.globularCluster => SkyMapVisualStyle.globularCluster,

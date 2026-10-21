@@ -74,6 +74,11 @@ class SkyMapRenderObject {
 
   /// 천체 종류별 심볼 형태.
   SkyMapShapeKind get shapeKind {
+    if (catalog == CatalogType.solar) {
+      if (catalogId == 'solar_1') return SkyMapShapeKind.sun;
+      if (catalogId == 'solar_2') return SkyMapShapeKind.moon;
+      return SkyMapShapeKind.planet;
+    }
     if (objectType == ObjectType.galaxy ||
         objectType == ObjectType.galaxyGroup) {
       return SkyMapShapeKind.galaxy;
@@ -98,6 +103,9 @@ class SkyMapRenderObject {
 
 /// 은하=타원, 산개=원, 구상=이중원, 성운=마름모, 행성상=별.
 enum SkyMapShapeKind {
+  sun,
+  moon,
+  planet,
   galaxy,
   openCluster,
   globularCluster,

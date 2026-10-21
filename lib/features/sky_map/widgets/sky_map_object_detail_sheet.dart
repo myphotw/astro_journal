@@ -13,16 +13,13 @@ Future<void> showSkyMapObjectDetailSheet({
   required SkyMapViewModel viewModel,
   required CatalogObject object,
 }) {
-  final isWindows =
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+  final isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
   if (isWindows) {
     return showDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (context) => _SkyMapObjectDetailDialog(
-        viewModel: viewModel,
-        object: object,
-      ),
+      builder: (context) =>
+          _SkyMapObjectDetailDialog(viewModel: viewModel, object: object),
     );
   }
 
@@ -108,6 +105,7 @@ class _SkyMapObjectDetailContent extends StatelessWidget {
       listenable: viewModel,
       builder: (context, _) {
         final equipment = viewModel.imagingEquipment;
+        final solarPosition = viewModel.solarSystemPositionFor(object.id);
         return SafeArea(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
@@ -170,8 +168,37 @@ class _SkyMapObjectDetailContent extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   _metaRow('Type', object.displayType),
-                  _metaRow('위치 RA', object.ra),
-                  _metaRow('위치 DEC', object.dec),
+                  if (solarPosition != null) ...[
+                    _metaRow(
+                      '관측 시각',
+                      _formatObservationTime(viewModel.observationTime),
+                      key: const ValueKey('sky-map-dynamic-time'),
+                    ),
+                    _metaRow(
+                      '위치 RA',
+                      _formatRa(solarPosition.raDeg),
+                      key: const ValueKey('sky-map-dynamic-ra'),
+                    ),
+                    _metaRow(
+                      '위치 DEC',
+                      _formatDec(solarPosition.decDeg),
+                      key: const ValueKey('sky-map-dynamic-dec'),
+                    ),
+                    _metaRow(
+                      '고도 / 방위각',
+                      '${solarPosition.altAz.altitude.toStringAsFixed(1)}° / '
+                          '${solarPosition.altAz.azimuth.toStringAsFixed(1)}°',
+                      key: const ValueKey('sky-map-dynamic-alt-az'),
+                    ),
+                    _metaRow(
+                      '지평선',
+                      solarPosition.altAz.altitude >= 0 ? '위' : '아래',
+                      key: const ValueKey('sky-map-dynamic-horizon'),
+                    ),
+                  ] else ...[
+                    _metaRow('위치 RA', object.ra),
+                    _metaRow('위치 DEC', object.dec),
+                  ],
                   _metaRow(
                     '크기',
                     object.angularSize ??
@@ -219,8 +246,9 @@ class _SkyMapObjectDetailContent extends StatelessWidget {
   }
 }
 
-Widget _metaRow(String label, String value) {
+Widget _metaRow(String label, String value, {Key? key}) {
   return Padding(
+    key: key,
     padding: const EdgeInsets.only(bottom: 8),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,13 +278,41 @@ Widget _metaRow(String label, String value) {
   );
 }
 
+String _formatObservationTime(DateTime time) {
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${time.year}-${two(time.month)}-${two(time.day)} '
+      '${two(time.hour)}:${two(time.minute)}';
+}
+
+String _formatRa(double raDeg) {
+  final totalSeconds = (raDeg / 15 * 3600).round() % (24 * 3600);
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '${hours.toString().padLeft(2, '0')}h '
+      '${minutes.toString().padLeft(2, '0')}m '
+      '${seconds.toString().padLeft(2, '0')}s';
+}
+
+String _formatDec(double decDeg) {
+  final sign = decDeg < 0 ? '-' : '+';
+  final totalSeconds = (decDeg.abs() * 3600).round();
+  final degrees = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '$sign${degrees.toString().padLeft(2, '0')}° '
+      '${minutes.toString().padLeft(2, '0')}′ '
+      '${seconds.toString().padLeft(2, '0')}″';
+}
+
 Widget _equipmentTile({
   required BuildContext context,
   required SkyMapViewModel viewModel,
   required Equipment equipment,
 }) {
   final advice = viewModel.framingAdviceFor(equipment);
-  final isActive = viewModel.showFovOverlay &&
+  final isActive =
+      viewModel.showFovOverlay &&
       viewModel.fovPreview?.equipmentId == equipment.id;
 
   return Padding(

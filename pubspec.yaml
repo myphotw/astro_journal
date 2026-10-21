@@ -74,6 +74,8 @@ dependencies:
   # Geocoding API HTTP 호출
   http: ^1.4.0
   crypto: ^3.0.6
+  # Offline Solar System ephemerides (VSOP87 / Meeus, MIT).
+  astronomia: ^1.1.1
 
   # Plate Solve 업로드용 이미지 리사이즈
   image: ^4.3.0

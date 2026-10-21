@@ -18,6 +18,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
     this.onSaveCurrentLocation,
     this.equipmentName,
     this.embedded = false,
+    this.compact = false,
     this.selectorHeight,
     this.activeWeather,
     this.isWeatherLoading = false,
@@ -34,6 +35,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
   final VoidCallback? onSaveCurrentLocation;
   final String? equipmentName;
   final bool embedded;
+  final bool compact;
   final double? selectorHeight;
   final WeatherData? activeWeather;
   final bool isWeatherLoading;
@@ -66,113 +68,126 @@ class ActiveObservationSiteSelector extends StatelessWidget {
           ),
         ];
 
-        final selector = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '관측지',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+        final selectorCard = Container(
+          key: const Key('active-observation-site-card'),
+          width: double.infinity,
+          height: selectorHeight ?? (compact ? 44 : null),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppColors.background.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.textSecondary.withValues(alpha: 0.22),
             ),
-            const SizedBox(height: 5),
-            Container(
-              key: const Key('active-observation-site-card'),
-              width: double.infinity,
-              height: selectorHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppColors.background.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.textSecondary.withValues(alpha: 0.22),
-                ),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  key: const Key('active-observation-site-selector'),
-                  value: selectedValue,
-                  isExpanded: true,
-                  itemHeight: 76,
-                  menuMaxHeight: 420,
-                  borderRadius: BorderRadius.circular(12),
-                  dropdownColor: AppColors.surface,
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                  selectedItemBuilder: (context) => choices
-                      .map(
-                        (choice) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: _SelectedSite(choice: choice),
-                        ),
-                      )
-                      .toList(),
-                  items: choices
-                      .map(
-                        (choice) => DropdownMenuItem<String>(
-                          value: choice.value,
-                          child: _SiteMenuItem(
-                            choice: choice,
-                            selected: choice.value == selectedValue,
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              key: const Key('active-observation-site-selector'),
+              value: selectedValue,
+              isExpanded: true,
+              itemHeight: 76,
+              menuMaxHeight: 420,
+              borderRadius: BorderRadius.circular(12),
+              dropdownColor: AppColors.surface,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              selectedItemBuilder: (context) => choices
+                  .map(
+                    (choice) => Align(
+                      alignment: Alignment.centerLeft,
+                      child: compact
+                          ? _CompactSelectedSite(choice: choice)
+                          : _SelectedSite(choice: choice),
+                    ),
+                  )
+                  .toList(),
+              items: choices
+                  .map(
+                    (choice) => DropdownMenuItem<String>(
+                      value: choice.value,
+                      child: _SiteMenuItem(
+                        choice: choice,
+                        selected: choice.value == selectedValue,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) async {
+                if (value == null) return;
+                if (value == selectedValue) {
+                  if (value == currentLocationValue &&
+                      (active.latitude == null || active.longitude == null)) {
+                    await onSelectCurrentLocation();
+                  }
+                  return;
+                }
+                if (value == currentLocationValue) {
+                  await onSelectCurrentLocation();
+                } else {
+                  await onSelectSite(value);
+                }
+              },
+            ),
+          ),
+        );
+
+        final selector = compact
+            ? selectorCard
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '관측지',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  selectorCard,
+                  if (!embedded) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            equipmentName?.trim().isNotEmpty == true
+                                ? '${viewModel.active.effectiveTrackingMode.label} · ${equipmentName!.trim()}'
+                                : viewModel.active.effectiveTrackingMode.label,
+                            key: const Key('active-observation-site-summary'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (value) async {
-                    if (value == null || value == selectedValue) return;
-                    if (value == currentLocationValue) {
-                      await onSelectCurrentLocation();
-                    } else {
-                      await onSelectSite(value);
-                    }
-                  },
-                ),
-              ),
-            ),
-            if (!embedded) ...[
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      equipmentName?.trim().isNotEmpty == true
-                          ? '${viewModel.active.effectiveTrackingMode.label} · ${equipmentName!.trim()}'
-                          : viewModel.active.effectiveTrackingMode.label,
-                      key: const Key('active-observation-site-summary'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
+                        if (active.isSavedSite)
+                          IconButton(
+                            key: const Key('open-active-site-detail'),
+                            tooltip: '관측지 상세',
+                            onPressed: onOpenDetail,
+                            icon: const Icon(Icons.chevron_right),
+                            visualDensity: VisualDensity.compact,
+                          )
+                        else if (onSaveCurrentLocation != null)
+                          IconButton(
+                            key: const Key('save-current-location-as-site'),
+                            tooltip: '관측지로 저장',
+                            onPressed: onSaveCurrentLocation,
+                            icon: const Icon(Icons.bookmark_add_outlined),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        IconButton(
+                          key: const Key('manage-observation-sites'),
+                          tooltip: '관측지 관리',
+                          onPressed: onManageSites,
+                          icon: const Icon(Icons.tune),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
                     ),
-                  ),
-                  if (active.isSavedSite)
-                    IconButton(
-                      key: const Key('open-active-site-detail'),
-                      tooltip: '관측지 상세',
-                      onPressed: onOpenDetail,
-                      icon: const Icon(Icons.chevron_right),
-                      visualDensity: VisualDensity.compact,
-                    )
-                  else if (onSaveCurrentLocation != null)
-                    IconButton(
-                      key: const Key('save-current-location-as-site'),
-                      tooltip: '관측지로 저장',
-                      onPressed: onSaveCurrentLocation,
-                      icon: const Icon(Icons.bookmark_add_outlined),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  IconButton(
-                    key: const Key('manage-observation-sites'),
-                    tooltip: '관측지 관리',
-                    onPressed: onManageSites,
-                    icon: const Icon(Icons.tune),
-                    visualDensity: VisualDensity.compact,
-                  ),
+                  ],
                 ],
-              ),
-            ],
-          ],
-        );
+              );
 
         if (embedded) return selector;
         return Card(
@@ -182,6 +197,36 @@ class ActiveObservationSiteSelector extends StatelessWidget {
       },
     );
   }
+}
+
+class _CompactSelectedSite extends StatelessWidget {
+  const _CompactSelectedSite({required this.choice});
+
+  final _SiteChoice choice;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      const Icon(
+        Icons.location_on_outlined,
+        size: 17,
+        color: AppColors.messier,
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Text(
+          choice.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class _SiteChoice {

@@ -29,6 +29,7 @@ void main() {
                   timeline: _timeline(DateTime(2026, 10, 20)),
                   onDateChanged: (_) {},
                   onTimelineMinutesChanged: (_) {},
+                  onTimelineChangeEnd: (_) {},
                   onNowPressed: () {},
                 ),
               ),
@@ -67,6 +68,7 @@ void main() {
               timeline: _timeline(DateTime(2026, 10, 20)),
               onDateChanged: (value) => selected = value,
               onTimelineMinutesChanged: (_) {},
+              onTimelineChangeEnd: (_) {},
               onNowPressed: () {},
             ),
           ),
@@ -84,10 +86,11 @@ void main() {
       expect(selected, DateTime(2026, 10, 21));
     });
 
-    testWidgets('slider emits ten-minute values and current button is active', (
+    testWidgets('slider emits continuous values and snaps when drag ends', (
       tester,
     ) async {
-      int? minutes;
+      double? dragMinutes;
+      double? endMinutes;
       var reset = false;
       await tester.pumpWidget(
         MaterialApp(
@@ -97,7 +100,8 @@ void main() {
               observationTime: DateTime(2026, 10, 20, 20),
               timeline: _timeline(DateTime(2026, 10, 20)),
               onDateChanged: (_) {},
-              onTimelineMinutesChanged: (value) => minutes = value,
+              onTimelineMinutesChanged: (value) => dragMinutes = value,
+              onTimelineChangeEnd: (value) => endMinutes = value,
               onNowPressed: () => reset = true,
             ),
           ),
@@ -107,8 +111,11 @@ void main() {
       final slider = tester.widget<Slider>(
         find.byKey(const ValueKey('sky-map-time-slider')),
       );
-      slider.onChanged!(613);
-      expect(minutes, 610);
+      expect(slider.divisions, isNull);
+      slider.onChanged!(613.75);
+      expect(dragMinutes, 613.75);
+      slider.onChangeEnd!(613.75);
+      expect(endMinutes, 613.75);
 
       await tester.tap(find.byKey(const ValueKey('sky-map-now-button')));
       expect(reset, isTrue);
@@ -116,14 +123,34 @@ void main() {
   });
 
   group('SkyMapViewModel observation time', () {
+    testWidgets('reset restores the lower-horizon initial direction view', (
+      tester,
+    ) async {
+      final vm = _viewModel(DateTime(2026, 10, 20, 20));
+      await tester.runAsync(vm.load);
+      vm.updateCanvasSize(const Size(900, 600));
+      vm.panByPixels(const Offset(80, -40));
+      vm.setViewHeightDeg(45);
+      await tester.pump();
+
+      vm.resetView();
+
+      expect(vm.centerAzimuthDeg, SkyMapViewModel.defaultCenterAzimuthDeg);
+      expect(vm.centerAltitudeDeg, SkyMapViewModel.defaultCenterAltitudeDeg);
+      expect(vm.viewHeightDeg, SkyMapViewModel.defaultViewHeightDeg);
+      vm.dispose();
+    });
+
     testWidgets('initializes to now and date changes preserve selected time', (
       tester,
     ) async {
       final now = DateTime(2026, 10, 20, 20, 37);
-      final vm = _viewModel(now, objects: [_object()]);
+      final object = _object();
+      final vm = _viewModel(now, objects: [object]);
       await tester.runAsync(vm.load);
       vm.updateCanvasSize(const Size(900, 600));
-      final beforeAltitude = vm.visibleObjects.single.altitudeDeg;
+      vm.selectObject(object);
+      final beforeAltitude = vm.selectedRenderObject!.altitudeDeg;
 
       expect(vm.observationTime, now);
       expect(vm.isFollowingCurrentTime, isTrue);
@@ -133,7 +160,7 @@ void main() {
 
       expect(vm.observationTime, DateTime(2026, 11, 5, 20, 37));
       expect(vm.isFollowingCurrentTime, isFalse);
-      expect(vm.visibleObjects.single.altitudeDeg, isNot(beforeAltitude));
+      expect(vm.selectedRenderObject!.altitudeDeg, isNot(beforeAltitude));
       vm.dispose();
     });
 
@@ -191,6 +218,7 @@ void main() {
       await tester.pump();
 
       expect(vm.observationTime, DateTime(2026, 10, 20, 20, 20));
+      vm.selectObject(object);
       final expected = CelestialPositionService.computeAltAz(
         raHours: 5,
         decDeg: 20,
@@ -199,8 +227,52 @@ void main() {
         time: vm.observationTime,
       );
       expect(
-        vm.visibleObjects.single.altitudeDeg,
+        vm.selectedRenderObject!.altitudeDeg,
         closeTo(expected.altitude, 1e-9),
+      );
+      vm.dispose();
+    });
+
+    testWidgets('continuous drag uses sub-minute sky time then snaps to ten', (
+      tester,
+    ) async {
+      final vm = _viewModel(DateTime(2026, 10, 20, 20));
+      await tester.runAsync(vm.load);
+      final base = vm.nightTimeline.start;
+
+      vm.setObservationTimelinePosition(123.75);
+      await tester.pump();
+      expect(
+        vm.observationTime,
+        base.add(const Duration(minutes: 123, seconds: 45)),
+      );
+
+      vm.finishObservationTimelinePosition(123.75);
+      await tester.pump();
+      expect(vm.observationTime, base.add(const Duration(minutes: 120)));
+      vm.dispose();
+    });
+
+    testWidgets('continuous drag crosses midnight without a date jump', (
+      tester,
+    ) async {
+      final vm = _viewModel(DateTime(2026, 10, 20, 20));
+      await tester.runAsync(vm.load);
+      final midnight = vm.nightTimeline.midnightOffsetMinutes.toDouble();
+
+      vm.setObservationTimelinePosition(midnight - 0.25);
+      await tester.pump();
+      expect(vm.observationTime, DateTime(2026, 10, 20, 23, 59, 45));
+
+      vm.setObservationTimelinePosition(midnight + 0.25);
+      await tester.pump();
+      expect(vm.observationTime, DateTime(2026, 10, 21, 0, 0, 15));
+      expect(
+        SkyMapTimeControl.formatTimeWithDayOffset(
+          vm.observationTime,
+          vm.observationDate,
+        ),
+        '00:00 (+1일)',
       );
       vm.dispose();
     });

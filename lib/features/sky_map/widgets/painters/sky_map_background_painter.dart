@@ -27,6 +27,12 @@ class SkyMapBackgroundPainter extends CustomPainter {
   static double gridIntervalFor(double viewHeightDeg) =>
       SkyMapVisualStyle.gridIntervalFor(viewHeightDeg);
 
+  @visibleForTesting
+  static const double cardinalFontSize = 20;
+
+  @visibleForTesting
+  static const Color cardinalLabelColor = Color(0xFFFFF8E7);
+
   @override
   void paint(Canvas canvas, Size size) {
     paintAtmosphereLayer(canvas, size);
@@ -548,21 +554,41 @@ class SkyMapBackgroundPainter extends CustomPainter {
     final coordinateColor = SkyMapVisualStyle.coordinateColorFor(
       sunAltitudeDeg,
     );
+    final effectiveFontSize = cardinal
+        ? cardinalFontSize
+        : (auxiliary ? fontSize - 1 : fontSize);
     final style = TextStyle(
-      color: coordinateColor.withValues(
-        alpha: auxiliary
-            ? 0.76
-            : (cardinal ? 1 : (altitudeDeg < 0 ? 0.72 : 0.9)),
-      ),
-      fontSize: cardinal ? 15 : (auxiliary ? fontSize - 1 : fontSize),
-      fontWeight: cardinal ? FontWeight.w800 : FontWeight.w500,
-      letterSpacing: cardinal ? 0.8 : 0.1,
-      shadows: const [Shadow(color: Color(0xE6000000), blurRadius: 4)],
+      color: cardinal
+          ? cardinalLabelColor
+          : coordinateColor.withValues(
+              alpha: auxiliary ? 0.76 : (altitudeDeg < 0 ? 0.72 : 0.9),
+            ),
+      fontSize: effectiveFontSize,
+      fontWeight: cardinal ? FontWeight.w900 : FontWeight.w500,
+      letterSpacing: cardinal ? 1 : 0.1,
+      shadows: const [Shadow(color: Color(0xF0000000), blurRadius: 5)],
     );
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
     )..layout();
+    final outlinePainter = cardinal
+        ? (TextPainter(
+            text: TextSpan(
+              text: text,
+              style: TextStyle(
+                foreground: Paint()
+                  ..color = const Color(0xE6000000)
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 3,
+                fontSize: effectiveFontSize,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout())
+        : null;
     final canvasRect = Offset.zero & size;
     if (!canvasRect.inflate(cardinal ? 20 : -3).contains(center)) return;
     final safeCenter = cardinal
@@ -593,15 +619,17 @@ class SkyMapBackgroundPainter extends CustomPainter {
     canvas.drawRRect(
       background,
       Paint()
-        ..color = _atmosphericColor(
-          altitudeDeg,
-          azimuthDeg,
-        ).withValues(alpha: auxiliary ? 0.62 : (cardinal ? 0.9 : 0.76)),
+        ..color = cardinal
+            ? const Color(0xAA06101B)
+            : _atmosphericColor(
+                altitudeDeg,
+                azimuthDeg,
+              ).withValues(alpha: auxiliary ? 0.62 : 0.76),
     );
-    painter.paint(
-      canvas,
-      safeCenter - Offset(painter.width / 2, painter.height / 2),
-    );
+    final textOffset =
+        safeCenter - Offset(painter.width / 2, painter.height / 2);
+    outlinePainter?.paint(canvas, textOffset);
+    painter.paint(canvas, textOffset);
     occupiedLabels?.add(labelBounds.inflate(2));
   }
 

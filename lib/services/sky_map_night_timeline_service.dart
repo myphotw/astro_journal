@@ -30,8 +30,19 @@ class SkyMapNightTimeline {
   DateTime timeAtOffset(int minutes) =>
       start.add(Duration(minutes: minutes.clamp(0, totalMinutes)));
 
+  DateTime timeAtPosition(double minutes) {
+    final clamped = minutes.clamp(0.0, totalMinutes.toDouble());
+    return start.add(Duration(milliseconds: (clamped * 60000).round()));
+  }
+
   int offsetFor(DateTime time) =>
       time.difference(start).inMinutes.clamp(0, totalMinutes);
+
+  double positionFor(DateTime time) =>
+      (time.difference(start).inMilliseconds / 60000).clamp(
+        0.0,
+        totalMinutes.toDouble(),
+      );
 
   double fractionFor(DateTime time) {
     if (totalMinutes <= 0) return 0;

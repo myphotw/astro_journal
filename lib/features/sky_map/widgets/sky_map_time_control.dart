@@ -14,6 +14,7 @@ class SkyMapTimeControl extends StatelessWidget {
     required this.timeline,
     required this.onDateChanged,
     required this.onTimelineMinutesChanged,
+    required this.onTimelineChangeEnd,
     required this.onNowPressed,
   });
 
@@ -21,7 +22,8 @@ class SkyMapTimeControl extends StatelessWidget {
   final DateTime observationTime;
   final SkyMapNightTimeline timeline;
   final ValueChanged<DateTime> onDateChanged;
-  final ValueChanged<int> onTimelineMinutesChanged;
+  final ValueChanged<double> onTimelineMinutesChanged;
+  final ValueChanged<double> onTimelineChangeEnd;
   final VoidCallback onNowPressed;
 
   static String formatDate(DateTime value) =>
@@ -49,9 +51,6 @@ class SkyMapTimeControl extends StatelessWidget {
     return offset == 0 ? formatTime(value) : '${formatTime(value)} (+$offset일)';
   }
 
-  static int _snapToTenMinutes(double value, int maximum) =>
-      ((value / 10).round() * 10).clamp(0, maximum).toInt();
-
   Future<void> _showCalendar(BuildContext context) async {
     final selected = await showDatePicker(
       context: context,
@@ -70,7 +69,7 @@ class SkyMapTimeControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalMinutes = timeline.totalMinutes;
-    final sliderMinutes = timeline.offsetFor(observationTime).toDouble();
+    final sliderMinutes = timeline.positionFor(observationTime);
 
     return DecoratedBox(
       key: const ValueKey('sky-map-time-axis'),
@@ -171,14 +170,12 @@ class SkyMapTimeControl extends StatelessWidget {
                                 ),
                                 min: 0,
                                 max: totalMinutes.toDouble(),
-                                divisions: totalMinutes ~/ 10,
                                 label: formatTimeWithDayOffset(
                                   observationTime,
                                   observationDate,
                                 ),
-                                onChanged: (value) => onTimelineMinutesChanged(
-                                  _snapToTenMinutes(value, totalMinutes),
-                                ),
+                                onChanged: onTimelineMinutesChanged,
+                                onChangeEnd: onTimelineChangeEnd,
                               ),
                             ),
                           ),

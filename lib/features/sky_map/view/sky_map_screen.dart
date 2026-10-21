@@ -7,6 +7,9 @@ import '../../../core/constants/catalog_type.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/sky_map_render_object.dart';
+import '../../../services/location_service.dart';
+import '../../observation_site/viewmodel/active_observation_site_view_model.dart';
+import '../../observation_site/widgets/active_observation_site_selector.dart';
 import '../viewmodel/sky_map_view_model.dart';
 import '../widgets/painters/sky_map_composite_painter.dart';
 import '../widgets/sky_map_constellation_objects_sheet.dart';
@@ -120,6 +123,38 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
     await _openDetail(vm, selected);
   }
 
+  Future<void> _selectCurrentLocation(
+    ActiveObservationSiteViewModel activeSite,
+  ) async {
+    try {
+      final location = await context.read<LocationService>().getCurrentLocation(
+        preferLastKnown: true,
+      );
+      if (!mounted) return;
+      await activeSite.selectCurrentLocationAt(
+        latitude: location.latitude,
+        longitude: location.longitude,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _selectSavedSite(
+    ActiveObservationSiteViewModel activeSite,
+    String id,
+  ) async {
+    for (final site in activeSite.sites) {
+      if (site.id != id) continue;
+      await activeSite.selectSavedSite(site);
+      return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<SkyMapViewModel>();
@@ -139,7 +174,8 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
               observationTime: vm.observationTime,
               timeline: vm.nightTimeline,
               onDateChanged: vm.setObservationDate,
-              onTimelineMinutesChanged: vm.setObservationTimelineMinutes,
+              onTimelineMinutesChanged: vm.setObservationTimelinePosition,
+              onTimelineChangeEnd: vm.finishObservationTimelinePosition,
               onNowPressed: vm.resetObservationTime,
             ),
           ],
@@ -149,60 +185,25 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
   }
 
   Widget _buildTopBar(SkyMapViewModel vm) {
+    final activeSite = context.read<ActiveObservationSiteViewModel>();
     // 성도 배경·별자리와 겹쳐 보이지 않도록 완전 불투명 헤더
     return ColoredBox(
       color: AppColors.surface,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocus,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: '천체 · 별 · 별자리 검색',
-                  hintStyle: TextStyle(
-                    color: AppColors.textSecondary.withValues(alpha: 0.85),
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: AppColors.textPrimary,
-                  ),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(
-                            Icons.close,
-                            color: AppColors.textPrimary,
-                          ),
-                          onPressed: () {
-                            _searchController.clear();
-                            vm.clearSearch();
-                            setState(() => _showSearchResults = false);
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: AppColors.background,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                onChanged: (value) {
-                  setState(() => _showSearchResults = value.trim().isNotEmpty);
-                },
-                onSubmitted: (value) {
-                  vm.setSearchQuery(value);
-                  setState(() => _showSearchResults = false);
-                  _searchFocus.unfocus();
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filledTonal(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final siteSelector = ActiveObservationSiteSelector(
+              key: const Key('sky-map-observation-site-selector'),
+              viewModel: activeSite,
+              onSelectCurrentLocation: () => _selectCurrentLocation(activeSite),
+              onSelectSite: (id) => _selectSavedSite(activeSite, id),
+              onOpenDetail: () {},
+              onManageSites: () {},
+              embedded: true,
+              compact: true,
+            );
+            final filterButton = IconButton.filledTonal(
               onPressed: () =>
                   showSkyMapFilterSheet(context: context, viewModel: vm),
               style: IconButton.styleFrom(
@@ -211,12 +212,78 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
               ),
               icon: const Icon(Icons.filter_list),
               tooltip: '필터',
-            ),
-          ],
+            );
+            final searchField = _buildSearchField(vm);
+
+            if (constraints.maxWidth < 560) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: siteSelector),
+                      const SizedBox(width: 8),
+                      filterButton,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  searchField,
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                SizedBox(width: 200, child: siteSelector),
+                const SizedBox(width: 8),
+                Expanded(child: searchField),
+                const SizedBox(width: 8),
+                filterButton,
+              ],
+            );
+          },
         ),
       ),
     );
   }
+
+  Widget _buildSearchField(SkyMapViewModel vm) => TextField(
+    controller: _searchController,
+    focusNode: _searchFocus,
+    style: const TextStyle(color: AppColors.textPrimary),
+    decoration: InputDecoration(
+      hintText: '천체 · 별 · 별자리 검색',
+      hintStyle: TextStyle(
+        color: AppColors.textSecondary.withValues(alpha: 0.85),
+      ),
+      prefixIcon: const Icon(Icons.search, color: AppColors.textPrimary),
+      suffixIcon: _searchController.text.isNotEmpty
+          ? IconButton(
+              icon: const Icon(Icons.close, color: AppColors.textPrimary),
+              onPressed: () {
+                _searchController.clear();
+                vm.clearSearch();
+                setState(() => _showSearchResults = false);
+              },
+            )
+          : null,
+      filled: true,
+      fillColor: AppColors.background,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    ),
+    onChanged: (value) {
+      setState(() => _showSearchResults = value.trim().isNotEmpty);
+    },
+    onSubmitted: (value) {
+      vm.setSearchQuery(value);
+      setState(() => _showSearchResults = false);
+      _searchFocus.unfocus();
+    },
+  );
 
   Widget _buildSearchResults(SkyMapViewModel vm) {
     final results = vm.searchResults(_searchController.text);
@@ -412,6 +479,10 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
                       sunAzimuthDeg: vm.sunAzimuthDeg,
                       milkyWay: vm.milkyWay,
                       showMilkyWay: vm.filters.showMilkyWay,
+                      observationSiteHorizonProfile:
+                          vm.observationSiteHorizonProfile,
+                      showObservationSiteHorizon:
+                          vm.filters.showObservationSiteHorizon,
                     ),
                   ),
                 ),
