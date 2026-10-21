@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +10,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/sky_map_render_object.dart';
 import '../../../services/location_service.dart';
+import '../../../services/catalog_favorite_controller.dart';
 import '../../observation_site/viewmodel/active_observation_site_view_model.dart';
 import '../../observation_site/widgets/active_observation_site_selector.dart';
 import '../viewmodel/sky_map_view_model.dart';
@@ -30,11 +33,26 @@ class _SkyMapScreenState extends State<SkyMapScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
   bool _showSearchResults = false;
+  bool _favoriteLoadStarted = false;
 
   /// 터치/마우스 포인터별 마지막 local 위치 (ScaleGesture 미사용).
   final Map<int, Offset> _pointerPositions = {};
   double? _pinchStartDistance;
   double? _pinchStartViewHeight;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_favoriteLoadStarted) return;
+    _favoriteLoadStarted = true;
+    try {
+      final favorites = context.read<CatalogFavoriteController>();
+      context.read<SkyMapViewModel>().attachCatalogFavorites(favorites);
+      unawaited(favorites.initialize().catchError((_) {}));
+    } on ProviderNotFoundException {
+      // Standalone screen tests may omit the app-level favorite provider.
+    }
+  }
 
   @override
   void dispose() {

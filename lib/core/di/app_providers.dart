@@ -9,6 +9,7 @@ import '../../data/repositories/tc_backend_astronomy_event_repository.dart';
 import '../../data/repositories/equipment_repository.dart';
 import '../../data/repositories/equipment_repository_impl.dart';
 import '../../data/datasources/gallery_cache_local_datasource.dart';
+import '../../data/datasources/catalog_favorite_cache_data_source.dart';
 import '../../data/datasources/common_file_link_datasource.dart';
 import '../../data/datasources/gallery_record_link_datasource.dart';
 import '../../data/datasources/sync_checkpoint_datasource.dart';
@@ -57,6 +58,7 @@ import '../../services/geocoding_service.dart';
 import '../../services/location_service.dart';
 import '../../services/metadata_service.dart';
 import '../../services/catalog_search_service.dart';
+import '../../services/catalog_favorite_controller.dart';
 import '../../services/catalog_capture_projection_service.dart';
 import '../../services/photo_metadata_pipeline.dart';
 import '../../services/photo_overlay_service.dart';
@@ -82,6 +84,7 @@ import '../../services/splash_image_service.dart';
 import '../../services/weather_cache_service.dart';
 import '../../services/weather_service.dart';
 import '../../services/tc_backend_settings_service.dart';
+import '../../services/tc_backend_catalog_favorite_service.dart';
 import '../../services/tc_backend_upload_service.dart';
 import '../../services/tc_backend_record_service.dart';
 import '../../services/tc_backend_sync_coordinator.dart';
@@ -536,6 +539,16 @@ class AppProviders {
       Provider<BortleRepository>.value(value: bortleRepository),
       Provider<AstronomyEventRepository>.value(value: astronomyEventRepository),
       Provider<CatalogRepository>.value(value: catalogRepository),
+      ChangeNotifierProvider<CatalogFavoriteController>(
+        create: (_) => CatalogFavoriteController(
+          remoteApi: TcBackendCatalogFavoriteService(
+            settingsService: tcBackendSettingsService,
+            authHeaders: tcBackendAuthHeaders,
+          ),
+          cache: CatalogFavoriteCacheLocalDataSource(galleryCache),
+          catalogRepository: catalogRepository,
+        ),
+      ),
       Provider<EquipmentRepository>.value(value: equipmentRepository),
       Provider<ShootingRecordRepository>.value(value: shootingRecordRepository),
       Provider<PhotoRepository>.value(value: photoRepository),

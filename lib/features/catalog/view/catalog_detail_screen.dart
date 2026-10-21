@@ -12,6 +12,8 @@ import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/catalog_exposure_guidance_section.dart';
 import '../../../shared/widgets/catalog_imaging_availability_section.dart';
 import '../../../shared/widgets/catalog_object_image.dart';
+import '../../../shared/widgets/catalog_favorite_button.dart';
+import '../../../services/catalog_favorite_controller.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
 import '../../gallery/view/gallery_detail_screen.dart';
@@ -32,10 +34,23 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
   PageController? _pageController;
   bool _pageReady = false;
   bool _loadStarted = false;
+  bool _favoriteLoadStarted = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_favoriteLoadStarted) {
+      _favoriteLoadStarted = true;
+      try {
+        unawaited(
+          context.read<CatalogFavoriteController>().initialize().catchError(
+            (_) {},
+          ),
+        );
+      } on ProviderNotFoundException {
+        // Standalone detail tests may omit the app-level favorite provider.
+      }
+    }
     if (!_pageReady) {
       final viewModel = context.read<CatalogDetailViewModel>();
       if (viewModel.canSwipe) {
@@ -87,6 +102,7 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
           ],
         ),
         actions: [
+          CatalogFavoriteButton(catalogObjectId: object.id),
           if (viewModel.canDelete)
             IconButton(
               key: const Key('catalog-delete-button'),

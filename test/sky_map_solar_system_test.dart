@@ -2,14 +2,18 @@ import 'dart:async';
 
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
+import 'package:astro_journal/data/models/catalog_favorite.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/data/models/sky_map_render_object.dart';
+import 'package:astro_journal/data/datasources/catalog_favorite_cache_data_source.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/features/sky_map/viewmodel/sky_map_view_model.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_filter_sheet.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_object_detail_sheet.dart';
+import 'package:astro_journal/services/catalog_favorite_controller.dart';
+import 'package:astro_journal/services/tc_backend_catalog_favorite_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -18,7 +22,7 @@ void main() {
 
   setUp(() async {
     viewModel = SkyMapViewModel(
-      _CatalogRepository(const [..._solarObjects, _pluto]),
+      _CatalogRepository(const [..._solarObjects, _pluto, _ngc2237]),
       _EquipmentRepository(),
       null,
       () => DateTime.utc(2026, 1, 1),
@@ -163,10 +167,83 @@ void main() {
     );
     expect(switchFinder, findsOneWidget);
     expect(find.text('태양계'), findsOneWidget);
+    expect(find.byKey(const ValueKey('sky-map-favorite-mode')), findsOneWidget);
+    expect(find.text('즐겨찾기만'), findsOneWidget);
     await tester.tap(switchFinder);
     await tester.pump();
     expect(viewModel.filters.showSolarSystem, isFalse);
   });
+
+  testWidgets(
+    'favorites mode bypasses catalog filters without changing normal mode',
+    (tester) async {
+      final repository = _CatalogRepository(const [
+        ..._solarObjects,
+        _pluto,
+        _ngc2237,
+      ]);
+      final favorites = CatalogFavoriteController(
+        remoteApi: _FavoriteRemote(const ['NGC2237', 'solar_6']),
+        cache: _FavoriteCache(),
+        catalogRepository: repository,
+      );
+      final favoriteViewModel = SkyMapViewModel(
+        repository,
+        _EquipmentRepository(),
+        null,
+        () => DateTime.utc(2026, 1, 1),
+      );
+      favoriteViewModel.attachCatalogFavorites(favorites);
+      await favorites.initialize();
+      await favoriteViewModel.load();
+      favoriteViewModel.updateCanvasSize(const Size(900, 700));
+      favoriteViewModel.setFilters(
+        const SkyMapFilters(
+          catalogs: {CatalogType.messier},
+          showSolarSystem: false,
+        ),
+      );
+
+      favoriteViewModel.setFavoritesOnly(true);
+      favoriteViewModel.focusOnSkyPosition(raDeg: 97.5, decDeg: 5.0);
+      expect(
+        favoriteViewModel.visibleObjects.map((object) => object.catalogId),
+        contains('NGC2237'),
+      );
+
+      final jupiter = favoriteViewModel.solarSystemPositionFor('solar_6')!;
+      favoriteViewModel.focusOnSkyPosition(
+        raDeg: jupiter.raDeg,
+        decDeg: jupiter.decDeg,
+      );
+      expect(
+        favoriteViewModel.visibleObjects.map((object) => object.catalogId),
+        contains('solar_6'),
+      );
+      expect(favoriteViewModel.filters.catalogs, {CatalogType.messier});
+      expect(favoriteViewModel.filters.showSolarSystem, isFalse);
+
+      favoriteViewModel.selectObject(
+        favoriteViewModel.solarSystemObjects.singleWhere(
+          (object) => object.id == 'solar_6',
+        ),
+      );
+      expect(favoriteViewModel.filters.favoritesOnly, isTrue);
+      expect(favoriteViewModel.filters.showSolarSystem, isFalse);
+
+      favoriteViewModel.setFavoritesOnly(false);
+      expect(favoriteViewModel.filters.catalogs, {CatalogType.messier});
+      expect(favoriteViewModel.filters.showSolarSystem, isFalse);
+      favoriteViewModel.focusOnSkyPosition(raDeg: 97.5, decDeg: 5.0);
+      expect(
+        favoriteViewModel.visibleObjects.map((object) => object.catalogId),
+        isNot(contains('NGC2237')),
+      );
+      favoriteViewModel.dispose();
+      favorites.dispose();
+      await tester.pump();
+    },
+  );
 
   testWidgets('detail sheet presents dynamic coordinates instead of dashes', (
     tester,
@@ -349,6 +426,20 @@ const _pluto = CatalogObject(
   magnitude: '+14.4',
 );
 
+const _ngc2237 = CatalogObject(
+  id: 'NGC2237',
+  number: 2237,
+  catalog: CatalogType.ngc,
+  name: 'NGC 2237',
+  commonName: '장미 성운',
+  type: '성운',
+  objectType: '발광성운',
+  constellation: 'Mon',
+  ra: '06h 30m 00s',
+  dec: '+05° 00′ 00″',
+  magnitude: '9.0',
+);
+
 class _CatalogRepository implements CatalogRepository {
   const _CatalogRepository(this.objects);
 
@@ -357,7 +448,13 @@ class _CatalogRepository implements CatalogRepository {
   @override
   Future<List<CatalogObject>> getAll({bool listOnly = true}) async => objects;
   @override
-  Future<CatalogObject?> getById(String id) async => null;
+  Future<CatalogObject?> getById(String id) async {
+    for (final object in objects) {
+      if (object.id == id) return object;
+    }
+    return null;
+  }
+
   @override
   Future<List<CatalogObject>> getByCatalog(CatalogType type) async => const [];
   @override
@@ -398,4 +495,37 @@ class _EquipmentRepository implements EquipmentRepository {
   Future<void> save(Equipment equipment) async {}
   @override
   Future<void> delete(String id) async {}
+}
+
+class _FavoriteRemote implements CatalogFavoriteRemoteApi {
+  const _FavoriteRemote(this.ids);
+
+  final List<String> ids;
+
+  @override
+  Future<List<CatalogFavorite>> list() async => ids
+      .map(
+        (id) => CatalogFavorite(
+          catalogObjectId: id,
+          createdAt: DateTime.utc(2026, 1, 1),
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      )
+      .toList(growable: false);
+
+  @override
+  Future<CatalogFavorite> add(String catalogObjectId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<CatalogFavoriteDeleteResult> remove(String catalogObjectId) =>
+      throw UnimplementedError();
+}
+
+class _FavoriteCache implements CatalogFavoriteCacheDataSource {
+  @override
+  Future<List<CatalogFavorite>> read() async => const [];
+
+  @override
+  Future<void> write(List<CatalogFavorite> favorites) async {}
 }

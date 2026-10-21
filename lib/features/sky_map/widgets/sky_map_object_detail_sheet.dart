@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/catalog_favorite_button.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
 import '../viewmodel/sky_map_view_model.dart';
@@ -157,6 +158,10 @@ class _SkyMapObjectDetailContent extends StatelessWidget {
                             ),
                           ],
                         ),
+                      ),
+                      CatalogFavoriteButton(
+                        catalogObjectId: object.id,
+                        color: AppColors.solar,
                       ),
                       if (showCloseButton)
                         IconButton(

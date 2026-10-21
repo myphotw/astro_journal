@@ -40,6 +40,28 @@ Future<void> showSkyMapFilterSheet({
                       ),
                     ),
                     const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<bool>(
+                        key: const ValueKey('sky-map-favorite-mode'),
+                        segments: const [
+                          ButtonSegment<bool>(
+                            value: false,
+                            icon: Icon(Icons.auto_awesome_mosaic_outlined),
+                            label: Text('일반'),
+                          ),
+                          ButtonSegment<bool>(
+                            value: true,
+                            icon: Icon(Icons.star_rounded),
+                            label: Text('즐겨찾기만'),
+                          ),
+                        ],
+                        selected: {filters.favoritesOnly},
+                        onSelectionChanged: (selection) =>
+                            viewModel.setFavoritesOnly(selection.single),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     const Text(
                       '필터',
                       style: TextStyle(
