@@ -173,6 +173,10 @@ abstract final class SkyMapVisualStyle {
   static Color azimuthGridColorFor(double sunAltitudeDeg) =>
       sunAltitudeDeg >= -6 ? const Color(0xFF38536E) : const Color(0xFF627B98);
 
+  static Color horizonColorFor(double sunAltitudeDeg) => sunAltitudeDeg >= -6
+      ? const Color(0xFF203D57).withValues(alpha: 0.90)
+      : const Color(0xFFD5E0EB).withValues(alpha: 0.92);
+
   static Color coordinateColorFor(double sunAltitudeDeg) =>
       sunAltitudeDeg >= -6 ? const Color(0xFF102840) : coordinateLabel;
 

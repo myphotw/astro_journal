@@ -480,12 +480,7 @@ class AppProviders {
       tilePreloadService,
       weatherService,
       observationSiteRepository,
-      catalogRepository,
-      equipmentRepository,
       observationEngine,
-      recommendationEngine,
-      equipmentRecommendationService,
-      recommendationSettingsService,
     );
 
     refreshAfterCaptureReset = () async {

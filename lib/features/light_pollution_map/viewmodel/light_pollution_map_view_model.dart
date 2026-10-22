@@ -5,28 +5,17 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../data/models/bortle_metadata.dart';
-import '../../../data/models/catalog_object.dart';
-import '../../../data/models/equipment.dart';
 import '../../../data/models/observation_condition.dart';
 import '../../../data/models/observation_site.dart';
-import '../../../data/models/tonight_observation_session.dart';
 import '../../../data/models/weather_data.dart';
 import '../../../data/models/weather_forecast_slot.dart';
-import '../../../data/repositories/catalog_repository.dart';
-import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/app_logger.dart';
-import '../../../services/equipment/equipment_recommendation_service.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../services/light_pollution_tile_preload_service.dart';
 import '../../../services/observation_condition_service.dart';
 import '../../../services/observation_engine.dart';
-import '../../../services/observation_score_service.dart';
-import '../../../services/recommendation/catalog_recommendation_eligibility_policy.dart';
-import '../../../services/recommendation_engine.dart';
-import '../../../services/recommendation_settings_service.dart';
 import '../../../services/weather_service.dart';
-import '../models/favorite_location_summary.dart';
 import '../models/location_weather_info.dart';
 import '../overlay/brightness_color_mapper.dart';
 import '../overlay/favorite_marker_icon_builder.dart';
@@ -52,12 +41,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     this._tilePreloadService,
     this._weatherService,
     this._favoriteRepository,
-    this._catalogRepository,
-    this._equipmentRepository,
     this._observationEngine,
-    this._recommendationEngine,
-    this._equipmentRecommendationService,
-    this._recommendationSettingsService,
   );
 
   static const _tag = 'LIGHT POLLUTION MAP';
@@ -74,16 +58,13 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
   final WeatherService _weatherService;
   final ObservationSiteRepository _favoriteRepository;
-  final CatalogRepository _catalogRepository;
-  final EquipmentRepository _equipmentRepository;
   final ObservationEngine _observationEngine;
-  final RecommendationEngine _recommendationEngine;
-  final EquipmentRecommendationService _equipmentRecommendationService;
-  final RecommendationSettingsService _recommendationSettingsService;
 
   Timer? _searchDebounce;
 
   int _searchGeneration = 0;
+  int _selectionGeneration = 0;
+  int _currentWeatherGeneration = 0;
 
   bool _isLoading = false;
 
@@ -123,8 +104,6 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
   List<ObservationSite> _favorites = const [];
   bool _isFavoritesDropdownOpen = false;
-  List<FavoriteLocationSummary> _favoriteSummaries = const [];
-  bool _isLoadingFavoriteSummaries = false;
   final Map<String, BitmapDescriptor> _favoriteMarkerIcons = {};
   bool _isBuildingFavoriteMarkerIcons = false;
 
@@ -172,8 +151,6 @@ class LightPollutionMapViewModel extends ChangeNotifier {
 
   List<ObservationSite> get favorites => _favorites;
   bool get isFavoritesDropdownOpen => _isFavoritesDropdownOpen;
-  List<FavoriteLocationSummary> get favoriteSummaries => _favoriteSummaries;
-  bool get isLoadingFavoriteSummaries => _isLoadingFavoriteSummaries;
 
   BortleMetadata? get metadata => _metadata;
 
@@ -345,13 +322,16 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   Future<void> refreshCurrentLocation() async {
     if (_isLoading) return;
 
+    _currentWeatherGeneration++;
     await _fetchCurrentCondition(preferLastKnown: false);
 
     if (_condition != null) {
-      await _loadCurrentWeather();
+      unawaited(_loadCurrentWeather());
     } else {
+      _currentWeatherGeneration++;
       _weatherInfo = null;
       _weatherErrorMessage = null;
+      _isLoadingWeather = false;
       notifyListeners();
     }
   }
@@ -381,6 +361,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   }
 
   Future<void> selectLocation(LatLng position, {String? addressLabel}) async {
+    final generation = ++_selectionGeneration;
     _selectedPosition = position;
 
     _selectedCondition = null;
@@ -400,42 +381,59 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _selectedCondition = await _observationConditionService.getConditionAt(
+      final selectedCondition = await _observationConditionService
+          .getConditionAt(
         position.latitude,
 
         position.longitude,
       );
+      if (!_isCurrentSelection(position, generation)) return;
+      _selectedCondition = selectedCondition;
     } catch (error) {
+      if (!_isCurrentSelection(position, generation)) return;
       _selectedCondition = null;
 
       _selectionErrorMessage = error.toString().replaceFirst('Exception: ', '');
     } finally {
-      _isLoadingSelection = false;
+      if (_isCurrentSelection(position, generation)) {
+        _isLoadingSelection = false;
 
-      notifyListeners();
+        notifyListeners();
+      }
     }
 
-    unawaited(_loadSelectedWeather(position.latitude, position.longitude));
+    if (!_isCurrentSelection(position, generation)) return;
+
+    unawaited(
+      _loadSelectedWeather(
+        position.latitude,
+        position.longitude,
+        generation,
+      ),
+    );
 
     if (addressLabel == null || addressLabel.trim().isEmpty) {
       unawaited(
-        _resolveSelectedRegionName(position.latitude, position.longitude),
+        _resolveSelectedRegionName(
+          position.latitude,
+          position.longitude,
+          generation,
+        ),
       );
     }
   }
 
-  Future<void> _resolveSelectedRegionName(double lat, double lng) async {
+  Future<void> _resolveSelectedRegionName(
+    double lat,
+    double lng,
+    int generation,
+  ) async {
     try {
       final result = await _geocodingService.getLocationInfo(lat, lng);
       final label = result?.regionName.trim();
       if (label == null || label.isEmpty) return;
 
-      final selected = _selectedPosition;
-      if (selected == null) return;
-      if ((selected.latitude - lat).abs() > 0.00001 ||
-          (selected.longitude - lng).abs() > 0.00001) {
-        return;
-      }
+      if (!_isCurrentSelection(LatLng(lat, lng), generation)) return;
 
       _selectedAddressLabel = label;
       notifyListeners();
@@ -612,6 +610,7 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   }
 
   void clearSelection() {
+    _selectionGeneration++;
     _selectedPosition = null;
 
     _selectedCondition = null;
@@ -667,42 +666,79 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   Future<void> _loadCurrentWeather() async {
     final condition = _condition;
     if (condition == null) return;
+    final generation = ++_currentWeatherGeneration;
 
     _isLoadingWeather = true;
     _weatherErrorMessage = null;
     notifyListeners();
 
     try {
-      _weatherInfo = await _fetchWeatherInfo(
+      final weatherInfo = await _fetchWeatherInfo(
         condition.latitude,
         condition.longitude,
       );
+      if (!_isCurrentCondition(condition, generation)) return;
+      _weatherInfo = weatherInfo;
     } catch (error) {
+      if (!_isCurrentCondition(condition, generation)) return;
       _weatherInfo = null;
       _weatherErrorMessage = error.toString().replaceFirst('Exception: ', '');
     } finally {
-      _isLoadingWeather = false;
-      notifyListeners();
+      if (_isCurrentCondition(condition, generation)) {
+        _isLoadingWeather = false;
+        notifyListeners();
+      }
     }
   }
 
-  Future<void> _loadSelectedWeather(double latitude, double longitude) async {
+  Future<void> _loadSelectedWeather(
+    double latitude,
+    double longitude,
+    int generation,
+  ) async {
+    final position = LatLng(latitude, longitude);
+    if (!_isCurrentSelection(position, generation)) return;
+
     _isLoadingSelectedWeather = true;
     _selectedWeatherErrorMessage = null;
     notifyListeners();
 
     try {
-      _selectedWeatherInfo = await _fetchWeatherInfo(latitude, longitude);
+      final weatherInfo = await _fetchWeatherInfo(latitude, longitude);
+      if (!_isCurrentSelection(position, generation)) return;
+      _selectedWeatherInfo = weatherInfo;
     } catch (error) {
+      if (!_isCurrentSelection(position, generation)) return;
       _selectedWeatherInfo = null;
       _selectedWeatherErrorMessage = error.toString().replaceFirst(
         'Exception: ',
         '',
       );
     } finally {
-      _isLoadingSelectedWeather = false;
-      notifyListeners();
+      if (_isCurrentSelection(position, generation)) {
+        _isLoadingSelectedWeather = false;
+        notifyListeners();
+      }
     }
+  }
+
+  bool _isCurrentSelection(LatLng position, int generation) {
+    final selected = _selectedPosition;
+    return generation == _selectionGeneration &&
+        selected != null &&
+        (selected.latitude - position.latitude).abs() <= 0.00001 &&
+        (selected.longitude - position.longitude).abs() <= 0.00001;
+  }
+
+  bool _isCurrentCondition(
+    ObservationCondition condition,
+    int generation,
+  ) {
+    final current = _condition;
+    return generation == _currentWeatherGeneration &&
+        current != null &&
+        (current.latitude - condition.latitude).abs() <= 0.00001 &&
+        (current.longitude - condition.longitude).abs() <= 0.00001;
   }
 
   Future<LocationWeatherInfo> _fetchWeatherInfo(
@@ -828,18 +864,12 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     if (existing == null) return;
     await _favoriteRepository.delete(existing.id);
     await loadFavorites();
-    if (_isFavoritesDropdownOpen) {
-      await _loadFavoriteSummaries();
-    }
   }
 
-  Future<void> toggleFavoritesDropdown() async {
+  void toggleFavoritesDropdown() {
     _isFavoritesDropdownOpen = !_isFavoritesDropdownOpen;
     if (_isFavoritesDropdownOpen) {
       _resetSearchState();
-      await _loadFavoriteSummaries();
-    } else {
-      _favoriteSummaries = const [];
     }
     notifyListeners();
   }
@@ -847,147 +877,15 @@ class LightPollutionMapViewModel extends ChangeNotifier {
   void closeFavoritesDropdown() {
     if (!_isFavoritesDropdownOpen) return;
     _isFavoritesDropdownOpen = false;
-    _favoriteSummaries = const [];
     notifyListeners();
   }
 
   Future<void> selectFavorite(ObservationSite favorite) async {
     _isFavoritesDropdownOpen = false;
-    _favoriteSummaries = const [];
     notifyListeners();
     await selectLocation(
       LatLng(favorite.latitude, favorite.longitude),
       addressLabel: favorite.name,
-    );
-  }
-
-  Future<void> _loadFavoriteSummaries() async {
-    if (_favorites.isEmpty) {
-      _favoriteSummaries = const [];
-      _isLoadingFavoriteSummaries = false;
-      return;
-    }
-
-    _isLoadingFavoriteSummaries = true;
-    _favoriteSummaries = _favorites
-        .map((f) => FavoriteLocationSummary(favorite: f, isLoading: true))
-        .toList();
-    notifyListeners();
-
-    try {
-      final catalog = await _catalogRepository.getAll();
-      final equipment = await _equipmentRepository.getAll(activeOnly: true);
-      final settings = await _recommendationSettingsService.load();
-
-      final summaries = await Future.wait(
-        _favorites.map(
-          (favorite) => _buildFavoriteSummary(
-            favorite,
-            catalog: catalog,
-            equipment: equipment,
-            settings: settings,
-          ),
-        ),
-      );
-
-      if (!_isFavoritesDropdownOpen) return;
-      _favoriteSummaries = summaries;
-    } catch (_) {
-      if (_isFavoritesDropdownOpen) {
-        _favoriteSummaries = _favorites
-            .map((f) => FavoriteLocationSummary(favorite: f))
-            .toList();
-      }
-    } finally {
-      _isLoadingFavoriteSummaries = false;
-      notifyListeners();
-    }
-  }
-
-  Future<FavoriteLocationSummary> _buildFavoriteSummary(
-    ObservationSite favorite, {
-    required List<CatalogObject> catalog,
-    required List<Equipment> equipment,
-    required RecommendationSettings settings,
-  }) async {
-    final now = DateTime.now();
-    final weatherResults = await Future.wait([
-      _weatherService.getCurrentWeather(favorite.latitude, favorite.longitude),
-      _weatherService.getForecast(favorite.latitude, favorite.longitude),
-    ]);
-    final currentWeather = weatherResults[0] as WeatherData;
-    final forecasts = weatherResults[1] as List<WeatherForecastSlot>;
-    final weatherInfo = await LocationWeatherInfo.buildWithEngine(
-      observationEngine: _observationEngine,
-      latitude: favorite.latitude,
-      longitude: favorite.longitude,
-      current: currentWeather,
-      forecasts: forecasts,
-      now: now,
-    );
-
-    String? equipmentName;
-    final targetNames = <String>[];
-
-    try {
-      final nightWindow = _estimateNightWindow(now);
-      final session = TonightObservationSession(
-        start: nightWindow.nightStart,
-        end: nightWindow.nightEnd,
-      );
-
-      final context = await _observationEngine.buildContext(
-        latitude: favorite.latitude,
-        longitude: favorite.longitude,
-        currentTime: now,
-        weather: currentWeather,
-        forecasts: forecasts,
-        session: session,
-        catalog: catalog,
-      );
-
-      final result = await _recommendationEngine.build(
-        catalog: catalog,
-        settings: settings,
-        context: context,
-        session: session,
-        limit: 3,
-        referenceTime: now,
-        candidateScope: RecommendationCandidateScope.all,
-      );
-
-      for (final rec in result.allRecommendations.take(3)) {
-        targetNames.add(rec.object.displayName);
-      }
-
-      if (result.allRecommendations.isNotEmpty && equipment.isNotEmpty) {
-        final topRec = result.allRecommendations.first;
-        final todayRec = _equipmentRecommendationService.recommendForToday(
-          object: topRec.object,
-          equipment: equipment,
-          recommendation: topRec,
-          observerLatitude: favorite.latitude,
-          observerLongitude: favorite.longitude,
-        );
-        equipmentName = todayRec.imaging?.equipment.name;
-        if (equipmentName == null) {
-          for (final visual in todayRec.visual) {
-            if (visual.isRecommended && visual.isFeasibleToday) {
-              equipmentName = visual.equipment.name;
-              break;
-            }
-          }
-        }
-      }
-    } catch (_) {
-      // Weather-only summary is still useful when recommendation fails.
-    }
-
-    return FavoriteLocationSummary(
-      favorite: favorite,
-      weatherInfo: weatherInfo,
-      recommendedEquipmentName: equipmentName,
-      recommendedTargetNames: targetNames,
     );
   }
 
@@ -1003,7 +901,4 @@ class LightPollutionMapViewModel extends ChangeNotifier {
     return null;
   }
 
-  static ({DateTime nightStart, DateTime nightEnd}) _estimateNightWindow(
-    DateTime now,
-  ) => ObservationScoreService.estimatedNightWindow(now);
 }

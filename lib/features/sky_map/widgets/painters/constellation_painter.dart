@@ -16,10 +16,10 @@ class ConstellationPainter extends CustomPainter {
   final List<Rect>? occupiedLabels;
 
   TextStyle get labelStyle => TextStyle(
-    color: SkyMapVisualStyle.constellationLabel.withValues(alpha: 0.88),
-    fontSize: viewHeightDeg <= 40 ? 13 : (viewHeightDeg <= 100 ? 12 : 11),
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.35,
+    color: SkyMapVisualStyle.constellationLabel.withValues(alpha: 0.76),
+    fontSize: viewHeightDeg <= 40 ? 12 : (viewHeightDeg <= 100 ? 11 : 10),
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.25,
     shadows: const [
       Shadow(color: Color(0xCC000000), blurRadius: 4, offset: Offset(0, 1)),
     ],
@@ -28,8 +28,8 @@ class ConstellationPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final linePaint = Paint()
-      ..color = SkyMapVisualStyle.constellationLine.withValues(alpha: 0.62)
-      ..strokeWidth = viewHeightDeg <= 45 ? 1.0 : 0.8
+      ..color = SkyMapVisualStyle.constellationLine.withValues(alpha: 0.54)
+      ..strokeWidth = viewHeightDeg <= 45 ? 0.9 : 0.75
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
@@ -50,16 +50,16 @@ class ConstellationPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round;
         if (segmentBounds.width < 0.01 && segmentBounds.height < 0.01) {
           segmentPaint.color = SkyMapVisualStyle.constellationLine.withValues(
-            alpha: 0.31 * (startVisibility + endVisibility),
+                alpha: 0.27 * (startVisibility + endVisibility),
           );
         } else {
           segmentPaint.shader = LinearGradient(
             colors: [
               SkyMapVisualStyle.constellationLine.withValues(
-                alpha: 0.62 * startVisibility,
+                alpha: 0.54 * startVisibility,
               ),
               SkyMapVisualStyle.constellationLine.withValues(
-                alpha: 0.62 * endVisibility,
+                alpha: 0.54 * endVisibility,
               ),
             ],
           ).createShader(segmentBounds);
@@ -86,6 +86,9 @@ class ConstellationPainter extends CustomPainter {
       );
       final bounds = (offset & painter.size).inflate(3);
       if (!(Offset.zero & size).overlaps(bounds)) continue;
+      if (occupiedLabels?.any((other) => other.overlaps(bounds)) == true) {
+        continue;
+      }
       painter.paint(canvas, offset);
       occupiedLabels?.add(bounds);
     }

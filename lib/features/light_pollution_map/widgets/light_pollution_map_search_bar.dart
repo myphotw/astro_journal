@@ -177,9 +177,9 @@ class _LightPollutionMapSearchBarState
                   color: vm.isFavoritesDropdownOpen
                       ? AppColors.solar
                       : AppColors.textSecondary,
-                  onPressed: () async {
+                  onPressed: () {
                     _focusNode.unfocus();
-                    await vm.toggleFavoritesDropdown();
+                    vm.toggleFavoritesDropdown();
                   },
                 ),
               ],
@@ -189,21 +189,21 @@ class _LightPollutionMapSearchBarState
             const Divider(height: 1, thickness: 1, color: AppColors.surface),
             LightPollutionFavoritesDropdown(
               viewModel: vm,
-              onSelect: (summary) async {
+              onSelect: (favorite) async {
                 _focusNode.unfocus();
                 final handler = widget.onFavoriteSelected;
                 if (handler != null) {
-                  await handler(summary.favorite);
+                  await handler(favorite);
                 } else {
-                  await vm.selectFavorite(summary.favorite);
+                  await vm.selectFavorite(favorite);
                 }
               },
-              onUnfavorite: (summary) async {
+              onUnfavorite: (favorite) async {
                 final confirmed = await _confirmDeleteFavorite(context);
                 if (!confirmed || !context.mounted) return;
                 await vm.removeFavoriteAt(
-                  summary.favorite.latitude,
-                  summary.favorite.longitude,
+                  favorite.latitude,
+                  favorite.longitude,
                 );
               },
             ),

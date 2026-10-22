@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../models/favorite_location_summary.dart';
+import '../../../data/models/observation_site.dart';
 import '../viewmodel/light_pollution_map_view_model.dart';
 
 class LightPollutionFavoritesDropdown extends StatelessWidget {
@@ -14,27 +14,13 @@ class LightPollutionFavoritesDropdown extends StatelessWidget {
   });
 
   final LightPollutionMapViewModel viewModel;
-  final void Function(FavoriteLocationSummary summary) onSelect;
-  final Future<void> Function(FavoriteLocationSummary summary) onUnfavorite;
+  final void Function(ObservationSite favorite) onSelect;
+  final Future<void> Function(ObservationSite favorite) onUnfavorite;
 
   static const _maxHeight = 320.0;
 
   @override
   Widget build(BuildContext context) {
-    if (viewModel.isLoadingFavoriteSummaries &&
-        viewModel.favoriteSummaries.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
     if (viewModel.favorites.isEmpty) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(
@@ -58,18 +44,18 @@ class LightPollutionFavoritesDropdown extends StatelessWidget {
       child: ListView.separated(
         shrinkWrap: true,
         padding: EdgeInsets.zero,
-        itemCount: viewModel.favoriteSummaries.length,
+        itemCount: viewModel.favorites.length,
         separatorBuilder: (_, _) => const Divider(
           height: 1,
           thickness: 1,
           color: AppColors.surface,
         ),
         itemBuilder: (context, index) {
-          final summary = viewModel.favoriteSummaries[index];
-          return _FavoriteSummaryTile(
-            summary: summary,
-            onTap: () => onSelect(summary),
-            onUnfavorite: () => onUnfavorite(summary),
+          final favorite = viewModel.favorites[index];
+          return _FavoriteTile(
+            favorite: favorite,
+            onTap: () => onSelect(favorite),
+            onUnfavorite: () => onUnfavorite(favorite),
           );
         },
       ),
@@ -77,14 +63,14 @@ class LightPollutionFavoritesDropdown extends StatelessWidget {
   }
 }
 
-class _FavoriteSummaryTile extends StatelessWidget {
-  const _FavoriteSummaryTile({
-    required this.summary,
+class _FavoriteTile extends StatelessWidget {
+  const _FavoriteTile({
+    required this.favorite,
     required this.onTap,
     required this.onUnfavorite,
   });
 
-  final FavoriteLocationSummary summary;
+  final ObservationSite favorite;
   final VoidCallback onTap;
   final VoidCallback onUnfavorite;
 
@@ -99,103 +85,53 @@ class _FavoriteSummaryTile extends StatelessWidget {
             horizontal: AppTheme.spacingSm,
             vertical: 12,
           ),
-          child: summary.isLoading
-              ? const SizedBox(
-                  height: 48,
-                  child: Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                )
-              : Row(
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            summary.favorite.name,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              height: 1.3,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(
-                                summary.bortleLabel,
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                  height: 1.35,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '☁${summary.cloudCoverage}%',
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                  height: 1.35,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                summary.starsText,
-                                style: const TextStyle(
-                                  color: AppColors.solar,
-                                  fontSize: 11,
-                                  height: 1.35,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '추천장비 : ${summary.equipmentLabel}',
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 11,
-                              height: 1.35,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '추천대상 : ${summary.targetsLabel}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 11,
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      favorite.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
                       ),
                     ),
-                    IconButton(
-                      tooltip: '즐겨찾기 해제',
-                      onPressed: onUnfavorite,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 32,
-                        minHeight: 32,
-                      ),
-                      icon: const Icon(
-                        Icons.star,
-                        size: 18,
-                        color: AppColors.solar,
+                    const SizedBox(height: 4),
+                    Text(
+                      favorite.bortle == null
+                          ? 'Bortle -'
+                          : 'Bortle ${favorite.bortle}',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        height: 1.35,
                       ),
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                tooltip: '즐겨찾기 해제',
+                onPressed: onUnfavorite,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 32,
+                  minHeight: 32,
+                ),
+                icon: const Icon(
+                  Icons.star,
+                  size: 18,
+                  color: AppColors.solar,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

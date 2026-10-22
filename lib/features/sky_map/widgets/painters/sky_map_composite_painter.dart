@@ -62,6 +62,8 @@ class SkyMapCompositePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
     final occupiedLabels = <Rect>[];
 
     final background = SkyMapBackgroundPainter(
@@ -124,6 +126,7 @@ class SkyMapCompositePainter extends CustomPainter {
     if (fovCorners.length == 4) {
       FovPainter(corners: fovCorners).paint(canvas, size);
     }
+    canvas.restore();
   }
 
   @override

@@ -28,10 +28,16 @@ class SkyMapBackgroundPainter extends CustomPainter {
       SkyMapVisualStyle.gridIntervalFor(viewHeightDeg);
 
   @visibleForTesting
-  static const double cardinalFontSize = 20;
+  static const double cardinalFontSize = 17;
 
   @visibleForTesting
   static const Color cardinalLabelColor = Color(0xFFFFF8E7);
+
+  @visibleForTesting
+  static const Color? cardinalBackgroundColor = null;
+
+  @visibleForTesting
+  static const List<Shadow> cardinalShadows = [];
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -57,20 +63,20 @@ class SkyMapBackgroundPainter extends CustomPainter {
     final altitudeGrid = Paint()
       ..color = SkyMapVisualStyle.gridColorFor(
         sunAltitudeDeg,
-      ).withValues(alpha: 0.64)
-      ..strokeWidth = 1.05
+      ).withValues(alpha: sunAltitudeDeg >= -6 ? 0.48 : 0.58)
+      ..strokeWidth = 0.9
       ..style = PaintingStyle.stroke;
     final majorAltitudeGrid = Paint()
       ..color = SkyMapVisualStyle.gridColorFor(
         sunAltitudeDeg,
-      ).withValues(alpha: 0.78)
-      ..strokeWidth = 1.2
+      ).withValues(alpha: sunAltitudeDeg >= -6 ? 0.70 : 0.82)
+      ..strokeWidth = 1.25
       ..style = PaintingStyle.stroke;
     final azimuthGrid = Paint()
       ..color = SkyMapVisualStyle.azimuthGridColorFor(
         sunAltitudeDeg,
-      ).withValues(alpha: 0.58)
-      ..strokeWidth = 0.9
+      ).withValues(alpha: sunAltitudeDeg >= -6 ? 0.42 : 0.50)
+      ..strokeWidth = 0.75
       ..style = PaintingStyle.stroke;
     final belowGrid = Paint()
       ..color = SkyMapVisualStyle.coordinateColorFor(
@@ -79,8 +85,8 @@ class SkyMapBackgroundPainter extends CustomPainter {
       ..strokeWidth = 0.8
       ..style = PaintingStyle.stroke;
     final horizonPaint = Paint()
-      ..color = const Color(0xFFBAC9D9).withValues(alpha: 0.92)
-      ..strokeWidth = 1.65
+      ..color = SkyMapVisualStyle.horizonColorFor(sunAltitudeDeg)
+      ..strokeWidth = 1.8
       ..style = PaintingStyle.stroke;
 
     final interval = gridIntervalFor(viewHeightDeg);
@@ -301,21 +307,14 @@ class SkyMapBackgroundPainter extends CustomPainter {
   }
 
   void _drawCoordinateLabels(Canvas canvas, Size size, double interval) {
-    for (final cardinal in cardinalLabels) {
-      final placement = _azimuthLabelPlacement(cardinal.azimuth, size);
-      if (placement == null) continue;
-      if (placement.auxiliary) {
-        _drawBoundaryTick(canvas, placement.boundaryPoint!, size);
-      }
+    for (final cardinal in _cardinalLabelPlacements(size)) {
       _label(
         canvas,
         cardinal.label,
-        placement.position,
+        cardinal.position,
         size,
         cardinal: true,
-        force: true,
-        auxiliary: placement.auxiliary,
-        altitudeDeg: placement.altitudeDeg,
+        altitudeDeg: 0,
         azimuthDeg: cardinal.azimuth,
       );
     }
@@ -382,6 +381,28 @@ class SkyMapBackgroundPainter extends CustomPainter {
   ];
 
   @visibleForTesting
+  List<({double azimuth, String label, Offset position})>
+  debugCardinalLabelPlacements(Size size) => _cardinalLabelPlacements(size);
+
+  List<({double azimuth, String label, Offset position})>
+  _cardinalLabelPlacements(Size size) {
+    final canvasRect = Offset.zero & size;
+    final placements = <({double azimuth, String label, Offset position})>[];
+    for (final cardinal in cardinalLabels) {
+      final position = _project(0, cardinal.azimuth, size);
+      // 전천 투영의 지평선은 정확히 캔버스 경계에 닿을 수 있다.
+      // 부동소수점 오차만 허용하되, 실제 화면 밖 지평선은 포함하지 않는다.
+      if (!canvasRect.inflate(0.5).contains(position)) continue;
+      placements.add((
+        azimuth: cardinal.azimuth,
+        label: cardinal.label,
+        position: position,
+      ));
+    }
+    return placements;
+  }
+
+  @visibleForTesting
   Offset debugAltitudeLabelPosition(
     double altitudeDeg,
     double interval,
@@ -441,6 +462,14 @@ class SkyMapBackgroundPainter extends CustomPainter {
         auxiliary: false,
       );
     }
+
+    // 화면 밖의 지평선 대신 자오선과 화면 경계의 교점을 표시할 때는,
+    // 해당 자오선이 현재 시야의 대표 고도도 실제로 통과하는 경우로 제한한다.
+    // 모든 자오선이 천정에서 수렴하므로 이 확인이 없으면 확대 화면에서도
+    // 무관한 동·서·남·북 라벨이 같은 경계에 겹쳐 잔상처럼 보일 수 있다.
+    final referenceAltitude = centerAltitudeDeg.clamp(-75.0, 75.0);
+    final referencePoint = _project(referenceAltitude, azimuthDeg, size);
+    if (!canvasRect.inflate(18).contains(referencePoint)) return null;
 
     final boundary = _meridianBoundaryIntersection(azimuthDeg, size);
     if (boundary == null) return null;
@@ -545,7 +574,6 @@ class SkyMapBackgroundPainter extends CustomPainter {
     Offset center,
     Size size, {
     bool cardinal = false,
-    bool force = false,
     bool auxiliary = false,
     double fontSize = 11,
     double altitudeDeg = 0,
@@ -564,31 +592,16 @@ class SkyMapBackgroundPainter extends CustomPainter {
               alpha: auxiliary ? 0.76 : (altitudeDeg < 0 ? 0.72 : 0.9),
             ),
       fontSize: effectiveFontSize,
-      fontWeight: cardinal ? FontWeight.w900 : FontWeight.w500,
-      letterSpacing: cardinal ? 1 : 0.1,
-      shadows: const [Shadow(color: Color(0xF0000000), blurRadius: 5)],
+      fontWeight: cardinal ? FontWeight.w700 : FontWeight.w500,
+      letterSpacing: cardinal ? 0.5 : 0.1,
+      shadows: cardinal
+          ? cardinalShadows
+          : const [Shadow(color: Color(0xB8000000), blurRadius: 2)],
     );
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
     )..layout();
-    final outlinePainter = cardinal
-        ? (TextPainter(
-            text: TextSpan(
-              text: text,
-              style: TextStyle(
-                foreground: Paint()
-                  ..color = const Color(0xE6000000)
-                  ..style = PaintingStyle.stroke
-                  ..strokeWidth = 3,
-                fontSize: effectiveFontSize,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
-              ),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout())
-        : null;
     final canvasRect = Offset.zero & size;
     if (!canvasRect.inflate(cardinal ? 20 : -3).contains(center)) return;
     final safeCenter = cardinal
@@ -608,27 +621,23 @@ class SkyMapBackgroundPainter extends CustomPainter {
       width: painter.width + (cardinal ? 8 : 4),
       height: painter.height + (cardinal ? 4 : 2),
     );
-    if (!force &&
-        occupiedLabels?.any((bounds) => bounds.overlaps(labelBounds)) == true) {
+    if (occupiedLabels?.any((bounds) => bounds.overlaps(labelBounds)) == true) {
       return;
     }
-    final background = RRect.fromRectAndRadius(
-      labelBounds,
-      Radius.circular(cardinal ? 5 : 3),
-    );
-    canvas.drawRRect(
-      background,
-      Paint()
-        ..color = cardinal
-            ? const Color(0xAA06101B)
-            : _atmosphericColor(
-                altitudeDeg,
-                azimuthDeg,
-              ).withValues(alpha: auxiliary ? 0.62 : 0.76),
-    );
+    final backgroundColor = cardinal
+        ? cardinalBackgroundColor
+        : _atmosphericColor(
+            altitudeDeg,
+            azimuthDeg,
+          ).withValues(alpha: auxiliary ? 0.62 : 0.76);
+    if (backgroundColor != null) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(labelBounds, const Radius.circular(3)),
+        Paint()..color = backgroundColor,
+      );
+    }
     final textOffset =
         safeCenter - Offset(painter.width / 2, painter.height / 2);
-    outlinePainter?.paint(canvas, textOffset);
     painter.paint(canvas, textOffset);
     occupiedLabels?.add(labelBounds.inflate(2));
   }

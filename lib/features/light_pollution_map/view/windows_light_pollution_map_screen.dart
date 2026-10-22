@@ -102,6 +102,7 @@ class _WindowsLightPollutionMapScreenState
   }
 
   Future<void> _goToCurrentLocation(LightPollutionMapViewModel vm) async {
+    vm.clearSelection();
     await vm.refreshCurrentLocation();
     if (!mounted || vm.condition == null) return;
     _mapController.move(_conditionPoint(vm.condition!), _initialZoom);
@@ -289,7 +290,7 @@ class _WindowsLightPollutionMapScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (vm.hasSelection) ...[
+                  if (vm.hasSelection)
                     LightPollutionLocationCard(
                       width: _locationCardWidth,
                       title: _selectedTitle(vm),
@@ -319,34 +320,33 @@ class _WindowsLightPollutionMapScreenState
                             )
                           : null,
                       onClose: vm.clearSelection,
-                    ),
-                    const SizedBox(height: AppTheme.spacingSm),
-                  ],
-                  LightPollutionLocationCard(
-                    width: _locationCardWidth,
-                    title: '현재 위치',
-                    condition: vm.condition,
-                    isLoading: vm.isLoading,
-                    errorMessage: vm.errorMessage,
-                    weatherInfo: vm.weatherInfo,
-                    isLoadingWeather: vm.isLoadingWeather,
-                    weatherErrorMessage: vm.weatherErrorMessage,
-                    isFavorited:
-                        vm.condition != null &&
-                        vm.isFavorited(
-                          vm.condition!.latitude,
-                          vm.condition!.longitude,
-                        ),
-                    onFavoriteTap: vm.condition == null
-                        ? null
-                        : () => _handleFavoriteTap(
-                            vm: vm,
-                            latitude: vm.condition!.latitude,
-                            longitude: vm.condition!.longitude,
-                            condition: vm.condition,
-                            isCurrent: true,
+                    )
+                  else
+                    LightPollutionLocationCard(
+                      width: _locationCardWidth,
+                      title: '현재 위치',
+                      condition: vm.condition,
+                      isLoading: vm.isLoading,
+                      errorMessage: vm.errorMessage,
+                      weatherInfo: vm.weatherInfo,
+                      isLoadingWeather: vm.isLoadingWeather,
+                      weatherErrorMessage: vm.weatherErrorMessage,
+                      isFavorited:
+                          vm.condition != null &&
+                          vm.isFavorited(
+                            vm.condition!.latitude,
+                            vm.condition!.longitude,
                           ),
-                  ),
+                      onFavoriteTap: vm.condition == null
+                          ? null
+                          : () => _handleFavoriteTap(
+                              vm: vm,
+                              latitude: vm.condition!.latitude,
+                              longitude: vm.condition!.longitude,
+                              condition: vm.condition,
+                              isCurrent: true,
+                            ),
+                    ),
                 ],
               ),
             ),

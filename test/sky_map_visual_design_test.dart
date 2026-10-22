@@ -2,8 +2,11 @@ import 'dart:ui';
 
 import 'package:astro_journal/data/models/sky_map_render_object.dart';
 import 'package:astro_journal/features/sky_map/widgets/painters/sky_map_background_painter.dart';
+import 'package:astro_journal/features/sky_map/widgets/painters/sky_map_composite_painter.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_visual_style.dart';
 import 'package:astro_journal/services/sky_map_horizontal_projection_service.dart';
+import 'package:flutter/material.dart' hide Image;
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -22,11 +25,13 @@ void main() {
         (azimuth: 180.0, label: '남'),
         (azimuth: 270.0, label: '서'),
       ]);
-      expect(SkyMapBackgroundPainter.cardinalFontSize, 20);
+      expect(SkyMapBackgroundPainter.cardinalFontSize, 17);
       expect(
         SkyMapBackgroundPainter.cardinalLabelColor,
         const Color(0xFFFFF8E7),
       );
+      expect(SkyMapBackgroundPainter.cardinalBackgroundColor, isNull);
+      expect(SkyMapBackgroundPainter.cardinalShadows, isEmpty);
     });
 
     test('object types retain distinct palette colors', () {
@@ -213,6 +218,167 @@ void main() {
       );
     });
 
+    test('directional view hides cardinals when horizon is outside', () {
+      const size = Size(800, 600);
+      const painter = SkyMapBackgroundPainter(
+        centerAltitudeDeg: 60,
+        centerAzimuthDeg: 180,
+        viewHeightDeg: 30,
+        sunAltitudeDeg: -20,
+        sunAzimuthDeg: 270,
+      );
+
+      expect(painter.debugCardinalLabelPlacements(size), isEmpty);
+    });
+
+    test('cardinal visibility remains stable across the azimuth wrap', () {
+      const size = Size(800, 600);
+      const beforeWrap = SkyMapBackgroundPainter(
+        centerAltitudeDeg: 15,
+        centerAzimuthDeg: 359,
+        viewHeightDeg: 60,
+        sunAltitudeDeg: -20,
+        sunAzimuthDeg: 270,
+      );
+      const afterWrap = SkyMapBackgroundPainter(
+        centerAltitudeDeg: 15,
+        centerAzimuthDeg: 1,
+        viewHeightDeg: 60,
+        sunAltitudeDeg: -20,
+        sunAzimuthDeg: 270,
+      );
+
+      final beforeLabels = beforeWrap.debugCardinalLabelPlacements(size);
+      final afterLabels = afterWrap.debugCardinalLabelPlacements(size);
+
+      expect(beforeLabels.where((item) => item.label == '북'), hasLength(1));
+      expect(afterLabels.where((item) => item.label == '북'), hasLength(1));
+      expect(beforeLabels.where((item) => item.label == '남'), isEmpty);
+      expect(afterLabels.where((item) => item.label == '남'), isEmpty);
+    });
+
+    test('all-sky view keeps four distinct cardinal placements', () {
+      const size = Size(800, 600);
+      const painter = SkyMapBackgroundPainter(
+        centerAltitudeDeg: 90,
+        centerAzimuthDeg: 0,
+        viewHeightDeg: 180,
+        sunAltitudeDeg: -20,
+        sunAzimuthDeg: 270,
+      );
+      final placements = painter.debugCardinalLabelPlacements(size);
+
+      expect(placements, hasLength(4));
+      for (var first = 0; first < placements.length; first++) {
+        for (var second = first + 1; second < placements.length; second++) {
+          expect(
+            (placements[first].position - placements[second].position).distance,
+            greaterThan(40),
+          );
+        }
+      }
+    });
+
+    test('every frame contains at most one label for each cardinal', () {
+      const size = Size(800, 600);
+      for (final viewHeight in const [30.0, 60.0, 120.0, 180.0]) {
+        for (var azimuth = 0.0; azimuth < 360; azimuth += 15) {
+          final painter = SkyMapBackgroundPainter(
+            centerAltitudeDeg: viewHeight == 180 ? 90 : 15,
+            centerAzimuthDeg: azimuth,
+            viewHeightDeg: viewHeight,
+            sunAltitudeDeg: -20,
+            sunAzimuthDeg: 270,
+          );
+          final labels = painter.debugCardinalLabelPlacements(size);
+
+          expect(
+            labels.map((item) => item.label).toSet(),
+            hasLength(labels.length),
+          );
+          expect(labels.length, lessThanOrEqualTo(4));
+        }
+      }
+    });
+
+    test('each cardinal-centered horizon view shows its direction once', () {
+      const size = Size(800, 600);
+      for (final cardinal in SkyMapBackgroundPainter.cardinalLabels) {
+        final painter = SkyMapBackgroundPainter(
+          centerAltitudeDeg: 15,
+          centerAzimuthDeg: cardinal.azimuth,
+          viewHeightDeg: 60,
+          sunAltitudeDeg: -20,
+          sunAzimuthDeg: 270,
+        );
+        final labels = painter.debugCardinalLabelPlacements(size);
+
+        expect(
+          labels.where((item) => item.label == cardinal.label),
+          hasLength(1),
+        );
+      }
+    });
+
+    test('composite painter invalidates old direction positions after pan', () {
+      final oldPainter = _compositePainter(centerAzimuthDeg: 179);
+      final movedPainter = _compositePainter(centerAzimuthDeg: 181);
+      final zoomedPainter = _compositePainter(
+        centerAzimuthDeg: 179,
+        viewHeightDeg: 45,
+      );
+
+      expect(movedPainter.shouldRepaint(oldPainter), isTrue);
+      expect(zoomedPainter.shouldRepaint(oldPainter), isTrue);
+    });
+
+    testWidgets(
+      'reused CustomPaint frame matches a fresh frame after direction pan',
+      (tester) async {
+        const size = Size(320, 240);
+        final reusedBoundary = GlobalKey();
+
+        await tester.pumpWidget(
+          _paintHost(
+            boundaryKey: reusedBoundary,
+            size: size,
+            painter: _compositePainter(centerAzimuthDeg: 90),
+          ),
+        );
+        await tester.pump();
+
+        await tester.pumpWidget(
+          _paintHost(
+            boundaryKey: reusedBoundary,
+            size: size,
+            painter: _compositePainter(centerAzimuthDeg: 180),
+          ),
+        );
+        await tester.pump();
+        final reusedPixels = await tester.runAsync(
+          () => _rawPixels(reusedBoundary),
+        );
+
+        final freshBoundary = GlobalKey();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpWidget(
+          _paintHost(
+            boundaryKey: freshBoundary,
+            size: size,
+            painter: _compositePainter(centerAzimuthDeg: 180),
+          ),
+        );
+        await tester.pump();
+        final freshPixels = await tester.runAsync(
+          () => _rawPixels(freshBoundary),
+        );
+
+        expect(reusedPixels, isNotNull);
+        expect(freshPixels, isNotNull);
+        expect(reusedPixels!, orderedEquals(freshPixels!));
+      },
+    );
+
     test('altitude labels share the exact projected altitude-grid point', () {
       const size = Size(800, 600);
       const painter = SkyMapBackgroundPainter(
@@ -235,6 +401,51 @@ void main() {
       expect((label - gridPoint).distance, closeTo(0, 1e-9));
     });
   });
+}
+
+SkyMapCompositePainter _compositePainter({
+  required double centerAzimuthDeg,
+  double viewHeightDeg = 60,
+}) => SkyMapCompositePainter(
+  constellations: const [],
+  stars: const [],
+  objects: const [],
+  selectedId: null,
+  fovCorners: const [],
+  showConstellations: true,
+  showStars: true,
+  showLabels: true,
+  centerAltitudeDeg: 30,
+  centerAzimuthDeg: centerAzimuthDeg,
+  viewHeightDeg: viewHeightDeg,
+  sunAltitudeDeg: -20,
+  sunAzimuthDeg: 270,
+);
+
+Widget _paintHost({
+  required GlobalKey boundaryKey,
+  required Size size,
+  required CustomPainter painter,
+}) => Directionality(
+  textDirection: TextDirection.ltr,
+  child: Center(
+    child: RepaintBoundary(
+      key: boundaryKey,
+      child: SizedBox.fromSize(
+        size: size,
+        child: CustomPaint(painter: painter),
+      ),
+    ),
+  ),
+);
+
+Future<List<int>> _rawPixels(GlobalKey boundaryKey) async {
+  final boundary =
+      boundaryKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  final image = await boundary.toImage(pixelRatio: 1);
+  final bytes = await image.toByteData(format: ImageByteFormat.rawRgba);
+  image.dispose();
+  return bytes!.buffer.asUint8List();
 }
 
 double _colorDistance(Color a, Color b) {

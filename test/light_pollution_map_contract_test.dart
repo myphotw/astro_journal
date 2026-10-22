@@ -17,6 +17,15 @@ void main() {
   final screen = File(
     'lib/features/light_pollution_map/view/light_pollution_map_screen.dart',
   ).readAsStringSync();
+  final windowsScreen = File(
+    'lib/features/light_pollution_map/view/windows_light_pollution_map_screen.dart',
+  ).readAsStringSync();
+  final viewModel = File(
+    'lib/features/light_pollution_map/viewmodel/light_pollution_map_view_model.dart',
+  ).readAsStringSync();
+  final favoritesDropdown = File(
+    'lib/features/light_pollution_map/widgets/light_pollution_favorites_dropdown.dart',
+  ).readAsStringSync();
   final debugManifest = File(
     'android/app/src/debug/AndroidManifest.xml',
   ).readAsStringSync();
@@ -73,5 +82,34 @@ void main() {
     expect(screen, contains('? vm.tileOverlays'));
     expect(screen, contains(': const {}'));
     expect(screen, contains('onMapCreated: _onMapCreated'));
+  });
+
+  test('saved-site dropdown has no weather or recommendation pipeline', () {
+    expect(viewModel, isNot(contains('_loadFavoriteSummaries')));
+    expect(viewModel, isNot(contains('_buildFavoriteSummary')));
+    expect(viewModel, isNot(contains('RecommendationEngine')));
+    expect(viewModel, isNot(contains('CatalogRepository')));
+    expect(viewModel, isNot(contains('EquipmentRepository')));
+    expect(favoritesDropdown, contains('viewModel.favorites'));
+    expect(favoritesDropdown, contains('favorite.bortle'));
+    expect(favoritesDropdown, isNot(contains('추천장비')));
+    expect(favoritesDropdown, isNot(contains('추천대상')));
+  });
+
+  test('mobile and Windows show selected or current location, not both', () {
+    for (final source in [screen, windowsScreen]) {
+      expect(source, contains('if (vm.hasSelection)'));
+      expect(source, isNot(contains('if (vm.hasSelection) ...[')));
+      expect(
+        RegExp('LightPollutionLocationCard\\(').allMatches(source).length,
+        2,
+      );
+      final clearSelection = source.indexOf('vm.clearSelection();');
+      final refreshCurrent = source.indexOf(
+        'await vm.refreshCurrentLocation();',
+      );
+      expect(clearSelection, greaterThanOrEqualTo(0));
+      expect(refreshCurrent, greaterThan(clearSelection));
+    }
   });
 }
