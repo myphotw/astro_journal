@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
@@ -41,13 +42,14 @@ bool shouldShowManualPlateSolve(ShootingRecord record) =>
     record.photoUri != null && record.photoUri!.isNotEmpty;
 
 @visibleForTesting
-bool galleryDetailHasPendingNasSync(SyncOutboxItem? item) => switch (item?.state) {
-  SyncOutboxState.queued ||
-  SyncOutboxState.uploading ||
-  SyncOutboxState.processing ||
-  SyncOutboxState.recordCreating => true,
-  _ => false,
-};
+bool galleryDetailHasPendingNasSync(SyncOutboxItem? item) =>
+    switch (item?.state) {
+      SyncOutboxState.queued ||
+      SyncOutboxState.uploading ||
+      SyncOutboxState.processing ||
+      SyncOutboxState.recordCreating => true,
+      _ => false,
+    };
 
 @visibleForTesting
 String? galleryOverlayStatusMessage({
@@ -85,13 +87,8 @@ class GalleryDetailScreen extends StatefulWidget {
     final photoOutbox = outbox is PhotoSyncOutboxRepository
         ? outbox as PhotoSyncOutboxRepository
         : null;
-    final photoRecords = GalleryDetailViewModel.photoRecordsFrom(
-      records,
-    );
-    final index = GalleryDetailViewModel.indexOfRecord(
-      photoRecords,
-      record,
-    );
+    final photoRecords = GalleryDetailViewModel.photoRecordsFrom(records);
+    final index = GalleryDetailViewModel.indexOfRecord(photoRecords, record);
     if (index < 0) return;
     final overlayService = context.read<PhotoOverlayService>();
     await Navigator.of(context).push<void>(
@@ -131,9 +128,11 @@ class GalleryDetailScreen extends StatefulWidget {
 class _GalleryDetailScreenState extends State<GalleryDetailScreen>
     with WidgetsBindingObserver {
   PageController? _pageController;
+  final ScrollController _thumbnailScrollController = ScrollController();
   bool _editMode = false;
   bool _pageReady = false;
   bool _isPhotoZoomed = false;
+  bool _filmstripVisible = false;
 
   // 편집용 상태/컨트롤러
   DateTime? _capturedAt;
@@ -167,6 +166,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       }
       _pageReady = true;
       _bindLiveRefresh(detailVm, context.read<GalleryViewModel>());
+      _scrollThumbnailIntoView(detailVm.currentIndex, animate: false);
     }
   }
 
@@ -246,12 +246,109 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       _isPhotoZoomed = false;
       _syncRecord(detailVm.currentRecord);
     });
+    _scrollThumbnailIntoView(index);
     _liveRefreshController?.resume();
+  }
+
+  void _goToPhoto(int index) {
+    if (_editMode) return;
+    final detailVm = context.read<GalleryDetailViewModel>();
+    if (detailVm.records.isEmpty) return;
+    final target = index.clamp(0, detailVm.records.length - 1);
+    if (target == detailVm.currentIndex) {
+      _scrollThumbnailIntoView(target);
+      return;
+    }
+    final controller = _pageController;
+    if (controller?.hasClients == true) {
+      unawaited(
+        controller!.animateToPage(
+          target,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+      return;
+    }
+    detailVm.onPageChanged(target);
+    setState(() {
+      _isPhotoZoomed = false;
+      _syncRecord(detailVm.currentRecord);
+    });
+    _scrollThumbnailIntoView(target);
+  }
+
+  void _goToPreviousPhoto() {
+    final detailVm = context.read<GalleryDetailViewModel>();
+    if (detailVm.currentIndex > 0) {
+      _goToPhoto(detailVm.currentIndex - 1);
+    }
+  }
+
+  void _goToNextPhoto() {
+    final detailVm = context.read<GalleryDetailViewModel>();
+    if (detailVm.currentIndex < detailVm.records.length - 1) {
+      _goToPhoto(detailVm.currentIndex + 1);
+    }
+  }
+
+  void _scrollThumbnailIntoView(int index, {bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_filmstripVisible ||
+          !_thumbnailScrollController.hasClients) {
+        return;
+      }
+      const itemExtent = 80.0;
+      const leadingPadding = 12.0;
+      final position = _thumbnailScrollController.position;
+      final centeredOffset =
+          leadingPadding +
+          index * itemExtent +
+          36 -
+          position.viewportDimension / 2;
+      final target = centeredOffset.clamp(0.0, position.maxScrollExtent);
+      if (animate) {
+        unawaited(
+          _thumbnailScrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          ),
+        );
+      } else {
+        _thumbnailScrollController.jumpTo(target);
+      }
+    });
+  }
+
+  void _setFilmstripVisible(bool visible) {
+    if (_filmstripVisible == visible) return;
+    setState(() => _filmstripVisible = visible);
+    if (visible) {
+      _scrollThumbnailIntoView(
+        context.read<GalleryDetailViewModel>().currentIndex,
+        animate: false,
+      );
+    }
+  }
+
+  void _toggleMobileFilmstrip() {
+    if (_isPhotoZoomed ||
+        _isDesktopGalleryPlatform(Theme.of(context).platform)) {
+      return;
+    }
+    _setFilmstripVisible(!_filmstripVisible);
   }
 
   void _onPhotoZoomChanged(bool isZoomed) {
     if (_isPhotoZoomed == isZoomed) return;
-    setState(() => _isPhotoZoomed = isZoomed);
+    setState(() {
+      _isPhotoZoomed = isZoomed;
+      if (isZoomed && !_isDesktopGalleryPlatform(Theme.of(context).platform)) {
+        _filmstripVisible = false;
+      }
+    });
   }
 
   void _initControllers() {
@@ -294,6 +391,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
     _observedDetailVm?.removeListener(_onDetailChanged);
     _observedGalleryVm?.removeListener(_onGalleryChanged);
     _pageController?.dispose();
+    _thumbnailScrollController.dispose();
     if (_controllersReady) {
       _exposureCtrl.dispose();
       _memoCtrl.dispose();
@@ -481,6 +579,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
     _record = detailVm.currentRecord;
     final obj = galleryVm.catalogObjectFor(_record.celestialObjectId);
     final pageController = _pageController;
+    final isDesktop = _isDesktopGalleryPlatform(Theme.of(context).platform);
 
     return Scaffold(
       appBar: AppBar(
@@ -572,50 +671,132 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
       ),
       body: pageController == null
           ? const Center(child: CircularProgressIndicator())
-          : PageView.builder(
-              key: const Key('gallery-detail-page-view'),
-              controller: pageController,
-              physics: _editMode || _isPhotoZoomed
-                  ? const NeverScrollableScrollPhysics()
-                  : const ClampingScrollPhysics(),
-              itemCount: detailVm.records.length,
-              onPageChanged: _onPageChanged,
-              itemBuilder: (context, index) {
-                final record = detailVm.records[index];
-                final recordObj = galleryVm.catalogObjectFor(
-                  record.celestialObjectId,
-                );
-                if (_editMode && index == detailVm.currentIndex) {
-                  return _EditBody(
-                    record: record,
-                    obj: recordObj,
-                    capturedAt: _capturedAt,
-                    onCapturedAtChanged: (value) {
-                      setState(() => _capturedAt = value);
-                    },
-                    equipmentSelection: _equipmentSelection,
-                    equipment: equipment,
-                    onEquipmentSelected: _selectEquipment,
-                    onEquipmentUnlinked: _unlinkEquipment,
-                    exposureCtrl: _exposureCtrl,
-                    memoCtrl: _memoCtrl,
-                    locationNameCtrl: _locationNameCtrl,
-                    addressCtrl: _addressCtrl,
-                    latCtrl: _latCtrl,
-                    lngCtrl: _lngCtrl,
-                    isGeocoding: _isGeocoding,
-                    onReverseGeocode: () => _reverseGeocode(context),
-                    onChangeTarget: () =>
-                        _showChangeTargetSheet(context, galleryVm),
-                    onMapLocationChanged: _onMapLocationChanged,
-                  );
-                }
-                return _ViewBody(
-                  record: record,
-                  obj: recordObj,
-                  onPhotoZoomChanged: _onPhotoZoomChanged,
-                );
+          : FocusableActionDetector(
+              autofocus: true,
+              shortcuts: const {
+                SingleActivator(LogicalKeyboardKey.arrowLeft):
+                    _PreviousPhotoIntent(),
+                SingleActivator(LogicalKeyboardKey.arrowRight):
+                    _NextPhotoIntent(),
               },
+              actions: {
+                _PreviousPhotoIntent: CallbackAction<_PreviousPhotoIntent>(
+                  onInvoke: (_) {
+                    _goToPreviousPhoto();
+                    return null;
+                  },
+                ),
+                _NextPhotoIntent: CallbackAction<_NextPhotoIntent>(
+                  onInvoke: (_) {
+                    _goToNextPhoto();
+                    return null;
+                  },
+                ),
+              },
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    key: const Key('gallery-detail-page-view'),
+                    controller: pageController,
+                    physics: _editMode || _isPhotoZoomed
+                        ? const NeverScrollableScrollPhysics()
+                        : const ClampingScrollPhysics(),
+                    itemCount: detailVm.records.length,
+                    onPageChanged: _onPageChanged,
+                    itemBuilder: (context, index) {
+                      final record = detailVm.records[index];
+                      final recordObj = galleryVm.catalogObjectFor(
+                        record.celestialObjectId,
+                      );
+                      if (_editMode && index == detailVm.currentIndex) {
+                        return _EditBody(
+                          record: record,
+                          obj: recordObj,
+                          capturedAt: _capturedAt,
+                          onCapturedAtChanged: (value) {
+                            setState(() => _capturedAt = value);
+                          },
+                          equipmentSelection: _equipmentSelection,
+                          equipment: equipment,
+                          onEquipmentSelected: _selectEquipment,
+                          onEquipmentUnlinked: _unlinkEquipment,
+                          exposureCtrl: _exposureCtrl,
+                          memoCtrl: _memoCtrl,
+                          locationNameCtrl: _locationNameCtrl,
+                          addressCtrl: _addressCtrl,
+                          latCtrl: _latCtrl,
+                          lngCtrl: _lngCtrl,
+                          isGeocoding: _isGeocoding,
+                          onReverseGeocode: () => _reverseGeocode(context),
+                          onChangeTarget: () =>
+                              _showChangeTargetSheet(context, galleryVm),
+                          onMapLocationChanged: _onMapLocationChanged,
+                        );
+                      }
+                      return _ViewBody(
+                        record: record,
+                        obj: recordObj,
+                        onPhotoZoomChanged: _onPhotoZoomChanged,
+                        onPhotoTap: !isDesktop && detailVm.canSwipe
+                            ? _toggleMobileFilmstrip
+                            : null,
+                      );
+                    },
+                  ),
+                  if (!_editMode && detailVm.canSwipe && isDesktop) ...[
+                    _GalleryNavigationButton(
+                      key: const Key('gallery-previous-photo'),
+                      alignment: Alignment.centerLeft,
+                      icon: Icons.chevron_left,
+                      tooltip: '이전 사진',
+                      onPressed: detailVm.currentIndex > 0
+                          ? _goToPreviousPhoto
+                          : null,
+                    ),
+                    _GalleryNavigationButton(
+                      key: const Key('gallery-next-photo'),
+                      alignment: Alignment.centerRight,
+                      icon: Icons.chevron_right,
+                      tooltip: '다음 사진',
+                      onPressed:
+                          detailVm.currentIndex < detailVm.records.length - 1
+                          ? _goToNextPhoto
+                          : null,
+                    ),
+                  ],
+                  if (!_editMode && detailVm.canSwipe)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: MediaQuery.paddingOf(context).bottom + 68,
+                      height: isDesktop ? 150 : 112,
+                      child: isDesktop
+                          ? MouseRegion(
+                              key: const Key('gallery-filmstrip-hover-region'),
+                              opaque: false,
+                              onEnter: (_) => _setFilmstripVisible(true),
+                              onExit: (_) => _setFilmstripVisible(false),
+                              child: Listener(
+                                behavior: HitTestBehavior.translucent,
+                                child: _GalleryFilmstripOverlay(
+                                  visible: _filmstripVisible,
+                                  records: detailVm.records,
+                                  currentIndex: detailVm.currentIndex,
+                                  scrollController: _thumbnailScrollController,
+                                  onSelected: _goToPhoto,
+                                ),
+                              ),
+                            )
+                          : _GalleryFilmstripOverlay(
+                              visible: _filmstripVisible,
+                              records: detailVm.records,
+                              currentIndex: detailVm.currentIndex,
+                              scrollController: _thumbnailScrollController,
+                              onSelected: _goToPhoto,
+                            ),
+                    ),
+                ],
+              ),
             ),
     );
   }
@@ -781,6 +962,7 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
                 return;
               }
               _pageController?.jumpToPage(detailVm.currentIndex);
+              _scrollThumbnailIntoView(detailVm.currentIndex, animate: false);
               setState(() {
                 _isPhotoZoomed = false;
                 _syncRecord(detailVm.currentRecord);
@@ -794,18 +976,211 @@ class _GalleryDetailScreenState extends State<GalleryDetailScreen>
   }
 }
 
+class _PreviousPhotoIntent extends Intent {
+  const _PreviousPhotoIntent();
+}
+
+class _NextPhotoIntent extends Intent {
+  const _NextPhotoIntent();
+}
+
+bool _isDesktopGalleryPlatform(TargetPlatform platform) => switch (platform) {
+  TargetPlatform.windows ||
+  TargetPlatform.macOS ||
+  TargetPlatform.linux => true,
+  _ => false,
+};
+
+class _GalleryNavigationButton extends StatelessWidget {
+  const _GalleryNavigationButton({
+    super.key,
+    required this.alignment,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final Alignment alignment;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: SafeArea(
+        minimum: const EdgeInsets.symmetric(horizontal: 12),
+        child: Material(
+          color: Colors.black.withValues(alpha: 0.58),
+          shape: const CircleBorder(),
+          child: IconButton(
+            tooltip: tooltip,
+            onPressed: onPressed,
+            icon: Icon(icon, size: 34),
+            color: Colors.white,
+            disabledColor: Colors.white38,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GalleryFilmstripOverlay extends StatelessWidget {
+  const _GalleryFilmstripOverlay({
+    required this.visible,
+    required this.records,
+    required this.currentIndex,
+    required this.scrollController,
+    required this.onSelected,
+  });
+
+  final bool visible;
+  final List<ShootingRecord> records;
+  final int currentIndex;
+  final ScrollController scrollController;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      key: const Key('gallery-filmstrip-visibility'),
+      ignoring: !visible,
+      child: AnimatedSlide(
+        offset: visible ? Offset.zero : const Offset(0, 0.18),
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: _filmstrip(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _filmstrip() {
+    return Material(
+      key: const Key('gallery-filmstrip'),
+      color: Colors.black.withValues(alpha: 0.78),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: 104,
+        child: Column(
+          children: [
+            SizedBox(
+              height: 28,
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Text(
+                    '사진 ${currentIndex + 1}/${records.length}',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                key: const Key('gallery-filmstrip-list'),
+                controller: scrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                itemCount: records.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final selected = index == currentIndex;
+                  final uri = records[index].galleryThumbnailUri;
+                  return Semantics(
+                    selected: selected,
+                    button: true,
+                    label: '사진 ${index + 1} 선택',
+                    child: InkWell(
+                      key: selected
+                          ? ValueKey('gallery-thumbnail-selected-$index')
+                          : ValueKey('gallery-thumbnail-$index'),
+                      onTap: () => onSelected(index),
+                      borderRadius: BorderRadius.circular(9),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        width: 72,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: selected ? AppColors.ic : Colors.white24,
+                            width: selected ? 3 : 1,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: uri == null || uri.isEmpty
+                            ? const _GalleryThumbnailPlaceholder()
+                            : AppFileImage(
+                                path: uri,
+                                fit: BoxFit.cover,
+                                memCacheWidth: 180,
+                                memCacheHeight: 180,
+                                filterQuality: FilterQuality.low,
+                                errorBuilder: (_, _, _) =>
+                                    const _GalleryThumbnailPlaceholder(),
+                              ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GalleryThumbnailPlaceholder extends StatelessWidget {
+  const _GalleryThumbnailPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: AppColors.surface,
+      child: Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 24,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
 // ── 보기 모드 (원본 사진 우선 + 상세정보 Bottom Sheet) ───────────────────────
 
 class _ViewBody extends StatelessWidget {
   const _ViewBody({
     required this.record,
     required this.onPhotoZoomChanged,
+    this.onPhotoTap,
     this.obj,
   });
 
   final ShootingRecord record;
   final dynamic obj;
   final ValueChanged<bool> onPhotoZoomChanged;
+  final VoidCallback? onPhotoTap;
 
   String _formatDateTime(DateTime dt) {
     String p(int n) => n.toString().padLeft(2, '0');
@@ -1005,6 +1380,7 @@ class _ViewBody extends StatelessWidget {
             onToggleShowNearby: detailVm.toggleShowNearby,
             onRequestOverlayLoad: detailVm.requestOverlayForCurrent,
             onZoomChanged: onPhotoZoomChanged,
+            onTap: onPhotoTap,
             fillViewport: true,
           ),
         ),
@@ -2529,6 +2905,7 @@ class _PhotoSection extends StatefulWidget {
     this.onToggleShowNearby,
     this.onRequestOverlayLoad,
     this.onZoomChanged,
+    this.onTap,
     this.fillViewport = false,
   });
 
@@ -2545,6 +2922,7 @@ class _PhotoSection extends StatefulWidget {
   final VoidCallback? onToggleShowNearby;
   final VoidCallback? onRequestOverlayLoad;
   final ValueChanged<bool>? onZoomChanged;
+  final VoidCallback? onTap;
   final bool fillViewport;
 
   @override
@@ -2628,42 +3006,46 @@ class _PhotoSectionState extends State<_PhotoSection> {
             ),
           );
 
-    return Container(
-      constraints: widget.fillViewport
-          ? const BoxConstraints.expand()
-          : const BoxConstraints(maxHeight: 280),
-      width: double.infinity,
-      color: Colors.black,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Positioned.fill(
-            child: InteractiveViewer(
-              key: ValueKey('gallery-photo-interactive-${widget.photoUri}'),
-              transformationController: _transformationController,
-              maxScale: 6,
-              child: Center(child: image),
-            ),
-          ),
-          if (_hasOverlayControls)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: _OverlayControlButton(
-                isLoading: widget.isOverlayLoading,
-                hasData: _hasOverlayData,
-                overlayState: widget.overlayState!,
-                overlayRecordId: widget.overlayRecordId!,
-                overlayEnabled: widget.overlayEnabled,
-                showTarget: widget.showTarget,
-                showNearby: widget.showNearby,
-                onToggleOverlayEnabled: widget.onToggleOverlayEnabled!,
-                onToggleShowTarget: widget.onToggleShowTarget!,
-                onToggleShowNearby: widget.onToggleShowNearby!,
-                onOpenMenu: widget.onRequestOverlayLoad,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _isZoomed ? null : widget.onTap,
+      child: Container(
+        constraints: widget.fillViewport
+            ? const BoxConstraints.expand()
+            : const BoxConstraints(maxHeight: 280),
+        width: double.infinity,
+        color: Colors.black,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                key: ValueKey('gallery-photo-interactive-${widget.photoUri}'),
+                transformationController: _transformationController,
+                maxScale: 6,
+                child: Center(child: image),
               ),
             ),
-        ],
+            if (_hasOverlayControls)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: _OverlayControlButton(
+                  isLoading: widget.isOverlayLoading,
+                  hasData: _hasOverlayData,
+                  overlayState: widget.overlayState!,
+                  overlayRecordId: widget.overlayRecordId!,
+                  overlayEnabled: widget.overlayEnabled,
+                  showTarget: widget.showTarget,
+                  showNearby: widget.showNearby,
+                  onToggleOverlayEnabled: widget.onToggleOverlayEnabled!,
+                  onToggleShowTarget: widget.onToggleShowTarget!,
+                  onToggleShowNearby: widget.onToggleShowNearby!,
+                  onOpenMenu: widget.onRequestOverlayLoad,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -33,6 +33,85 @@ function Read-LocalBuildConfig {
     return $values
 }
 
+function Publish-AndroidRelease {
+    param(
+        [Parameter(Mandatory)][string]$SourcePath,
+        [Parameter(Mandatory)][string]$DestinationPath
+    )
+
+    if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) {
+        throw "Android Release artifact was not found: $SourcePath"
+    }
+
+    $destinationDirectory = Split-Path -Parent $DestinationPath
+    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+    $stagingPath = "$DestinationPath.$([guid]::NewGuid()).tmp"
+    try {
+        Copy-Item -LiteralPath $SourcePath -Destination $stagingPath -Force
+        Move-Item -LiteralPath $stagingPath -Destination $DestinationPath -Force
+    }
+    catch {
+        throw "Failed to copy Android Release artifact to '$DestinationPath': $($_.Exception.Message)"
+    }
+    finally {
+        if (Test-Path -LiteralPath $stagingPath) {
+            Remove-Item -LiteralPath $stagingPath -Force
+        }
+    }
+
+    return Get-Item -LiteralPath $DestinationPath
+}
+
+function Publish-WindowsRelease {
+    param(
+        [Parameter(Mandatory)][string]$SourcePath,
+        [Parameter(Mandatory)][string]$DestinationPath
+    )
+
+    if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
+        throw "Windows Release directory was not found: $SourcePath"
+    }
+
+    $destinationParent = Split-Path -Parent $DestinationPath
+    New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+    $operationId = [guid]::NewGuid()
+    $stagingPath = Join-Path $destinationParent ".windows-stage-$operationId"
+    $backupPath = Join-Path $destinationParent ".windows-backup-$operationId"
+    $previousDistributionMoved = $false
+    try {
+        Copy-Item -LiteralPath $SourcePath -Destination $stagingPath -Recurse -Force
+        $stagedExecutable = Join-Path $stagingPath 'astro_journal.exe'
+        if (-not (Test-Path -LiteralPath $stagedExecutable -PathType Leaf)) {
+            throw "Windows Release executable was not copied to the staging directory."
+        }
+
+        if (Test-Path -LiteralPath $DestinationPath) {
+            Move-Item -LiteralPath $DestinationPath -Destination $backupPath
+            $previousDistributionMoved = $true
+        }
+        Move-Item -LiteralPath $stagingPath -Destination $DestinationPath
+
+        if ($previousDistributionMoved) {
+            Remove-Item -LiteralPath $backupPath -Recurse -Force
+        }
+    }
+    catch {
+        if (-not (Test-Path -LiteralPath $DestinationPath) -and
+            $previousDistributionMoved -and
+            (Test-Path -LiteralPath $backupPath)) {
+            Move-Item -LiteralPath $backupPath -Destination $DestinationPath
+        }
+        throw "Failed to copy Windows Release distribution to '$DestinationPath': $($_.Exception.Message)"
+    }
+    finally {
+        if (Test-Path -LiteralPath $stagingPath) {
+            Remove-Item -LiteralPath $stagingPath -Recurse -Force
+        }
+    }
+
+    return Get-Item -LiteralPath $DestinationPath
+}
+
 try {
     $config = Read-LocalBuildConfig -Path $configPath
     $requiredNames = @('TC_BACKEND_AUTH_TOKEN')
@@ -115,11 +194,24 @@ try {
             $apk = Get-Item -LiteralPath (Join-Path $projectRoot "build\app\outputs\flutter-apk\app-$variant.apk")
             Write-Host ("{0} APK: {1}" -f $Mode, $apk.FullName)
             Write-Host ("Size: {0:N0} bytes" -f $apk.Length)
+            if ($Mode -eq 'Release') {
+                $distApk = Publish-AndroidRelease `
+                    -SourcePath $apk.FullName `
+                    -DestinationPath (Join-Path $projectRoot 'dist\android\AstroJournal.apk')
+                Write-Host ("Release Android dist: {0}" -f $distApk.FullName)
+            }
         }
         else {
-            $exe = Get-Item -LiteralPath (Join-Path $projectRoot "build\windows\x64\runner\$Mode\astro_journal.exe")
+            $windowsReleaseDirectory = Join-Path $projectRoot "build\windows\x64\runner\$Mode"
+            $exe = Get-Item -LiteralPath (Join-Path $windowsReleaseDirectory 'astro_journal.exe')
             Write-Host ("{0} Windows EXE: {1}" -f $Mode, $exe.FullName)
             Write-Host ("Size: {0:N0} bytes" -f $exe.Length)
+            if ($Mode -eq 'Release') {
+                $distWindows = Publish-WindowsRelease `
+                    -SourcePath $windowsReleaseDirectory `
+                    -DestinationPath (Join-Path $projectRoot 'dist\windows')
+                Write-Host ("Release Windows dist: {0}" -f $distWindows.FullName)
+            }
         }
     }
     finally {

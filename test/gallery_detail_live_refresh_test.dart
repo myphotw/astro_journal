@@ -21,7 +21,10 @@ void main() {
       final pushStart = source.indexOf('await Navigator.of(context).push<void>(', openStart);
       final beforePush = source.substring(openStart, pushStart);
 
-      expect(beforePush, contains('photoRecordsFrom(\n      records,'));
+      expect(
+        beforePush,
+        matches(RegExp(r'photoRecordsFrom\(\s*records,?\s*\)')),
+      );
       expect(beforePush, isNot(contains('await syncCoordinator')));
       expect(beforePush, isNot(contains('await pullSyncCoordinator')));
       expect(beforePush, isNot(contains('loadDetailRecord')));
