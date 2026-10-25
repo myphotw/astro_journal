@@ -2,6 +2,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config/app_build_config.dart';
 
+enum TcBackendEndpointKind { internal, external, legacy, custom }
+
+class TcBackendEndpoint {
+  const TcBackendEndpoint({required this.baseUrl, required this.kind});
+
+  final String baseUrl;
+  final TcBackendEndpointKind kind;
+}
+
 class TcBackendSettings {
   const TcBackendSettings({required this.baseUrl, required this.enabled});
 
@@ -39,6 +48,8 @@ class TcBackendSettingsService {
   TcBackendSettingsService({
     this.useBuildConfiguration = false,
     this.buildBaseUrl = AppBuildConfig.backendUrl,
+    this.buildInternalUrl = AppBuildConfig.backendUrlInternal,
+    this.buildExternalUrl = AppBuildConfig.backendUrlExternal,
   });
 
   /// Production factory. Runtime preferences are deliberately ignored so a
@@ -51,10 +62,62 @@ class TcBackendSettingsService {
 
   final bool useBuildConfiguration;
   final String buildBaseUrl;
+  final String buildInternalUrl;
+  final String buildExternalUrl;
+  String? _selectedBuildBaseUrl;
+
+  List<TcBackendEndpoint> get configuredEndpoints {
+    if (!useBuildConfiguration) return const [];
+    final endpoints = <TcBackendEndpoint>[];
+    final seen = <String>{};
+    void add(String value, TcBackendEndpointKind kind) {
+      final normalized = TcBackendSettings.normalizeBaseUrl(value);
+      if (normalized != null && seen.add(normalized)) {
+        endpoints.add(TcBackendEndpoint(baseUrl: normalized, kind: kind));
+      }
+    }
+
+    add(buildInternalUrl, TcBackendEndpointKind.internal);
+    add(buildExternalUrl, TcBackendEndpointKind.external);
+    add(buildBaseUrl, TcBackendEndpointKind.legacy);
+    return List.unmodifiable(endpoints);
+  }
+
+  Future<List<TcBackendEndpoint>> endpoints() async {
+    if (useBuildConfiguration) return configuredEndpoints;
+    final settings = await load();
+    final normalized = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
+    return normalized == null
+        ? const []
+        : [
+            TcBackendEndpoint(
+              baseUrl: normalized,
+              kind: TcBackendEndpointKind.custom,
+            ),
+          ];
+  }
+
+  void selectEndpoint(TcBackendEndpoint endpoint) {
+    if (!useBuildConfiguration) return;
+    final allowed = configuredEndpoints.any(
+      (candidate) => candidate.baseUrl == endpoint.baseUrl,
+    );
+    if (!allowed) {
+      throw ArgumentError.value(
+        endpoint.baseUrl,
+        'endpoint',
+        'Endpoint is not part of the build configuration.',
+      );
+    }
+    _selectedBuildBaseUrl = endpoint.baseUrl;
+  }
 
   Future<TcBackendSettings> load() async {
     if (useBuildConfiguration) {
-      final normalized = TcBackendSettings.normalizeBaseUrl(buildBaseUrl);
+      final endpoints = configuredEndpoints;
+      final normalized =
+          _selectedBuildBaseUrl ??
+          (endpoints.isEmpty ? null : endpoints.first.baseUrl);
       return TcBackendSettings(
         baseUrl: normalized ?? AppBuildConfig.defaultBackendUrl,
         enabled: true,

@@ -102,6 +102,8 @@ import '../../services/tc_backend_multi_night_framing_service.dart';
 import '../../services/multi_night_framing_sync_coordinator.dart';
 import '../../services/multi_night_framing_match_service.dart';
 import '../../services/tc_backend_auth_service.dart';
+import '../../services/tc_backend_connection_manager.dart';
+import '../../services/tc_backend_network_monitor.dart';
 import '../../services/tc_backend_astrojournal_reset_service.dart';
 import '../../services/astrojournal_capture_reset_coordinator.dart';
 import '../../services/astrojournal_local_capture_reset_service.dart';
@@ -148,6 +150,12 @@ class AppProviders {
     final tcBackendSettingsService = TcBackendSettingsService.autoConfigured();
     const tcBackendTokenStore = BuildConfiguredTcBackendTokenStore();
     final tcBackendAuthHeaders = TcBackendAuthHeaders(tcBackendTokenStore);
+    final tcBackendNetworkMonitor = TcBackendNetworkMonitor();
+    final tcBackendConnectionManager = TcBackendConnectionManager(
+      settingsService: tcBackendSettingsService,
+      authHeaders: tcBackendAuthHeaders,
+      networkChanges: tcBackendNetworkMonitor.changes,
+    );
     final tcBackendMediaAuthService = TcBackendMediaAuthService(
       tcBackendSettingsService,
       tcBackendAuthHeaders,
@@ -505,6 +513,7 @@ class AppProviders {
       plateSolveSummaryLoader: backendPlateSolveService.getSummary,
       tokenStore: tcBackendTokenStore,
       authHeaders: tcBackendAuthHeaders,
+      connectionManager: tcBackendConnectionManager,
     );
     refreshAfterPull = () async {
       await galleryViewModel.load(silent: true);
@@ -561,6 +570,9 @@ class AppProviders {
       Provider<TcBackendSettingsService>.value(value: tcBackendSettingsService),
       Provider<TcBackendTokenStore>.value(value: tcBackendTokenStore),
       Provider<TcBackendAuthHeaders>.value(value: tcBackendAuthHeaders),
+      ChangeNotifierProvider<TcBackendConnectionManager>.value(
+        value: tcBackendConnectionManager,
+      ),
       Provider<TcBackendMediaAuthService>.value(
         value: tcBackendMediaAuthService,
       ),

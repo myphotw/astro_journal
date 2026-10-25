@@ -174,6 +174,41 @@ void main() {
     expect(relative.headers['Authorization'], 'Bearer media-token');
   });
 
+  test(
+    'configured media URL follows the currently selected endpoint',
+    () async {
+      final settings = TcBackendSettingsService(
+        useBuildConfiguration: true,
+        buildBaseUrl: '',
+        buildInternalUrl: 'http://internal.example:8000',
+        buildExternalUrl: 'https://external.example:8443',
+      );
+      settings.selectEndpoint(
+        settings.configuredEndpoints.singleWhere(
+          (endpoint) => endpoint.kind == TcBackendEndpointKind.external,
+        ),
+      );
+      final media = TcBackendMediaAuthService(
+        settings,
+        TcBackendAuthHeaders(_MemoryTokenStore('media-token')),
+      );
+
+      final request = await media.requestFor(
+        'http://internal.example:8000/api/common/gallery/1/preview?size=large',
+      );
+
+      expect(
+        request.url,
+        'https://external.example:8443/api/common/gallery/1/preview?size=large',
+      );
+      expect(request.headers['Authorization'], 'Bearer media-token');
+      expect(
+        (await media.requestFor('https://untrusted.example/api/private')).url,
+        'https://untrusted.example/api/private',
+      );
+    },
+  );
+
   test('JSON GET and POST external API requests include Bearer', () async {
     final settings = TcBackendSettingsService();
     await settings.save(

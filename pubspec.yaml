@@ -73,6 +73,8 @@ dependencies:
 
   # Geocoding API HTTP 호출
   http: ^1.4.0
+  # Windows/Android 네트워크 변경 감지 후 실제 Backend 재검사
+  connectivity_plus: 7.3.1
   crypto: ^3.0.6
   # Offline Solar System ephemerides (VSOP87 / Meeus, MIT).
   astronomia: ^1.1.1

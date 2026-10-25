@@ -7,10 +7,13 @@ AstroJournal users do not enter server addresses or provider credentials in the 
 1. Copy `config/local.env.example` to `config/local.env`.
 2. Fill `GOOGLE_MAPS_API_KEY` with the Android Maps SDK key.
 3. Fill `TC_BACKEND_AUTH_TOKEN` with the AstroJournal client token.
+4. Fill `TC_BACKEND_URL_INTERNAL` and `TC_BACKEND_URL_EXTERNAL` with the two
+   trusted endpoints. Leave `TC_BACKEND_URL` empty unless a legacy
+   single-endpoint build is required.
 
 `config/local.env` is ignored by Git. Do not add it or paste its contents into build logs, issues, or documentation. `android/local.properties` remains only for the Android SDK path and does not need credential edits.
 
-The application uses `https://onepieces.synology.me:8443` by default. Developers may add `TC_BACKEND_URL` to the local file for a build-time override; normal users cannot change it at runtime.
+Backend endpoints are supplied only through the untracked `config/local.env` file. Use `TC_BACKEND_URL_INTERNAL` and `TC_BACKEND_URL_EXTERNAL` for automatic reachability-based selection. The legacy `TC_BACKEND_URL` remains a single-endpoint fallback; normal users cannot change these values at runtime.
 
 ## Release APK
 

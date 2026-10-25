@@ -3,6 +3,8 @@ import 'package:astro_journal/data/models/plate_solve_queue.dart';
 import 'package:astro_journal/features/settings/viewmodel/tc_backend_view_model.dart';
 import 'package:astro_journal/features/settings/widgets/tc_backend_settings_section.dart';
 import 'package:astro_journal/services/tc_backend_service.dart';
+import 'package:astro_journal/services/tc_backend_auth_service.dart';
+import 'package:astro_journal/services/tc_backend_connection_manager.dart';
 import 'package:astro_journal/services/tc_backend_settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,21 +27,26 @@ void main() {
       completed: 2,
       failed: 1,
     ),
+    TcBackendSettingsService? settingsService,
+    TcBackendConnectionManager? connectionManager,
   }) async {
     SharedPreferences.setMockInitialValues({});
-    final settings = TcBackendSettingsService();
-    await settings.save(
-      const TcBackendSettings(
-        baseUrl: 'https://backend.example',
-        enabled: true,
-      ),
-    );
+    final settings = settingsService ?? TcBackendSettingsService();
+    if (!settings.useBuildConfiguration) {
+      await settings.save(
+        const TcBackendSettings(
+          baseUrl: 'https://backend.example',
+          enabled: true,
+        ),
+      );
+    }
     return TcBackendViewModel(
       settings,
       syncOutboxRepository: _FakeOutbox(queued, processing, failed),
       retryFailed: retry,
       plateSolveSummaryLoader: summaryLoader ?? () async => summary,
       serviceFactory: (_) => _healthyService(),
+      connectionManager: connectionManager,
     );
   }
 
@@ -65,6 +72,9 @@ void main() {
 
     expect(find.byKey(const Key('backend_readiness')), findsOneWidget);
     expect(find.text('NAS 서버'), findsOneWidget);
+    expect(find.text('서버 주소'), findsOneWidget);
+    expect(find.text('https://backend.example'), findsOneWidget);
+    expect(find.text('연결 재시도'), findsOneWidget);
     expect(find.text('날씨'), findsOneWidget);
     expect(find.text('위치 검색'), findsOneWidget);
     expect(find.text('Plate Solve'), findsNWidgets(2));
@@ -85,7 +95,9 @@ void main() {
     var retries = 0;
     final vm = await viewModel(failed: 1, retry: () async => retries++);
     await pump(tester, vm);
-    await tester.tap(find.byKey(const Key('sync_retry')));
+    final retryButton = find.byKey(const Key('sync_retry'));
+    await tester.ensureVisible(retryButton);
+    await tester.tap(retryButton);
     await tester.pumpAndSettle();
     expect(retries, 1);
   });
@@ -93,7 +105,9 @@ void main() {
   testWidgets('refresh reloads readiness and sync counts', (tester) async {
     final vm = await viewModel();
     await pump(tester, vm);
-    await tester.tap(find.byKey(const Key('backend_status_refresh')));
+    final refreshButton = find.byKey(const Key('backend_status_refresh'));
+    await tester.ensureVisible(refreshButton);
+    await tester.tap(refreshButton);
     await tester.pumpAndSettle();
     expect(vm.result?.isCompatible, isTrue);
   });
@@ -110,6 +124,44 @@ void main() {
     expect(find.byKey(const Key('backend_readiness')), findsOneWidget);
     expect(find.byKey(const Key('sync_status_card')), findsOneWidget);
     expect(find.text('Plate Solve 진행현황을 불러오지 못했습니다.'), findsOneWidget);
+  });
+
+  testWidgets('shows the selected internal endpoint and retries connection', (
+    tester,
+  ) async {
+    final settings = TcBackendSettingsService(
+      useBuildConfiguration: true,
+      buildBaseUrl: '',
+      buildInternalUrl: 'http://internal.example:8000',
+      buildExternalUrl: 'https://external.example:8443',
+    );
+    var checks = 0;
+    final manager = TcBackendConnectionManager(
+      settingsService: settings,
+      authHeaders: TcBackendAuthHeaders(const EmptyTcBackendTokenStore()),
+      networkChanges: const Stream.empty(),
+      serviceFactory: (_, _) {
+        checks++;
+        return _healthyService();
+      },
+    );
+    final vm = await viewModel(
+      settingsService: settings,
+      connectionManager: manager,
+    );
+    await pump(tester, vm);
+
+    expect(find.text('내부'), findsOneWidget);
+    expect(find.text('http://internal.example:8000'), findsOneWidget);
+    final retryButton = find.byKey(const Key('backend_status_refresh'));
+    await tester.ensureVisible(retryButton);
+    await tester.tap(retryButton);
+    await tester.pumpAndSettle();
+    expect(checks, 2);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    vm.dispose();
+    manager.dispose();
   });
 }
 

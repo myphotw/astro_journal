@@ -136,7 +136,21 @@ try {
     if ($config.ContainsKey('TC_BACKEND_URL') -and -not [string]::IsNullOrWhiteSpace($config['TC_BACKEND_URL'])) {
         $defines['TC_BACKEND_URL'] = $config['TC_BACKEND_URL']
     }
-    $backendUrlSource = if ($defines.ContainsKey('TC_BACKEND_URL')) { 'local_env' } else { 'app_default' }
+    foreach ($endpointName in @('TC_BACKEND_URL_INTERNAL', 'TC_BACKEND_URL_EXTERNAL')) {
+        if ($config.ContainsKey($endpointName) -and -not [string]::IsNullOrWhiteSpace($config[$endpointName])) {
+            $defines[$endpointName] = $config[$endpointName]
+        }
+    }
+    $backendUrlSource = if ($defines.ContainsKey('TC_BACKEND_URL_INTERNAL') -or
+        $defines.ContainsKey('TC_BACKEND_URL_EXTERNAL')) {
+        'internal_external'
+    }
+    elseif ($defines.ContainsKey('TC_BACKEND_URL')) {
+        'legacy_local_env'
+    }
+    else {
+        'app_default'
+    }
     $temporaryDefines = Join-Path ([IO.Path]::GetTempPath()) ("astro-journal-defines-{0}.json" -f [guid]::NewGuid())
     $json = $defines | ConvertTo-Json -Compress
     [IO.File]::WriteAllText(

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/tc_backend_models.dart';
+import '../../../services/tc_backend_settings_service.dart';
 import '../viewmodel/tc_backend_view_model.dart';
 
 /// Read-only connection/readiness panel. Credentials and endpoints are part of
@@ -24,7 +25,11 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
     if (_loaded) return;
     _loaded = true;
     final viewModel = context.read<TcBackendViewModel>();
-    viewModel.load().then((_) => viewModel.testConnection());
+    viewModel.load().then((_) {
+      if (viewModel.status == TcBackendConnectionStatus.notConfigured) {
+        return viewModel.testConnection();
+      }
+    });
   }
 
   @override
@@ -62,7 +67,7 @@ class _TcBackendSettingsSectionState extends State<TcBackendSettingsSection> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.refresh),
-                  label: const Text('상태 새로고침'),
+                  label: const Text('연결 재시도'),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
@@ -159,8 +164,38 @@ class _ReadinessPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StatusRow(label: 'NAS 서버', ready: connected, readyText: '연결됨'),
+          _StatusRow(
+            label: 'NAS 서버',
+            ready: connected,
+            text: _connectionStatusText(viewModel),
+            readyText: '연결됨',
+          ),
+          _StatusRow(
+            label: '연결 방식',
+            ready: connected,
+            text: _endpointKindText(viewModel.endpointKind),
+          ),
+          _StatusRow(
+            label: '서버 주소',
+            ready: connected,
+            text: viewModel.settings.baseUrl.isEmpty
+                ? '구성되지 않음'
+                : viewModel.settings.baseUrl,
+          ),
+          if (result?.message != null && !connected) ...[
+            const SizedBox(height: 6),
+            Text(
+              result!.message!,
+              key: const Key('backend_connection_error'),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+          const Divider(height: 16),
           _StatusRow(label: 'Google 지도', text: '앱에 구성됨', ready: true),
           _StatusRow(
             label: '날씨',
@@ -180,6 +215,26 @@ class _ReadinessPanel extends StatelessWidget {
       ),
     );
   }
+
+  String _connectionStatusText(TcBackendViewModel viewModel) =>
+      switch (viewModel.status) {
+        TcBackendConnectionStatus.checking => '연결 확인 중…',
+        TcBackendConnectionStatus.connected => '연결됨',
+        TcBackendConnectionStatus.degraded => '연결됨 (일부 기능 제한)',
+        TcBackendConnectionStatus.authenticationFailed => '인증 실패',
+        TcBackendConnectionStatus.incompatible => '호환되지 않는 서버',
+        TcBackendConnectionStatus.serverError => '서버 오류',
+        TcBackendConnectionStatus.securityError => '보안 연결 오류',
+        TcBackendConnectionStatus.unreachable => '연결 실패',
+        TcBackendConnectionStatus.notConfigured => '구성 확인 필요',
+      };
+
+  String _endpointKindText(TcBackendEndpointKind? kind) => switch (kind) {
+    TcBackendEndpointKind.internal => '내부',
+    TcBackendEndpointKind.external => '외부',
+    TcBackendEndpointKind.legacy || TcBackendEndpointKind.custom => '기본',
+    null => '선택되지 않음',
+  };
 }
 
 class _StatusRow extends StatelessWidget {

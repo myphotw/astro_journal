@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:astro_journal/data/models/tc_backend_models.dart';
 import 'package:astro_journal/features/settings/viewmodel/tc_backend_view_model.dart';
 import 'package:astro_journal/services/tc_backend_service.dart';
@@ -128,6 +130,28 @@ void main() {
       expect(
         (await service.checkCompatibility()).status,
         TcBackendConnectionStatus.unreachable,
+      );
+    });
+
+    test('keeps authentication, server, and TLS failures distinct', () async {
+      Future<TcBackendConnectionStatus> statusFor(
+        Future<http.Response> Function(http.Request request) handler,
+      ) async => (await TcBackendService(
+        baseUrl: 'https://backend.example',
+        client: MockClient(handler),
+      ).checkCompatibility()).status;
+
+      expect(
+        await statusFor((_) async => http.Response('{}', 403)),
+        TcBackendConnectionStatus.authenticationFailed,
+      );
+      expect(
+        await statusFor((_) async => http.Response('{}', 503)),
+        TcBackendConnectionStatus.serverError,
+      );
+      expect(
+        await statusFor((_) async => throw HandshakeException('bad cert')),
+        TcBackendConnectionStatus.securityError,
       );
     });
 

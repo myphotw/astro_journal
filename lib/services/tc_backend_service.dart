@@ -12,12 +12,16 @@ class TcBackendException implements Exception {
     this.message, {
     this.isUnreachable = false,
     this.isAuthenticationFailure = false,
+    this.isServerFailure = false,
+    this.isSecurityFailure = false,
     this.statusCode,
   });
 
   final String message;
   final bool isUnreachable;
   final bool isAuthenticationFailure;
+  final bool isServerFailure;
+  final bool isSecurityFailure;
   final int? statusCode;
 }
 
@@ -80,9 +84,13 @@ class TcBackendService {
       return TcBackendCheckResult(
         status: error.isAuthenticationFailure
             ? TcBackendConnectionStatus.authenticationFailed
+            : error.isSecurityFailure
+            ? TcBackendConnectionStatus.securityError
+            : error.isServerFailure
+            ? TcBackendConnectionStatus.serverError
             : error.isUnreachable
             ? TcBackendConnectionStatus.unreachable
-            : TcBackendConnectionStatus.degraded,
+            : TcBackendConnectionStatus.serverError,
         message: error.message,
       );
     }
@@ -103,14 +111,18 @@ class TcBackendService {
           )
           .timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        if (response.statusCode == 401) {
-          throw const TcBackendException(
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          throw TcBackendException(
             'TC-Backend authentication failed. Check the client token.',
             isAuthenticationFailure: true,
-            statusCode: 401,
+            statusCode: response.statusCode,
           );
         }
-        throw TcBackendException('서버 오류 (HTTP ${response.statusCode})');
+        throw TcBackendException(
+          '서버 오류 (HTTP ${response.statusCode})',
+          isServerFailure: true,
+          statusCode: response.statusCode,
+        );
       }
       if (response.body.isEmpty) {
         throw const TcBackendException('서버 응답이 비어 있습니다.');
@@ -124,6 +136,11 @@ class TcBackendService {
       return data is Map ? Map<String, dynamic>.from(data) : map;
     } on TimeoutException {
       throw const TcBackendException('서버 응답 시간이 초과되었습니다.', isUnreachable: true);
+    } on HandshakeException {
+      throw const TcBackendException(
+        '서버 보안 연결을 확인할 수 없습니다.',
+        isSecurityFailure: true,
+      );
     } on SocketException {
       throw const TcBackendException('서버에 연결할 수 없습니다.', isUnreachable: true);
     } on FormatException {

@@ -6,6 +6,7 @@ import '../../../services/tc_backend_service.dart';
 import '../../../services/tc_backend_settings_service.dart';
 import '../../../data/repositories/sync_outbox_repository.dart';
 import '../../../services/tc_backend_auth_service.dart';
+import '../../../services/tc_backend_connection_manager.dart';
 
 class TcBackendSyncCounts {
   const TcBackendSyncCounts({
@@ -20,20 +21,40 @@ class TcBackendSyncCounts {
 
 class TcBackendViewModel extends ChangeNotifier {
   TcBackendViewModel(
-    this._settingsService, {
-    this.serviceFactory,
+    TcBackendSettingsService settingsService, {
+    TcBackendService Function(String baseUrl)? serviceFactory,
     SyncOutboxRepository? syncOutboxRepository,
     Future<void> Function()? retryFailed,
     Future<PlateSolveSummary> Function()? plateSolveSummaryLoader,
     TcBackendTokenStore? tokenStore,
     TcBackendAuthHeaders? authHeaders,
-  }) : _syncOutboxRepository = syncOutboxRepository,
-       _retryFailed = retryFailed,
-       _plateSolveSummaryLoader = plateSolveSummaryLoader,
-       _tokenStore = tokenStore ?? const EmptyTcBackendTokenStore(),
-       _authHeaders =
-           authHeaders ??
-           TcBackendAuthHeaders(tokenStore ?? const EmptyTcBackendTokenStore());
+    TcBackendConnectionManager? connectionManager,
+  }) : this._(
+         settingsService,
+         serviceFactory,
+         syncOutboxRepository,
+         retryFailed,
+         plateSolveSummaryLoader,
+         tokenStore ?? const EmptyTcBackendTokenStore(),
+         authHeaders ??
+             TcBackendAuthHeaders(
+               tokenStore ?? const EmptyTcBackendTokenStore(),
+             ),
+         connectionManager,
+       );
+
+  TcBackendViewModel._(
+    this._settingsService,
+    this.serviceFactory,
+    this._syncOutboxRepository,
+    this._retryFailed,
+    this._plateSolveSummaryLoader,
+    this._tokenStore,
+    this._authHeaders,
+    this._connectionManager,
+  ) {
+    _connectionManager?.addListener(_onConnectionChanged);
+  }
 
   final TcBackendSettingsService _settingsService;
   final TcBackendService Function(String baseUrl)? serviceFactory;
@@ -42,6 +63,7 @@ class TcBackendViewModel extends ChangeNotifier {
   final Future<PlateSolveSummary> Function()? _plateSolveSummaryLoader;
   final TcBackendTokenStore _tokenStore;
   final TcBackendAuthHeaders _authHeaders;
+  final TcBackendConnectionManager? _connectionManager;
 
   bool _hasStoredToken = false;
   bool get hasStoredToken => _hasStoredToken;
@@ -58,10 +80,16 @@ class TcBackendViewModel extends ChangeNotifier {
   TcBackendConnectionStatus _status = TcBackendConnectionStatus.notConfigured;
   TcBackendConnectionStatus get status => _status;
 
+  TcBackendEndpointKind? get endpointKind =>
+      _connectionManager?.selectedEndpoint?.kind;
+  DateTime? get lastCheckedAt => _connectionManager?.lastCheckedAt;
+
   TcBackendSyncCounts _syncCounts = const TcBackendSyncCounts();
   TcBackendSyncCounts get syncCounts => _syncCounts;
   bool get isBackendSyncAvailable =>
-      _settings.enabled && _settings.isConfigured;
+      _settings.enabled &&
+      _settings.isConfigured &&
+      (_connectionManager == null || _result?.isCompatible == true);
 
   PlateSolveSummary? _plateSolveSummary;
   PlateSolveSummary? get plateSolveSummary => _plateSolveSummary;
@@ -75,9 +103,11 @@ class TcBackendViewModel extends ChangeNotifier {
   Future<void> load() async {
     _settings = await _settingsService.load();
     _hasStoredToken = await _tokenStore.readToken() != null;
-    _status = _settings.enabled && _settings.isConfigured
-        ? TcBackendConnectionStatus.notConfigured
-        : TcBackendConnectionStatus.notConfigured;
+    _syncConnectionState();
+    if (_connectionManager != null) {
+      await _connectionManager.reconnect();
+      _syncConnectionState();
+    }
     await refreshSyncStatus(notify: false);
     await refreshPlateSolveSummary(notify: false);
     notifyListeners();
@@ -157,12 +187,26 @@ class TcBackendViewModel extends ChangeNotifier {
   }
 
   Future<void> refreshStatus() async {
-    await testConnection();
+    final connectionManager = _connectionManager;
+    if (connectionManager != null) {
+      await connectionManager.reconnect();
+      _syncConnectionState();
+      notifyListeners();
+    } else {
+      await testConnection();
+    }
     await refreshSyncStatus();
     await refreshPlateSolveSummary();
   }
 
   Future<void> testConnection({String? baseUrl, bool? enabled}) async {
+    final connectionManager = _connectionManager;
+    if (connectionManager != null && baseUrl == null && enabled == null) {
+      await connectionManager.reconnect();
+      _syncConnectionState();
+      notifyListeners();
+      return;
+    }
     final effectiveBaseUrl = baseUrl ?? _settings.baseUrl;
     final effectiveEnabled = enabled ?? _settings.enabled;
     final normalized = TcBackendSettings.normalizeBaseUrl(effectiveBaseUrl);
@@ -185,5 +229,27 @@ class TcBackendViewModel extends ChangeNotifier {
     _result = await service.checkCompatibility();
     _status = _result!.status;
     notifyListeners();
+  }
+
+  void _onConnectionChanged() {
+    _syncConnectionState();
+    notifyListeners();
+  }
+
+  void _syncConnectionState() {
+    final manager = _connectionManager;
+    if (manager == null) return;
+    final selected = manager.selectedEndpoint;
+    if (selected != null) {
+      _settings = TcBackendSettings(baseUrl: selected.baseUrl, enabled: true);
+    }
+    _result = manager.result;
+    _status = manager.status;
+  }
+
+  @override
+  void dispose() {
+    _connectionManager?.removeListener(_onConnectionChanged);
+    super.dispose();
   }
 }

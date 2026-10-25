@@ -114,11 +114,21 @@ class TcBackendMediaAuthService {
       return TcBackendMediaRequest(url: url);
     }
     final baseUri = Uri.parse(base);
-    final mediaUri = parsed.hasScheme ? parsed : baseUri.resolveUri(parsed);
-    final sameOrigin =
-        mediaUri.scheme == baseUri.scheme &&
-        mediaUri.host == baseUri.host &&
-        mediaUri.port == baseUri.port;
+    var mediaUri = parsed.hasScheme ? parsed : baseUri.resolveUri(parsed);
+    if (parsed.hasScheme && parsed.path.startsWith('/api/')) {
+      final endpoints = await _settingsService.endpoints();
+      final belongsToConfiguredBackend = endpoints.any(
+        (endpoint) => _sameOrigin(parsed, Uri.parse(endpoint.baseUrl)),
+      );
+      if (belongsToConfiguredBackend && !_sameOrigin(parsed, baseUri)) {
+        mediaUri = baseUri.replace(
+          path: parsed.path,
+          query: parsed.hasQuery ? parsed.query : null,
+          fragment: parsed.hasFragment ? parsed.fragment : null,
+        );
+      }
+    }
+    final sameOrigin = _sameOrigin(mediaUri, baseUri);
     if (!sameOrigin || !mediaUri.path.startsWith('/api/')) {
       return TcBackendMediaRequest(url: url);
     }
@@ -130,6 +140,11 @@ class TcBackendMediaAuthService {
 
   Future<Map<String, String>> headersFor(String url) async =>
       (await requestFor(url)).headers;
+
+  bool _sameOrigin(Uri left, Uri right) =>
+      left.scheme == right.scheme &&
+      left.host == right.host &&
+      left.port == right.port;
 }
 
 class TcBackendMediaRequest {

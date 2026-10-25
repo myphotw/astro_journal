@@ -6,6 +6,8 @@ enum TcBackendConnectionStatus {
   incompatible,
   unreachable,
   authenticationFailed,
+  serverError,
+  securityError,
 }
 
 class TcBackendHealth {

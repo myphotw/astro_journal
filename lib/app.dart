@@ -21,6 +21,7 @@ import 'services/base_exposure_settings_service.dart';
 import 'services/recommendation_settings_service.dart';
 import 'services/splash_image_service.dart';
 import 'services/tc_backend_startup_resume_service.dart';
+import 'services/tc_backend_connection_manager.dart';
 import 'shared/widgets/main_shell.dart';
 import 'shared/widgets/pc_main_shell.dart';
 
@@ -31,14 +32,62 @@ class AstroJournalApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: AppProviders.build(context),
-      child: MaterialApp(
-        title: '천체 기록장',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark,
-        home: const _AppStartupGate(),
-      ),
+      child: const _BackendConnectionLifecycle(),
     );
   }
+}
+
+class _BackendConnectionLifecycle extends StatefulWidget {
+  const _BackendConnectionLifecycle();
+
+  @override
+  State<_BackendConnectionLifecycle> createState() =>
+      _BackendConnectionLifecycleState();
+}
+
+class _BackendConnectionLifecycleState
+    extends State<_BackendConnectionLifecycle>
+    with WidgetsBindingObserver {
+  late final TcBackendConnectionManager _connectionManager;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _connectionManager = context.read<TcBackendConnectionManager>();
+    _connectionManager.start();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _connectionManager.resume();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        unawaited(_connectionManager.pause());
+        break;
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connectionManager.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: '천체 기록장',
+    debugShowCheckedModeBanner: false,
+    theme: AppTheme.dark,
+    home: const _AppStartupGate(),
+  );
 }
 
 /// Provider 준비 후 주요 데이터를 preload하고, 완료되면 플랫폼 Shell로 페이드 진입한다.
@@ -73,7 +122,13 @@ class _AppStartupGateState extends State<_AppStartupGate> {
     );
     _startup.addListener(_onStartupChanged);
     _startup.run();
-    unawaited(context.read<TcBackendStartupResumeService>().resume());
+    unawaited(_resumeBackend());
+  }
+
+  Future<void> _resumeBackend() async {
+    await context.read<TcBackendConnectionManager>().reconnect();
+    if (!mounted) return;
+    await context.read<TcBackendStartupResumeService>().resume();
   }
 
   void _onStartupChanged() {

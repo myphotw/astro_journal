@@ -36,6 +36,27 @@ void main() {
     expect(headers, isNot(contains('Authorization')));
   });
 
+  test(
+    'internal and external build endpoints preserve legacy fallback',
+    () async {
+      final settings = TcBackendSettingsService(
+        useBuildConfiguration: true,
+        buildBaseUrl: 'https://legacy.example',
+        buildInternalUrl: 'http://internal.example:8000',
+        buildExternalUrl: 'https://external.example:8443',
+      );
+
+      expect(settings.configuredEndpoints.map((endpoint) => endpoint.kind), [
+        TcBackendEndpointKind.internal,
+        TcBackendEndpointKind.external,
+        TcBackendEndpointKind.legacy,
+      ]);
+      expect((await settings.load()).baseUrl, 'http://internal.example:8000');
+      settings.selectEndpoint(settings.configuredEndpoints[1]);
+      expect((await settings.load()).baseUrl, 'https://external.example:8443');
+    },
+  );
+
   test('release Maps build contract uses one generated Android resource', () {
     final script = readSourceText('scripts/build_app.ps1');
     final gradle = readSourceText('android/app/build.gradle.kts');
@@ -61,10 +82,14 @@ void main() {
     expect(script, contains('flutter build apk "--\$variant"'));
     expect(script, contains('TC_BACKEND_AUTH_TOKEN'));
     expect(script, contains('TC_BACKEND_URL'));
+    expect(script, contains('TC_BACKEND_URL_INTERNAL'));
+    expect(script, contains('TC_BACKEND_URL_EXTERNAL'));
     expect(script, contains('--dart-define-from-file='));
     expect(script, isNot(contains('Write-Host \$config')));
     expect(script, isNot(contains('Write-Host \$defines')));
     expect(config, contains('defaultBackendUrl'));
     expect(config, contains("String.fromEnvironment(\n    'TC_BACKEND_URL'"));
+    expect(config, contains("'TC_BACKEND_URL_INTERNAL'"));
+    expect(config, contains("'TC_BACKEND_URL_EXTERNAL'"));
   });
 }
