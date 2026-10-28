@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/constants/detect_method.dart';
 import '../../../data/models/catalog_exposure_guidance.dart';
 import '../../../data/models/catalog_object.dart';
+import '../../../data/models/equipment.dart';
 
 import '../../../data/models/equipment_recommendation.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
@@ -38,6 +39,7 @@ import '../../../services/metadata_service.dart';
 
 import '../../../services/object_imaging_profile_provider.dart';
 import '../../../services/observation_condition_service.dart';
+import '../../../services/observation_score_service.dart';
 
 import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
@@ -156,6 +158,8 @@ class CatalogDetailViewModel extends ChangeNotifier {
   ObjectEquipmentRecommendation _equipmentRecommendation =
       ObjectEquipmentRecommendation.empty;
 
+  List<Equipment> _activeEquipment = const [];
+
   Duration? _minimumExposure;
 
   Duration? _recommendedExposure;
@@ -218,8 +222,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
       _selectedRegisteredObservationSite;
   TargetImagingAvailability? get registeredImagingAvailability =>
       _registeredImagingAvailability;
-  bool get isRegisteredAvailabilityLoading =>
-      _isRegisteredAvailabilityLoading;
+  bool get isRegisteredAvailabilityLoading => _isRegisteredAvailabilityLoading;
   ObservationSite? get currentLocationSite => _currentLocationSite;
   TargetImagingAvailability? get currentLocationAvailability =>
       _currentLocationAvailability;
@@ -282,6 +285,8 @@ class CatalogDetailViewModel extends ChangeNotifier {
     _errorMessage = null;
 
     _equipmentRecommendation = ObjectEquipmentRecommendation.empty;
+
+    _activeEquipment = const [];
 
     _minimumExposure = null;
 
@@ -380,8 +385,9 @@ class CatalogDetailViewModel extends ChangeNotifier {
         }
       }
       _selectedRegisteredObservationSite = matchingSite;
-      _selectedRegisteredObservationSite ??=
-          _observationSites.isEmpty ? null : _observationSites.first;
+      _selectedRegisteredObservationSite ??= _observationSites.isEmpty
+          ? null
+          : _observationSites.first;
       final site = _selectedRegisteredObservationSite;
       _registeredImagingAvailability = site == null
           ? null
@@ -395,6 +401,7 @@ class CatalogDetailViewModel extends ChangeNotifier {
       _registeredImagingAvailability = null;
     } finally {
       _isRegisteredAvailabilityLoading = false;
+      _rebuildEquipmentRecommendation();
       notifyListeners();
     }
   }
@@ -441,15 +448,72 @@ class CatalogDetailViewModel extends ChangeNotifier {
       _currentLocationAvailabilityError = '현재 위치를 확인할 수 없습니다.';
     } finally {
       _isCurrentLocationAvailabilityLoading = false;
+      _rebuildEquipmentRecommendation();
       notifyListeners();
     }
   }
 
   Future<void> _loadEquipmentRecommendation() async {
-    final equipment = await _equipmentRepository.getAll(activeOnly: true);
+    _activeEquipment = await _equipmentRepository.getAll(activeOnly: true);
+
+    _rebuildEquipmentRecommendation();
+  }
+
+  void _rebuildEquipmentRecommendation() {
+    final context = _captureRecommendationContext();
 
     _equipmentRecommendation = _equipmentRecommendationService
-        .recommendForObject(object: object, equipment: equipment);
+        .recommendForObject(
+          object: object,
+          equipment: _activeEquipment,
+          captureContext: context,
+        );
+  }
+
+  CaptureRecommendationContext? _captureRecommendationContext() {
+    final registeredSite = _selectedRegisteredObservationSite;
+    final registeredAvailability = _registeredImagingAvailability;
+    if (registeredSite != null && registeredAvailability != null) {
+      return _captureContextFor(
+        site: registeredSite,
+        availability: registeredAvailability,
+      );
+    }
+
+    final currentSite = _currentLocationSite;
+    final currentAvailability = _currentLocationAvailability;
+    if (currentSite != null && currentAvailability != null) {
+      return _captureContextFor(
+        site: currentSite,
+        availability: currentAvailability,
+      );
+    }
+    return null;
+  }
+
+  CaptureRecommendationContext _captureContextFor({
+    required ObservationSite site,
+    required TargetImagingAvailability availability,
+  }) {
+    final recommendation = availability.recommendation;
+    final window = recommendation?.observationWindow;
+    final referenceTime = window?.optimalTime ?? availability.referenceDate;
+    return CaptureRecommendationContext(
+      siteName: site.name,
+      bortle: site.bortle,
+      sqm: site.sqm,
+      targetAltitude:
+          window?.optimalAltitude ??
+          window?.peakAltitude ??
+          window?.currentAltitude,
+      moonIllumination: ObservationScoreService.computeMoonInfo(
+        referenceTime,
+      ).illumination,
+      moonSeparation: recommendation?.moonSeparation,
+      observableMinutes:
+          availability.usableMinutes ?? window?.totalObservableMinutes,
+      referenceTime: referenceTime,
+    );
   }
 
   Future<void> _loadBaseExposureInfo({int? referenceBortle}) async {

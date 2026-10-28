@@ -7,7 +7,10 @@ import '../../../core/constants/equipment_purpose.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/fov_input_parser.dart';
 import '../../../data/models/equipment.dart';
+import '../../../data/models/equipment_capture_capability.dart';
+import '../../../data/models/equipment_exposure_capability.dart';
 import '../../../data/models/eyepiece.dart';
+import '../widgets/equipment_capture_capability_editor.dart';
 import '../viewmodel/equipment_view_model.dart';
 
 class EquipmentFormScreen extends StatefulWidget {
@@ -29,13 +32,13 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
   late final TextEditingController _fovHeightCtrl;
   late final TextEditingController _apertureCtrl;
   late List<Eyepiece> _eyepieces;
+  late EquipmentCaptureCapability _captureCapability;
   String? _autofocusEyepieceId;
 
   bool _isSaving = false;
-  bool get _isEditing =>
-      context.read<EquipmentViewModel>().equipment.any(
-            (e) => e.id == widget.initial.id,
-          );
+  bool get _isEditing => context.read<EquipmentViewModel>().equipment.any(
+    (e) => e.id == widget.initial.id,
+  );
 
   @override
   void initState() {
@@ -62,6 +65,8 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
       text: e.apertureMm?.toStringAsFixed(0) ?? '',
     );
     _eyepieces = List<Eyepiece>.from(e.eyepieces);
+    _captureCapability =
+        e.effectiveCaptureCapability ?? const EquipmentCaptureCapability();
   }
 
   @override
@@ -117,6 +122,12 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
       }
       fovWidth = fov.$1;
       fovHeight = fov.$2;
+      try {
+        _captureCapability.validate();
+      } catch (error) {
+        _showError(error.toString().replaceFirst('Invalid argument(s): ', ''));
+        return;
+      }
     } else {
       final aperture = _parseDouble(_apertureCtrl.text);
       if (focal == null || aperture == null) {
@@ -148,10 +159,8 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
       purpose: _purpose,
       isActive: _isActive,
       focalLengthMm: focal,
-      fovWidthDegrees:
-          _purpose == EquipmentPurpose.imaging ? fovWidth : null,
-      fovHeightDegrees:
-          _purpose == EquipmentPurpose.imaging ? fovHeight : null,
+      fovWidthDegrees: _purpose == EquipmentPurpose.imaging ? fovWidth : null,
+      fovHeightDegrees: _purpose == EquipmentPurpose.imaging ? fovHeight : null,
       apertureMm: _purpose == EquipmentPurpose.visual
           ? _parseDouble(_apertureCtrl.text)
           : null,
@@ -165,6 +174,15 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
             ),
           )
           .toList(),
+      azExposureCapability: _legacyExposureFor(
+        EquipmentCaptureModeCapability.altAzId,
+        widget.initial.azExposureCapability,
+      ),
+      eqExposureCapability: _legacyExposureFor(
+        EquipmentCaptureModeCapability.equatorialId,
+        widget.initial.eqExposureCapability,
+      ),
+      captureCapability: _captureCapability.isEmpty ? null : _captureCapability,
     );
 
     final ok = await context.read<EquipmentViewModel>().save(equipment);
@@ -174,16 +192,14 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
     if (ok) {
       Navigator.of(context).pop();
     } else {
-      _showError(
-        context.read<EquipmentViewModel>().errorMessage ?? '저장 실패',
-      );
+      _showError(context.read<EquipmentViewModel>().errorMessage ?? '저장 실패');
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _addEyepiece() {
@@ -261,6 +277,12 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
             _buildTextField(_focalCtrl, '초점거리 (mm)', '160'),
             const SizedBox(height: 12),
             _buildFovFields(),
+            EquipmentCaptureCapabilityEditor(
+              value: _captureCapability,
+              onChanged: (value) => setState(() {
+                _captureCapability = value;
+              }),
+            ),
           ] else ...[
             _buildTextField(_apertureCtrl, '구경 (mm)', '90'),
             const SizedBox(height: 12),
@@ -319,22 +341,13 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
       children: [
         const Text(
           'FOV (가로 × 세로 °)',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
         const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: _buildTextField(
-                _fovWidthCtrl,
-                '가로',
-                '2.24',
-              ),
-            ),
+            Expanded(child: _buildTextField(_fovWidthCtrl, '가로', '2.24')),
             const Padding(
               padding: EdgeInsets.fromLTRB(8, 28, 8, 0),
               child: Text(
@@ -346,25 +359,33 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
                 ),
               ),
             ),
-            Expanded(
-              child: _buildTextField(
-                _fovHeightCtrl,
-                '세로',
-                '3.99',
-              ),
-            ),
+            Expanded(child: _buildTextField(_fovHeightCtrl, '세로', '3.99')),
           ],
         ),
         const SizedBox(height: 4),
         const Text(
           '예: S50 0.72×1.28°, S30 Pro 2.24×3.99°',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
         ),
       ],
     );
+  }
+
+  EquipmentExposureCapability? _legacyExposureFor(
+    String modeId,
+    EquipmentExposureCapability? fallback,
+  ) {
+    final mode = _captureCapability.modeById(modeId);
+    if (mode == null) return null;
+    final capability = mode.exposureCapability;
+    // The current NAS API only knows discrete/range AZ/EQ capabilities.
+    // Keep its last compatible value when the new local profile uses the
+    // free-input variant, rather than sending an unsupported discriminator.
+    return switch (capability) {
+      DiscreteExposureCapability() || RangeExposureCapability() => capability,
+      FreeInputExposureCapability() => fallback,
+      null => null,
+    };
   }
 
   Widget _buildTextField(
@@ -413,10 +434,8 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
       ),
       items: items
           .map(
-            (item) => DropdownMenuItem<T>(
-              value: item,
-              child: Text(labelOf(item)),
-            ),
+            (item) =>
+                DropdownMenuItem<T>(value: item, child: Text(labelOf(item))),
           )
           .toList(),
       onChanged: onChanged,
@@ -450,8 +469,12 @@ class _EyepieceEditorState extends State<_EyepieceEditor> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.eyepiece.name);
-    _focalCtrl = TextEditingController(text: _formatLength(widget.eyepiece.focalLengthMm));
-    _afovCtrl = TextEditingController(text: _formatLength(widget.eyepiece.afovDegrees));
+    _focalCtrl = TextEditingController(
+      text: _formatLength(widget.eyepiece.focalLengthMm),
+    );
+    _afovCtrl = TextEditingController(
+      text: _formatLength(widget.eyepiece.afovDegrees),
+    );
   }
 
   String _formatLength(double value) {

@@ -57,6 +57,8 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
   late bool _favorite;
   late List<HorizonPoint> _points;
   late List<BlockedAzimuthRange> _blockedRanges;
+  HorizonGraphSelection? _horizonSelection;
+  HorizonBlockedRangeSelection? _blockedSelection;
   List<Equipment> _equipment = const [];
   bool _saving = false;
   bool _derivingSkyQuality = false;
@@ -141,6 +143,10 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     return value.isEmpty ? null : value;
   }
 
+  String _formatAzimuth(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+
   Future<void> _useCurrentLocation() async {
     try {
       final locationService = context.read<LocationService>();
@@ -194,6 +200,7 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     setState(() {
       _points = result.points;
       _blockedRanges = result.blockedRanges;
+      _horizonSelection = null;
     });
   }
 
@@ -331,6 +338,10 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
                 source: existing?.source ?? HorizonDataSource.manual,
               );
               try {
+                if (point.minAltitude < 0 ||
+                    (point.maxAltitude != null && point.maxAltitude! < 0)) {
+                  throw ArgumentError('시야 그래프 고도는 0° 이상이어야 합니다.');
+                }
                 ObservationSiteValidator.validateHorizonPoint(point);
                 final duplicate = _points.any(
                   (item) =>
@@ -358,6 +369,11 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
         _points[index] = result;
       }
       _points.sort((a, b) => a.azimuth.compareTo(b.azimuth));
+      _horizonSelection = HorizonGraphSelection(
+        pointId: result.id,
+        azimuth: result.azimuth,
+        boundary: _horizonSelection?.boundary ?? HorizonBoundaryKind.minimum,
+      );
     });
   }
 
@@ -407,10 +423,140 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
     });
   }
 
+  void _selectHorizon(HorizonGraphSelection selection) {
+    setState(() {
+      _horizonSelection = selection;
+      _blockedSelection = null;
+    });
+  }
+
+  void _selectBlockedBoundary(HorizonBlockedRangeSelection selection) {
+    setState(() {
+      _blockedSelection = selection;
+      _horizonSelection = null;
+    });
+  }
+
+  void _dragBlockedBoundary(
+    HorizonBlockedRangeSelection selection,
+    double azimuth,
+  ) {
+    final index = _blockedRanges.indexWhere(
+      (range) => range.id == selection.rangeId,
+    );
+    if (index < 0) return;
+    final range = _blockedRanges[index];
+    final normalized = ((azimuth % 360) + 360) % 360;
+    setState(() {
+      _blockedRanges[index] = BlockedAzimuthRange(
+        id: range.id,
+        observationSiteId: range.observationSiteId,
+        startAzimuth: selection.boundary == BlockedRangeBoundaryKind.start
+            ? normalized
+            : range.startAzimuth,
+        endAzimuth: selection.boundary == BlockedRangeBoundaryKind.end
+            ? normalized
+            : range.endAzimuth,
+        reason: range.reason,
+        source: range.source,
+      );
+      _blockedSelection = HorizonBlockedRangeSelection(
+        rangeId: selection.rangeId,
+        boundary: selection.boundary,
+        azimuth: normalized,
+      );
+      _horizonSelection = null;
+    });
+  }
+
+  void _dragHorizonBoundary(HorizonGraphSelection selection, double altitude) {
+    final index = _points.indexWhere((point) => point.id == selection.pointId);
+    if (index < 0) return;
+    final point = _points[index];
+    setState(() {
+      _points[index] = switch (selection.boundary) {
+        HorizonBoundaryKind.minimum => point.copyWith(
+          minAltitude: altitude.clamp(0, point.maxAltitude ?? 90).toDouble(),
+        ),
+        HorizonBoundaryKind.maximum => point.copyWith(
+          maxAltitude: altitude.clamp(point.minAltitude, 90).toDouble(),
+        ),
+      };
+      _horizonSelection = selection;
+    });
+  }
+
+  HorizonPoint? get _selectedHorizonPoint {
+    final pointId = _horizonSelection?.pointId;
+    if (pointId == null) return null;
+    for (final point in _points) {
+      if (point.id == pointId) return point;
+    }
+    return null;
+  }
+
+  void _addPointAtGraphSelection() {
+    final selection = _horizonSelection;
+    if (selection == null) return;
+    final normalizedAzimuth = selection.azimuth % 360;
+    final existingIndex = _points.indexWhere(
+      (point) => (point.azimuth - normalizedAzimuth).abs() < 1e-9,
+    );
+    if (existingIndex >= 0) {
+      final existing = _points[existingIndex];
+      setState(() {
+        _horizonSelection = HorizonGraphSelection(
+          pointId: existing.id,
+          azimuth: existing.azimuth,
+          boundary: selection.boundary,
+        );
+      });
+      return;
+    }
+
+    final minimum = const HorizonVisibilityService().minimumVisibleAltitude(
+      _horizonProfile,
+      normalizedAzimuth,
+    );
+    final maximum = const HorizonVisibilityService().maximumVisibleAltitude(
+      _horizonProfile,
+      normalizedAzimuth,
+    );
+    final point = HorizonPoint(
+      id: _uuid.v4(),
+      observationSiteId: _siteId,
+      azimuth: normalizedAzimuth,
+      minAltitude: minimum.clamp(0, 90).toDouble(),
+      maxAltitude: maximum >= 90 ? null : maximum.clamp(0, 90).toDouble(),
+      sortOrder: _points.length,
+      source: HorizonDataSource.manual,
+    );
+    setState(() {
+      _points.add(point);
+      _points.sort((a, b) => a.azimuth.compareTo(b.azimuth));
+      _horizonSelection = HorizonGraphSelection(
+        pointId: point.id,
+        azimuth: point.azimuth,
+        boundary: selection.boundary,
+      );
+    });
+  }
+
+  void _removeHorizonPoint(HorizonPoint point) {
+    setState(() {
+      _points.removeWhere((item) => item.id == point.id);
+      if (_horizonSelection?.pointId == point.id) {
+        _horizonSelection = null;
+      }
+    });
+  }
+
   void _clearHorizon() {
     setState(() {
       _points.clear();
       _blockedRanges.clear();
+      _horizonSelection = null;
+      _blockedSelection = null;
     });
   }
 
@@ -439,6 +585,7 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
                 onChanged: (value) => end = value,
               ),
               TextFormField(
+                key: const Key('blocked-range-reason'),
                 initialValue: reason,
                 onChanged: (value) => reason = value,
                 decoration: const InputDecoration(labelText: '사유 (선택)'),
@@ -488,7 +635,229 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
       } else {
         _blockedRanges[index] = result;
       }
+      final boundary = _blockedSelection?.rangeId == result.id
+          ? _blockedSelection!.boundary
+          : BlockedRangeBoundaryKind.start;
+      _blockedSelection = HorizonBlockedRangeSelection(
+        rangeId: result.id,
+        boundary: boundary,
+        azimuth: boundary == BlockedRangeBoundaryKind.start
+            ? result.startAzimuth
+            : result.endAzimuth,
+      );
+      _horizonSelection = null;
     });
+  }
+
+  BlockedAzimuthRange? get _selectedBlockedRange {
+    final rangeId = _blockedSelection?.rangeId;
+    if (rangeId == null) return null;
+    for (final range in _blockedRanges) {
+      if (range.id == rangeId) return range;
+    }
+    return null;
+  }
+
+  Widget _selectedBlockedRangeEditor(
+    BuildContext context,
+    BlockedAzimuthRange range,
+  ) {
+    final selection = _blockedSelection!;
+    final colors = Theme.of(context).colorScheme;
+    final boundaryLabel = selection.boundary == BlockedRangeBoundaryKind.start
+        ? '시작 경계'
+        : '종료 경계';
+    final selectedAzimuth = selection.boundary == BlockedRangeBoundaryKind.start
+        ? range.startAzimuth
+        : range.endAzimuth;
+    return Card(
+      key: const Key('horizon-selection-summary'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.block_outlined, size: 18, color: colors.error),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '선택한 완전 차폐 경계',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Text(
+                  '$boundaryLabel ${_formatAzimuth(selectedAzimuth)}°',
+                  key: const Key('blocked-selection-value'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '완전 차폐: ${_formatAzimuth(range.startAzimuth)}° → '
+              '${_formatAzimuth(range.endAzimuth)}°',
+              key: const Key('blocked-selection-range'),
+            ),
+            if (range.reason?.trim().isNotEmpty ?? false) ...[
+              const SizedBox(height: 4),
+              Text(
+                '사유: ${range.reason}',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            const Text(
+              '좌우로 드래그하여 방위각 조정 · 1° 단위',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              key: const Key('edit-selected-blocked-range'),
+              onPressed: () => _editBlockedRange(range),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('시작·종료 방위각 정확히 입력'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _selectedHorizonEditor(BuildContext context) {
+    final blockedRange = _selectedBlockedRange;
+    if (blockedRange != null) {
+      return _selectedBlockedRangeEditor(context, blockedRange);
+    }
+    final selection = _horizonSelection;
+    final point = _selectedHorizonPoint;
+    final colors = Theme.of(context).colorScheme;
+    if (selection == null) {
+      return Card(
+        key: const Key('horizon-selection-summary'),
+        margin: EdgeInsets.zero,
+        child: const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text(
+            '고도 지점은 위아래로, 완전 차폐 경계 핸들은 좌우로 '
+            '드래그해 1° 단위로 조절할 수 있습니다.',
+          ),
+        ),
+      );
+    }
+
+    final minimum =
+        point?.minAltitude ??
+        const HorizonVisibilityService().minimumVisibleAltitude(
+          _horizonProfile,
+          selection.azimuth,
+        );
+    final maximum =
+        point?.maxAltitude ??
+        const HorizonVisibilityService().maximumVisibleAltitude(
+          _horizonProfile,
+          selection.azimuth,
+        );
+    final selectedAltitude = selection.boundary == HorizonBoundaryKind.minimum
+        ? minimum
+        : maximum;
+    final boundaryLabel = selection.boundary == HorizonBoundaryKind.minimum
+        ? '하단 경계'
+        : '상단 경계';
+
+    return Card(
+      key: const Key('horizon-selection-summary'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  point == null ? Icons.add_location_alt_outlined : Icons.tune,
+                  size: 18,
+                  color: colors.primary,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    point == null ? '새 지점 후보' : '선택한 측정 지점',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Text(
+                  '${selection.azimuth.toStringAsFixed(0)}° · '
+                  '$boundaryLabel ${selectedAltitude.toStringAsFixed(0)}°',
+                  key: const Key('horizon-selection-value'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SegmentedButton<HorizonBoundaryKind>(
+              key: const Key('horizon-boundary-selector'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: HorizonBoundaryKind.minimum,
+                  label: Text('하단 경계'),
+                ),
+                ButtonSegment(
+                  value: HorizonBoundaryKind.maximum,
+                  label: Text('상단 경계'),
+                ),
+              ],
+              selected: {selection.boundary},
+              onSelectionChanged: (selected) {
+                setState(() {
+                  _horizonSelection = HorizonGraphSelection(
+                    pointId: selection.pointId,
+                    azimuth: selection.azimuth,
+                    boundary: selected.single,
+                  );
+                });
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '방위각 ${selection.azimuth.toStringAsFixed(1)}° · '
+              '가시 고도 ${minimum.toStringAsFixed(1)}°~${maximum.toStringAsFixed(1)}°',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            if (point != null) ...[
+              const SizedBox(height: 6),
+              const Text(
+                '위아래로 드래그하여 고도 조정 · 1° 단위',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 10),
+            if (point == null)
+              FilledButton.icon(
+                key: const Key('add-selected-horizon-point'),
+                onPressed: _addPointAtGraphSelection,
+                icon: const Icon(Icons.add),
+                label: const Text('이 방위각에 지점 추가'),
+              )
+            else
+              OutlinedButton.icon(
+                key: const Key('edit-selected-horizon-point'),
+                onPressed: () => _editHorizonPoint(point),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('방위각·고도 정확히 입력'),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -750,9 +1119,76 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
             HorizonVisibilityOverview(
               points: _points,
               blockedRanges: _blockedRanges,
+              editable: true,
+              selection: _horizonSelection,
+              blockedSelection: _blockedSelection,
+              onSelectionChanged: _selectHorizon,
+              onAltitudeChanged: _dragHorizonBoundary,
+              onBlockedSelectionChanged: _selectBlockedBoundary,
+              onBlockedAzimuthChanged: _dragBlockedBoundary,
             ),
             const SizedBox(height: 12),
+            _selectedHorizonEditor(context),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('add-horizon-point'),
+                  onPressed: _editHorizonPoint,
+                  icon: const Icon(Icons.add),
+                  label: const Text('정확한 지점 추가'),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('add-blocked-range'),
+                  onPressed: _editBlockedRange,
+                  icon: const Icon(Icons.block_outlined),
+                  label: const Text('완전 차폐 구간 추가'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('막힌 방향', style: Theme.of(context).textTheme.titleSmall),
+            const Text(
+              '완전 차폐 구간은 시야 그래프에 가려진 영역으로 표시됩니다.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            if (_blockedRanges.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  '등록된 완전 차폐 구간이 없습니다.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ..._blockedRanges.map(
+              (range) => ListTile(
+                key: Key('blocked-range-${range.id}'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  '${_formatAzimuth(range.startAzimuth)}° → '
+                  '${_formatAzimuth(range.endAzimuth)}°',
+                ),
+                subtitle: range.reason == null ? null : Text(range.reason!),
+                onTap: () => _editBlockedRange(range),
+                trailing: IconButton(
+                  tooltip: '차폐 구간 삭제',
+                  onPressed: () => setState(() {
+                    _blockedRanges.removeWhere((item) => item.id == range.id);
+                    if (_blockedSelection?.rangeId == range.id) {
+                      _blockedSelection = null;
+                    }
+                  }),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ),
+            ),
             if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) ...[
+              const SizedBox(height: 12),
               FilledButton.icon(
                 key: const Key('start-horizon-scan'),
                 onPressed: _openHorizonScan,
@@ -793,50 +1229,52 @@ class _ObservationSiteEditScreenState extends State<ObservationSiteEditScreen> {
                 label: const Text('시야 제한 없음'),
               ),
             ),
-            Text('막힌 방향', style: Theme.of(context).textTheme.titleSmall),
-            ..._blockedRanges.map(
-              (range) => ListTile(
-                key: Key('blocked-range-${range.id}'),
-                contentPadding: EdgeInsets.zero,
-                title: Text('${range.startAzimuth}° → ${range.endAzimuth}°'),
-                subtitle: range.reason == null ? null : Text(range.reason!),
-                onTap: () => _editBlockedRange(range),
-                trailing: IconButton(
-                  onPressed: () => setState(() => _blockedRanges.remove(range)),
-                  icon: const Icon(Icons.delete_outline),
+            ExpansionTile(
+              key: const Key('advanced-horizon-editor'),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('고급 편집'),
+              subtitle: Text('전체 측정 지점 ${_points.length}개'),
+              children: [
+                if (_points.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      '등록된 측정 지점이 없습니다.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ..._points.map(
+                  (point) => ListTile(
+                    key: Key('horizon-point-${point.id}'),
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('방향 ${point.azimuth}°'),
+                    subtitle: Text(
+                      point.maxAltitude == null
+                          ? '최소 가시 고도 ${point.minAltitude.toStringAsFixed(0)}°'
+                          : '가시 고도 ${point.minAltitude.toStringAsFixed(0)}°~${point.maxAltitude!.toStringAsFixed(0)}°',
+                    ),
+                    onTap: () {
+                      _selectHorizon(
+                        HorizonGraphSelection(
+                          pointId: point.id,
+                          azimuth: point.azimuth,
+                          boundary: HorizonBoundaryKind.minimum,
+                        ),
+                      );
+                      _editHorizonPoint(point);
+                    },
+                    trailing: IconButton(
+                      tooltip: '측정 지점 삭제',
+                      onPressed: () => _removeHorizonPoint(point),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            OutlinedButton.icon(
-              key: const Key('add-blocked-range'),
-              onPressed: _editBlockedRange,
-              icon: const Icon(Icons.add),
-              label: const Text('막힌 방향 추가'),
-            ),
-            const SizedBox(height: 16),
-            Text('세부 방향 지점', style: Theme.of(context).textTheme.titleSmall),
-            ..._points.map(
-              (point) => ListTile(
-                key: Key('horizon-point-${point.id}'),
-                contentPadding: EdgeInsets.zero,
-                title: Text('방향 ${point.azimuth}°'),
-                subtitle: Text(
-                  point.maxAltitude == null
-                      ? '최소 가시 고도 ${point.minAltitude.toStringAsFixed(0)}°'
-                      : '가시 고도 ${point.minAltitude.toStringAsFixed(0)}°~${point.maxAltitude!.toStringAsFixed(0)}°',
-                ),
-                onTap: () => _editHorizonPoint(point),
-                trailing: IconButton(
-                  onPressed: () => setState(() => _points.remove(point)),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ),
-            ),
-            OutlinedButton.icon(
-              key: const Key('add-horizon-point'),
-              onPressed: _editHorizonPoint,
-              icon: const Icon(Icons.add),
-              label: const Text('방향별 고도 추가'),
+              ],
             ),
             const SizedBox(height: 24),
             FilledButton.icon(

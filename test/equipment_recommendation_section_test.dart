@@ -113,6 +113,98 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'renders AZ and EQ capture guidance without changing fit details',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: EquipmentRecommendationSection(
+                recommendation: _captureRecommendation,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final summary = find.byKey(
+        const ValueKey('equipment-imaging-summary-s30'),
+      );
+      expect(summary, findsOneWidget);
+      expect(
+        find.descendant(of: summary, matching: find.text('38%')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('equipment-capture-mode-s30-alt_az')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('equipment-capture-mode-s30-equatorial')),
+        findsOneWidget,
+      );
+      expect(find.text('AZ'), findsOneWidget);
+      expect(find.text('EQ'), findsOneWidget);
+      expect(find.text('20초'), findsOneWidget);
+      expect(find.text('30초'), findsOneWidget);
+      expect(find.text('5초'), findsOneWidget);
+      expect(find.text('기본 촬영'), findsNWidgets(2));
+      expect(find.text('밝은 영역 보호'), findsOneWidget);
+      expect(find.text('희미한 구조'), findsOneWidget);
+      expect(find.text('시험 촬영 시작값'), findsNWidgets(6));
+      expect(find.textContaining('Bortle 9'), findsOneWidget);
+      expect(find.textContaining('듀얼밴드'), findsNWidgets(2));
+    },
+  );
+
+  testWidgets('stacks AZ and EQ capture guidance on a narrow screen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 360,
+                child: EquipmentRecommendationSection(
+                  recommendation: _captureRecommendation,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final az = find.byKey(const ValueKey('equipment-capture-mode-s30-alt_az'));
+    final eq = find.byKey(
+      const ValueKey('equipment-capture-mode-s30-equatorial'),
+    );
+    expect(tester.getTopLeft(az).dy, lessThan(tester.getTopLeft(eq).dy));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('legacy equipment keeps fit result and shows setup hint', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: EquipmentRecommendationSection(recommendation: _recommendation),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('equipment-capture-settings-empty-s30')),
+      findsOneWidget,
+    );
+    expect(find.text('38%'), findsOneWidget);
+  });
+
   testWidgets('imaging-only target does not render the visual section', (
     tester,
   ) async {
@@ -310,4 +402,78 @@ const _imagingRecommendation = ImagingEquipmentRecommendation(
   reason: '화각에 여유 있게 들어옴',
   screenFillPercent: 38,
   framingRecommendation: FramingRecommendation.good,
+);
+
+const _captureRecommendation = ObjectEquipmentRecommendation(
+  imaging: [
+    ImagingEquipmentRecommendation(
+      equipment: _imaging,
+      score: 80,
+      starCount: 4,
+      reason: '화각에 여유 있게 들어옴',
+      screenFillPercent: 38,
+      framingRecommendation: FramingRecommendation.good,
+      captureSettings: [
+        CaptureModeRecommendation(
+          modeId: 'alt_az',
+          mode: CaptureRecommendationMode.altAz,
+          label: 'AZ',
+          recommendedExposureSeconds: 20,
+          exposureSupportLabel: '지원: 2/5/10/20/30/60초',
+          exposureConfidence: CaptureRecommendationConfidence.experimental,
+          exposurePolicyId: 'capture.exposure.capability-relative.v1',
+          exposureReason: '지원 범위 안에서 시험 촬영을 권장합니다.',
+          exposureInputs: ['천체 발광성운', '모드 AZ'],
+          exposureRecommendations: [
+            CaptureExposureRecommendation(
+              purpose: CaptureExposurePurpose.standard,
+              exposureSeconds: 20,
+              confidence: CaptureRecommendationConfidence.experimental,
+              policyId: 'capture.exposure.purpose-aware.v2',
+              reason: '기본 촬영 시작값',
+            ),
+            CaptureExposureRecommendation(
+              purpose: CaptureExposurePurpose.highlightProtection,
+              exposureSeconds: 5,
+              confidence: CaptureRecommendationConfidence.experimental,
+              policyId: 'capture.exposure.highlight-protection.v1',
+              reason: 'HDR 보조 프레임',
+            ),
+            CaptureExposureRecommendation(
+              purpose: CaptureExposurePurpose.faintStructure,
+              confidence: CaptureRecommendationConfidence.experimental,
+              policyId: 'capture.exposure.faint-structure-integration.v1',
+              reason: '총 적산시간 확보',
+              guidance: '기본 노출 유지 · 총 적산시간 확보',
+            ),
+          ],
+          exposureAdvisories: ['관측지 집 · Bortle 9'],
+          recommendedFilters: ['듀얼밴드'],
+          supportedFilters: ['필터 끄기', '듀얼밴드'],
+          filterReason: '발광성운 특성과 장비 지원 필터의 교집합',
+          filterConfidence: CaptureRecommendationConfidence.experimental,
+          filterPolicyId: 'capture.filter.target-semantics.v1',
+          cautions: ['AZ 추적은 필드 회전 영향을 받을 수 있습니다.'],
+        ),
+        CaptureModeRecommendation(
+          modeId: 'equatorial',
+          mode: CaptureRecommendationMode.equatorial,
+          label: 'EQ',
+          recommendedExposureSeconds: 30,
+          exposureSupportLabel: '지원: 2/5/10/20/30/60초',
+          exposureConfidence: CaptureRecommendationConfidence.experimental,
+          exposurePolicyId: 'capture.exposure.capability-relative.v1',
+          exposureReason: '지원 범위 안에서 시험 촬영을 권장합니다.',
+          exposureInputs: ['천체 발광성운', '모드 EQ'],
+          recommendedFilters: ['듀얼밴드'],
+          supportedFilters: ['필터 끄기', '듀얼밴드'],
+          filterReason: '발광성운 특성과 장비 지원 필터의 교집합',
+          filterConfidence: CaptureRecommendationConfidence.experimental,
+          filterPolicyId: 'capture.filter.target-semantics.v1',
+        ),
+      ],
+    ),
+  ],
+  visual: [],
+  showVisual: false,
 );

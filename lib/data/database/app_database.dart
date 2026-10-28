@@ -194,7 +194,8 @@ class AppDatabase {
         ${DatabaseConstants.colApertureMm} REAL,
         ${DatabaseConstants.colSortOrder} INTEGER NOT NULL DEFAULT 0,
         ${DatabaseConstants.colAzExposureCapabilityJson} TEXT,
-        ${DatabaseConstants.colEqExposureCapabilityJson} TEXT
+        ${DatabaseConstants.colEqExposureCapabilityJson} TEXT,
+        ${DatabaseConstants.colCaptureCapabilityJson} TEXT
       )
     ''');
 
@@ -447,6 +448,12 @@ class AppDatabase {
     }
     if (oldVersion < 35) {
       await _createMultiNightFramingTables(db);
+    }
+    if (oldVersion < 36 && newVersion >= 36) {
+      await db.execute('''
+        ALTER TABLE ${DatabaseConstants.tableEquipment}
+        ADD COLUMN ${DatabaseConstants.colCaptureCapabilityJson} TEXT
+      ''');
     }
   }
 

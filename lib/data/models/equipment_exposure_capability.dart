@@ -1,4 +1,4 @@
-enum ExposureCapabilityType { discrete, range }
+enum ExposureCapabilityType { discrete, range, freeInputRange }
 
 sealed class EquipmentExposureCapability {
   const EquipmentExposureCapability();
@@ -15,6 +15,10 @@ sealed class EquipmentExposureCapability {
         minSeconds: _number(json, 'min_seconds'),
         maxSeconds: _number(json, 'max_seconds'),
         stepSeconds: _number(json, 'step_seconds'),
+      ),
+      'free_input_range' => FreeInputExposureCapability(
+        minSeconds: _number(json, 'min_seconds'),
+        maxSeconds: _number(json, 'max_seconds'),
       ),
       _ => throw const FormatException('Unknown exposure capability type.'),
     };
@@ -56,6 +60,26 @@ class RangeExposureCapability extends EquipmentExposureCapability {
     'min_seconds': minSeconds,
     'max_seconds': maxSeconds,
     'step_seconds': stepSeconds,
+  };
+}
+
+class FreeInputExposureCapability extends EquipmentExposureCapability {
+  const FreeInputExposureCapability({
+    required this.minSeconds,
+    required this.maxSeconds,
+  });
+
+  final double minSeconds;
+  final double maxSeconds;
+
+  @override
+  ExposureCapabilityType get type => ExposureCapabilityType.freeInputRange;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'free_input_range',
+    'min_seconds': minSeconds,
+    'max_seconds': maxSeconds,
   };
 }
 

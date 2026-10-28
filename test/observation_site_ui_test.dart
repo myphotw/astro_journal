@@ -12,6 +12,7 @@ import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/data/repositories/observation_site_repository.dart';
 import 'package:astro_journal/features/settings/view/observation_site_list_screen.dart';
+import 'package:astro_journal/features/observation_site/widgets/horizon_visibility_overview.dart';
 import 'package:astro_journal/services/geocoding_service.dart';
 import 'package:astro_journal/services/location_service.dart';
 import 'package:astro_journal/services/observation_condition_service.dart';
@@ -257,10 +258,10 @@ void main() {
     await tester.enterText(find.byKey(const Key('blocked-range-end')), '20');
     await tester.tap(find.widgetWithText(FilledButton, '적용'));
     await tester.pumpAndSettle();
-    expect(find.text('350.0° → 20.0°'), findsOneWidget);
+    expect(find.text('350° → 20°'), findsOneWidget);
 
     final blockedRangeTile = find.ancestor(
-      of: find.text('350.0° → 20.0°'),
+      of: find.text('350° → 20°'),
       matching: find.byType(ListTile),
     );
     await tester.tap(
@@ -278,14 +279,17 @@ void main() {
     await tester.enterText(find.byKey(const Key('horizon-min-altitude')), '25');
     await tester.tap(find.widgetWithText(FilledButton, '적용'));
     await tester.pumpAndSettle();
-    expect(find.text('방향 120.0°'), findsOneWidget);
+    expect(
+      find.byKey(const Key('edit-selected-horizon-point')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.text('방향 120.0°'));
+    await tester.tap(find.byKey(const Key('edit-selected-horizon-point')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('horizon-min-altitude')), '30');
     await tester.tap(find.widgetWithText(FilledButton, '적용'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('최소 가시 고도 30°'), findsOneWidget);
+    expect(find.textContaining('가시 고도 30.0°~90.0°'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const Key('save-observation-site')));
     await tester.tap(find.byKey(const Key('save-observation-site')));
@@ -516,6 +520,181 @@ void main() {
     expect(repository.sites.single.blockedAzimuthRanges, isEmpty);
   });
 
+  testWidgets(
+    'graph editing clamps boundaries and adds an interpolated point',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = _FakeObservationSiteRepository()
+        ..sites.add(
+          ObservationSite(
+            id: 'graph-site',
+            name: '그래프 관측지',
+            latitude: 37.5,
+            longitude: 127,
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+            horizonPoints: const [
+              HorizonPoint(
+                id: 'north',
+                observationSiteId: 'graph-site',
+                azimuth: 0,
+                minAltitude: 10,
+                maxAltitude: 70,
+              ),
+              HorizonPoint(
+                id: 'south',
+                observationSiteId: 'graph-site',
+                azimuth: 180,
+                minAltitude: 20,
+                maxAltitude: 60,
+              ),
+            ],
+            blockedAzimuthRanges: const [
+              BlockedAzimuthRange(
+                id: 'wrap',
+                observationSiteId: 'graph-site',
+                startAzimuth: 350,
+                endAzimuth: 20,
+              ),
+            ],
+          ),
+        );
+      await tester.pumpWidget(_app(repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('그래프 관측지'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('edit-observation-site-detail')));
+      await tester.pumpAndSettle();
+
+      final overview = tester.widget<HorizonVisibilityOverview>(
+        find.byType(HorizonVisibilityOverview),
+      );
+      overview.onAltitudeChanged!(
+        const HorizonGraphSelection(
+          pointId: 'south',
+          azimuth: 180,
+          boundary: HorizonBoundaryKind.minimum,
+        ),
+        80,
+      );
+      await tester.pump();
+
+      final graph = find.byKey(const Key('editable-horizon-graph'));
+      await tester.ensureVisible(graph);
+      await tester.pumpAndSettle();
+      final rect = tester.getRect(graph);
+      await tester.tapAt(
+        Offset(rect.left + rect.width * 90 / 360, rect.top + rect.height / 2),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const Key('add-selected-horizon-point')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('add-selected-horizon-point')));
+      await tester.pump();
+
+      await tester.ensureVisible(
+        find.byKey(const Key('save-observation-site')),
+      );
+      await tester.tap(find.byKey(const Key('save-observation-site')));
+      await tester.pumpAndSettle();
+
+      final saved = repository.sites.single;
+      expect(
+        saved.horizonPoints
+            .firstWhere((point) => point.id == 'south')
+            .minAltitude,
+        60,
+      );
+      expect(saved.horizonPoints.any((point) => point.azimuth == 90), isTrue);
+      expect(saved.blockedAzimuthRanges.single.id, 'wrap');
+    },
+  );
+
+  testWidgets(
+    'blocked boundary preview and numeric editing preserve reason on save',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = _FakeObservationSiteRepository()
+        ..sites.add(
+          ObservationSite(
+            id: 'blocked-site',
+            name: '차폐 관측지',
+            latitude: 37.5,
+            longitude: 127,
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+            blockedAzimuthRanges: const [
+              BlockedAzimuthRange(
+                id: 'wrap',
+                observationSiteId: 'blocked-site',
+                startAzimuth: 224,
+                endAzimuth: 89,
+                reason: '동쪽 건물',
+              ),
+            ],
+          ),
+        );
+      await tester.pumpWidget(_app(repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('차폐 관측지'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('edit-observation-site-detail')));
+      await tester.pumpAndSettle();
+
+      final overview = tester.widget<HorizonVisibilityOverview>(
+        find.byType(HorizonVisibilityOverview),
+      );
+      const selection = HorizonBlockedRangeSelection(
+        rangeId: 'wrap',
+        boundary: BlockedRangeBoundaryKind.end,
+        azimuth: 89,
+      );
+      overview.onBlockedSelectionChanged!(selection);
+      overview.onBlockedAzimuthChanged!(selection, 104);
+      await tester.pump();
+
+      expect(find.text('완전 차폐: 224° → 104°'), findsOneWidget);
+      expect(find.text('224° → 104°'), findsOneWidget);
+      await tester.ensureVisible(
+        find.byKey(const Key('edit-selected-blocked-range')),
+      );
+      await tester.tap(find.byKey(const Key('edit-selected-blocked-range')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('blocked-range-end')), '103');
+      await tester.tap(find.widgetWithText(FilledButton, '적용'));
+      await tester.pumpAndSettle();
+      expect(find.text('224° → 103°'), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('edit-selected-blocked-range')),
+      );
+      await tester.tap(find.byKey(const Key('edit-selected-blocked-range')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('blocked-range-end')), '104');
+      await tester.tap(find.widgetWithText(FilledButton, '적용'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(
+        find.byKey(const Key('save-observation-site')),
+      );
+      await tester.tap(find.byKey(const Key('save-observation-site')));
+      await tester.pumpAndSettle();
+
+      final savedRange = repository.sites.single.blockedAzimuthRanges.single;
+      expect(savedRange.startAzimuth, 224);
+      expect(savedRange.endAzimuth, 104);
+      expect(savedRange.reason, '동쪽 건물');
+    },
+  );
+
   testWidgets('shows validation error for an empty site name', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1;
@@ -622,7 +801,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('촬영 가능 시야'), findsWidgets);
-      expect(find.byKey(const Key('horizon-visibility-legend')), findsOneWidget);
+      expect(
+        find.byKey(const Key('horizon-visibility-legend')),
+        findsOneWidget,
+      );
       expect(find.text('보이는 하늘 영역'), findsOneWidget);
       expect(find.text('가려진 영역'), findsOneWidget);
       expect(

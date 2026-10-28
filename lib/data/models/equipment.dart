@@ -6,6 +6,7 @@ import '../../core/constants/equipment_purpose.dart';
 import '../../core/utils/fov_input_parser.dart';
 import 'eyepiece.dart';
 import 'equipment_exposure_capability.dart';
+import 'equipment_capture_capability.dart';
 
 class Equipment {
   const Equipment({
@@ -22,6 +23,7 @@ class Equipment {
     this.eyepieces = const [],
     this.azExposureCapability,
     this.eqExposureCapability,
+    this.captureCapability,
   });
 
   final String id;
@@ -44,6 +46,31 @@ class Equipment {
   final List<Eyepiece> eyepieces;
   final EquipmentExposureCapability? azExposureCapability;
   final EquipmentExposureCapability? eqExposureCapability;
+  final EquipmentCaptureCapability? captureCapability;
+
+  /// Returns the generalized local capability, or a compatibility projection
+  /// of the legacy AZ/EQ exposure fields when an old row has not been edited
+  /// with the extended equipment form yet.
+  EquipmentCaptureCapability? get effectiveCaptureCapability {
+    if (captureCapability != null) return captureCapability;
+    final modes = <EquipmentCaptureModeCapability>[
+      if (azExposureCapability != null)
+        EquipmentCaptureModeCapability(
+          id: EquipmentCaptureModeCapability.altAzId,
+          type: EquipmentCaptureModeType.altAz,
+          label: EquipmentCaptureModeType.altAz.label,
+          exposureCapability: azExposureCapability,
+        ),
+      if (eqExposureCapability != null)
+        EquipmentCaptureModeCapability(
+          id: EquipmentCaptureModeCapability.equatorialId,
+          type: EquipmentCaptureModeType.equatorial,
+          label: EquipmentCaptureModeType.equatorial.label,
+          exposureCapability: eqExposureCapability,
+        ),
+    ];
+    return modes.isEmpty ? null : EquipmentCaptureCapability(modes: modes);
+  }
 
   bool get isImaging => purpose == EquipmentPurpose.imaging;
   bool get isVisual => purpose == EquipmentPurpose.visual;
@@ -97,6 +124,9 @@ class Equipment {
           eqExposureCapability == null
           ? null
           : jsonEncode(eqExposureCapability!.toJson()),
+      DatabaseConstants.colCaptureCapabilityJson: captureCapability == null
+          ? null
+          : jsonEncode(captureCapability!.toJson()),
     };
   }
 
@@ -136,6 +166,9 @@ class Equipment {
       eqExposureCapability: _capability(
         map[DatabaseConstants.colEqExposureCapabilityJson],
       ),
+      captureCapability: _captureCapability(
+        map[DatabaseConstants.colCaptureCapabilityJson],
+      ),
     );
   }
 
@@ -155,6 +188,8 @@ class Equipment {
     bool clearAzExposureCapability = false,
     EquipmentExposureCapability? eqExposureCapability,
     bool clearEqExposureCapability = false,
+    EquipmentCaptureCapability? captureCapability,
+    bool clearCaptureCapability = false,
   }) {
     return Equipment(
       id: id ?? this.id,
@@ -174,6 +209,9 @@ class Equipment {
       eqExposureCapability: clearEqExposureCapability
           ? null
           : (eqExposureCapability ?? this.eqExposureCapability),
+      captureCapability: clearCaptureCapability
+          ? null
+          : (captureCapability ?? this.captureCapability),
     );
   }
 
@@ -184,6 +222,17 @@ class Equipment {
       throw const FormatException('Equipment exposure capability is invalid.');
     }
     return EquipmentExposureCapability.fromJson(
+      Map<String, dynamic>.from(decoded),
+    );
+  }
+
+  static EquipmentCaptureCapability? _captureCapability(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) {
+      throw const FormatException('Equipment capture capability is invalid.');
+    }
+    return EquipmentCaptureCapability.fromJson(
       Map<String, dynamic>.from(decoded),
     );
   }

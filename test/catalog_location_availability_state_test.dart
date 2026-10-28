@@ -1,9 +1,15 @@
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/core/constants/equipment_kind.dart';
+import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
+import 'package:astro_journal/data/models/equipment_recommendation.dart';
 import 'package:astro_journal/data/models/imaging_suitability_assessment.dart';
+import 'package:astro_journal/data/models/object_observation_window.dart';
 import 'package:astro_journal/data/models/observation_condition.dart';
 import 'package:astro_journal/data/models/observation_site.dart';
+import 'package:astro_journal/data/models/recommendation_result.dart';
+import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/models/target_imaging_availability.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
@@ -12,6 +18,7 @@ import 'package:astro_journal/data/repositories/shooting_record_repository.dart'
 import 'package:astro_journal/features/catalog/viewmodel/catalog_detail_view_model.dart';
 import 'package:astro_journal/services/base_exposure_settings_service.dart';
 import 'package:astro_journal/services/equipment/equipment_recommendation_service.dart';
+import 'package:astro_journal/services/equipment/equipment_capture_presets.dart';
 import 'package:astro_journal/services/exposure_policy.dart';
 import 'package:astro_journal/services/metadata_service.dart';
 import 'package:astro_journal/services/object_imaging_profile_provider.dart';
@@ -133,6 +140,36 @@ void main() {
       viewModel.dispose();
     },
   );
+
+  test(
+    'selected registered site feeds capture recommendation context',
+    () async {
+      final viewModel = _viewModel(
+        object: object,
+        sites: [home, gure],
+        availability: _AvailabilityService(),
+        condition: _ConditionService(_currentCondition),
+      );
+
+      await viewModel.load();
+      await viewModel.refreshAvailability();
+      await viewModel.selectObservationSite(gure.id);
+
+      final setting = viewModel
+          .equipmentRecommendation
+          .imaging
+          .single
+          .captureSettings
+          .first;
+      expect(
+        setting.exposureConfidence,
+        CaptureRecommendationConfidence.experimental,
+      );
+      expect(setting.filterInputs, contains('Bortle 4'));
+      expect(setting.filterInputs, isNot(contains('Bortle 7')));
+      viewModel.dispose();
+    },
+  );
 }
 
 final _currentCondition = ObservationCondition(
@@ -180,6 +217,22 @@ class _AvailabilityService implements TargetImagingAvailabilityService {
       object: object,
       referenceDate: referenceDate ?? DateTime(2026, 9, 17),
       isAvailableTonight: true,
+      usableMinutes: 90,
+      recommendation: RecommendationResult(
+        object: object,
+        reasons: const [],
+        season: '가을',
+        score: 80,
+        moonSeparation: 40,
+        observationWindow: ObjectObservationWindow(
+          currentAltitude: 35,
+          currentAzimuth: 180,
+          isCurrentlyVisible: true,
+          optimalAltitude: 55,
+          optimalTime: DateTime(2026, 9, 17, 22),
+          totalObservableMinutes: 120,
+        ),
+      ),
     );
   }
 
@@ -228,10 +281,17 @@ class _BaseExposureSettings extends BaseExposureSettingsService {
 
 class _ShootingRecords implements ShootingRecordRepository {
   @override
+  Future<List<ShootingRecord>> getByCelestialObjectId(String objectId) async =>
+      [];
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Catalogs implements CatalogRepository {
+  @override
+  Future<CatalogObject?> getById(String id) async => null;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -242,6 +302,22 @@ class _RegistrationService implements PhotoRegistrationService {
 }
 
 class _Equipment implements EquipmentRepository {
+  @override
+  Future<List<Equipment>> getAll({bool activeOnly = false}) async => [
+    Equipment(
+      id: 's30',
+      name: 'Seestar S30 Pro',
+      kind: EquipmentKind.smartTelescope,
+      purpose: EquipmentPurpose.imaging,
+      focalLengthMm: 160,
+      fovWidthDegrees: 2.24,
+      fovHeightDegrees: 3.99,
+      captureCapability: EquipmentCapturePresets.build(
+        EquipmentCapturePreset.seestarS30Pro,
+      ),
+    ),
+  ];
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

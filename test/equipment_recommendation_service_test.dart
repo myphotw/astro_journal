@@ -3,11 +3,14 @@ import 'package:astro_journal/core/constants/equipment_kind.dart';
 import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
+import 'package:astro_journal/data/models/equipment_capture_capability.dart';
+import 'package:astro_journal/data/models/equipment_exposure_capability.dart';
 import 'package:astro_journal/data/models/equipment_recommendation.dart';
 import 'package:astro_journal/data/models/eyepiece.dart';
 import 'package:astro_journal/data/models/recommendation_result.dart';
 import 'package:astro_journal/features/home/viewmodel/home_view_model.dart';
 import 'package:astro_journal/services/equipment/equipment_recommendation_service.dart';
+import 'package:astro_journal/services/equipment/equipment_capture_presets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -16,7 +19,10 @@ void main() {
   CatalogObject object({
     required String id,
     String type = '구상성단',
+    String? objectType,
+    String magnitude = '5.8',
     String? angularSize,
+    List<String> tags = const [],
   }) {
     return CatalogObject(
       id: id,
@@ -27,8 +33,10 @@ void main() {
       constellation: 'Hercules',
       ra: '16h41m',
       dec: "+36°28'",
-      magnitude: '5.8',
+      magnitude: magnitude,
+      objectType: objectType,
       angularSize: angularSize,
+      tags: tags,
     );
   }
 
@@ -425,6 +433,391 @@ void main() {
 
       expect(result.hasRegisteredEquipment, isFalse);
       expect(result.imaging, isEmpty);
+    });
+
+    test('capture settings do not change the existing imaging fit score', () {
+      final withoutCapability = seestarS30();
+      final withCapability = withoutCapability.copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.seestarS30Pro,
+        ),
+      );
+
+      final baseline = service.recommendForObject(
+        object: object(id: 'm13'),
+        equipment: [withoutCapability],
+      );
+      final extended = service.recommendForObject(
+        object: object(id: 'm13'),
+        equipment: [withCapability],
+      );
+
+      expect(extended.imaging.single.score, baseline.imaging.single.score);
+      expect(
+        extended.imaging.single.screenFillPercent,
+        baseline.imaging.single.screenFillPercent,
+      );
+      expect(extended.imaging.single.captureSettings, hasLength(2));
+    });
+
+    test('builds independent AZ and EQ capture setting guidance', () {
+      final equipment = seestarS30().copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.seestarS30Pro,
+        ),
+      );
+
+      final result = service.recommendForObject(
+        object: object(id: 'm42', type: '발광성운'),
+        equipment: [equipment],
+      );
+      final settings = result.imaging.single.captureSettings;
+
+      expect(settings.map((item) => item.mode), [
+        CaptureRecommendationMode.altAz,
+        CaptureRecommendationMode.equatorial,
+      ]);
+      expect(settings.first.exposureSupportLabel, contains('2/5/10/20/30/60초'));
+      expect(settings.last.exposureSupportLabel, contains('2/5/10/20/30/60초'));
+      expect(
+        settings.map((item) => item.exposureConfidence),
+        everyElement(CaptureRecommendationConfidence.experimental),
+      );
+      expect(
+        settings.first.recommendedExposureSeconds!,
+        lessThanOrEqualTo(settings.last.recommendedExposureSeconds!),
+      );
+    });
+
+    test('folds sensor derotation capability into the AZ display mode', () {
+      final equipment = seestarS30().copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.draco,
+        ),
+      );
+
+      final settings = service
+          .recommendForObject(
+            object: object(id: 'm42', type: '발광성운'),
+            equipment: [equipment],
+          )
+          .imaging
+          .single
+          .captureSettings;
+
+      expect(settings, hasLength(2));
+      final az = settings.singleWhere(
+        (item) => item.mode == CaptureRecommendationMode.altAz,
+      );
+      expect(az.label, 'AZ');
+      expect(az.usesSensorDerotation, isTrue);
+      expect(az.cautions.single, contains('EQ 추적과 동일'));
+    });
+
+    test('never returns an exposure outside the registered capability', () {
+      final captureCapability = EquipmentCapturePresets.build(
+        EquipmentCapturePreset.draco,
+      );
+      final equipment = seestarS30().copyWith(
+        captureCapability: captureCapability,
+      );
+      final settings = service
+          .recommendForObject(
+            object: object(id: 'm42', type: '발광성운'),
+            equipment: [equipment],
+          )
+          .imaging
+          .single
+          .captureSettings;
+
+      for (final setting in settings) {
+        final recommended = setting.recommendedExposureSeconds;
+        if (recommended != null) {
+          expect(
+            captureCapability.supportsExposure(setting.modeId, recommended),
+            isTrue,
+          );
+        }
+        expect(setting.exposureReason, contains('시작값'));
+      }
+    });
+
+    test(
+      'omits Gain for unsupported equipment and reports supported values',
+      () {
+        final seestar = seestarS30().copyWith(
+          captureCapability: EquipmentCapturePresets.build(
+            EquipmentCapturePreset.seestarS30Pro,
+          ),
+        );
+        final draco = seestarS30().copyWith(
+          id: 'draco',
+          captureCapability: EquipmentCapturePresets.build(
+            EquipmentCapturePreset.draco,
+          ),
+        );
+
+        final result = service.recommendForObject(
+          object: object(id: 'm42', type: '발광성운'),
+          equipment: [seestar, draco],
+        );
+        final seestarResult = result.imaging.singleWhere(
+          (item) => item.equipment.id == 's30',
+        );
+        final dracoResult = result.imaging.singleWhere(
+          (item) => item.equipment.id == 'draco',
+        );
+
+        expect(seestarResult.captureSettings.first.gainSupportLabel, isNull);
+        expect(
+          dracoResult.captureSettings.first.gainSupportLabel,
+          contains('240'),
+        );
+        expect(dracoResult.captureSettings.first.recommendedGain, isNull);
+      },
+    );
+
+    test('intersects target filter semantics with equipment support', () {
+      final equipment = seestarS30().copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.seestarS30Pro,
+        ),
+      );
+
+      final emission = service.recommendForObject(
+        object: object(id: 'm42', type: '발광성운'),
+        equipment: [equipment],
+      );
+      final galaxy = service.recommendForObject(
+        object: object(id: 'm31', type: '은하'),
+        equipment: [equipment],
+      );
+
+      expect(emission.imaging.single.captureSettings.first.recommendedFilters, [
+        '듀얼밴드',
+      ]);
+      expect(galaxy.imaging.single.captureSettings.first.recommendedFilters, [
+        '필터 끄기',
+      ]);
+    });
+
+    test('records only observation environment inputs that were provided', () {
+      final equipment = seestarS30().copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.seestarS30Pro,
+        ),
+      );
+      final contextual = service.recommendForObject(
+        object: object(id: 'm31', type: '은하'),
+        equipment: [equipment],
+        captureContext: const CaptureRecommendationContext(
+          siteName: '집',
+          bortle: 8,
+          targetAltitude: 42,
+          moonIllumination: 0.8,
+          moonSeparation: 30,
+          observableMinutes: 90,
+        ),
+      );
+      final withoutContext = service.recommendForObject(
+        object: object(id: 'm31', type: '은하'),
+        equipment: [equipment],
+      );
+
+      final contextualSetting = contextual.imaging.single.captureSettings.first;
+      final fallbackSetting =
+          withoutContext.imaging.single.captureSettings.first;
+      expect(
+        contextualSetting.exposureAdvisories.join(' '),
+        contains('Bortle 8'),
+      );
+      expect(
+        contextualSetting.exposureAdvisories.join(' '),
+        contains('달 밝기 80%'),
+      );
+      expect(
+        fallbackSetting.exposureAdvisories.where(
+          (value) => value.startsWith('Bortle') || value.startsWith('달 '),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('shows SHO capability without inventing a channel ratio', () {
+      final equipment = seestarS30().copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.draco,
+        ),
+      );
+
+      final setting = service
+          .recommendForObject(
+            object: object(id: 'm42', type: '발광성운'),
+            equipment: [equipment],
+          )
+          .imaging
+          .single
+          .captureSettings
+          .first;
+      final sho = setting.channelCombinations.single;
+
+      expect(setting.recommendedFilters, contains('SHO'));
+      expect(sho.guidance, contains('합계 100%'));
+      expect(sho.recommendedPrimaryPercent, isNull);
+      expect(sho.recommendedSecondaryPercent, isNull);
+    });
+
+    test('keeps legacy equipment without capture capability recommendable', () {
+      final result = service.recommendForObject(
+        object: object(id: 'm13'),
+        equipment: [seestarS30()],
+      );
+
+      expect(result.imaging, hasLength(1));
+      expect(result.imaging.single.captureSettings, isEmpty);
+      expect(result.imaging.single.score, greaterThan(0));
+    });
+
+    test('M42 separates basic exposure from highlight protection', () {
+      final equipment = seestarS30().copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.seestarS30Pro,
+        ),
+      );
+      final settings = service
+          .recommendForObject(
+            object: object(
+              id: 'M42',
+              type: '성단과 성운',
+              objectType: '성단과 성운',
+              magnitude: '4.00',
+              angularSize: "90' × 60'",
+              tags: const ['발광성운'],
+            ),
+            equipment: [equipment],
+            captureContext: const CaptureRecommendationContext(
+              siteName: '집',
+              bortle: 9,
+              moonIllumination: 0.89,
+              moonSeparation: 38,
+            ),
+          )
+          .imaging
+          .single
+          .captureSettings;
+
+      final az = settings.singleWhere(
+        (item) => item.mode == CaptureRecommendationMode.altAz,
+      );
+      final eq = settings.singleWhere(
+        (item) => item.mode == CaptureRecommendationMode.equatorial,
+      );
+      expect(az.recommendedExposureSeconds, 20);
+      expect(eq.recommendedExposureSeconds, 30);
+      expect(
+        az.exposureRecommendations
+            .singleWhere(
+              (item) =>
+                  item.purpose == CaptureExposurePurpose.highlightProtection,
+            )
+            .exposureSeconds,
+        5,
+      );
+      expect(
+        eq.exposureRecommendations
+            .singleWhere(
+              (item) =>
+                  item.purpose == CaptureExposurePurpose.highlightProtection,
+            )
+            .exposureSeconds,
+        5,
+      );
+      expect(az.exposureAdvisories.join(' '), contains('Bortle 9'));
+      expect(az.exposureAdvisories.join(' '), contains('각거리 38°'));
+    });
+
+    test('M45 keeps exposure stable while environment advice changes', () {
+      final equipment = seestarS30().copyWith(
+        captureCapability: EquipmentCapturePresets.build(
+          EquipmentCapturePreset.seestarS30Pro,
+        ),
+      );
+      final target = object(
+        id: 'M45',
+        type: '산개성단',
+        objectType: '반사성운',
+        magnitude: '1.6',
+        tags: const ['반사성운', '산개성단'],
+      );
+
+      List<CaptureModeRecommendation> settingsFor(int bortle) => service
+          .recommendForObject(
+            object: target,
+            equipment: [equipment],
+            captureContext: CaptureRecommendationContext(
+              siteName: bortle == 9 ? '집' : '구례',
+              bortle: bortle,
+            ),
+          )
+          .imaging
+          .single
+          .captureSettings;
+
+      final home = settingsFor(9);
+      final gurye = settingsFor(4);
+      expect(home.map((item) => item.recommendedExposureSeconds), [20, 60]);
+      expect(gurye.map((item) => item.recommendedExposureSeconds), [20, 60]);
+      expect(home.first.exposureAdvisories.join(' '), contains('Bortle 9'));
+      expect(gurye.first.exposureAdvisories.join(' '), contains('Bortle 4'));
+      expect(home.first.exposureAdvisories.join(' '), contains('히스토그램'));
+      expect(
+        gurye.first.exposureAdvisories.join(' '),
+        isNot(contains('히스토그램')),
+      );
+    });
+
+    test('supports AZ-only and EQ-only equipment without phantom modes', () {
+      const exposure = DiscreteExposureCapability(valuesSeconds: [10, 20]);
+      Equipment modeEquipment(String id, EquipmentCaptureModeType type) {
+        return seestarS30().copyWith(
+          id: id,
+          captureCapability: EquipmentCaptureCapability(
+            modes: [
+              EquipmentCaptureModeCapability(
+                id: id,
+                type: type,
+                label: type.label,
+                exposureCapability: exposure,
+              ),
+            ],
+          ),
+        );
+      }
+
+      final result = service.recommendForObject(
+        object: object(id: 'm13'),
+        equipment: [
+          modeEquipment('az-only', EquipmentCaptureModeType.altAz),
+          modeEquipment('eq-only', EquipmentCaptureModeType.equatorial),
+        ],
+      );
+
+      expect(
+        result.imaging
+            .singleWhere((item) => item.equipment.id == 'az-only')
+            .captureSettings
+            .single
+            .mode,
+        CaptureRecommendationMode.altAz,
+      );
+      expect(
+        result.imaging
+            .singleWhere((item) => item.equipment.id == 'eq-only')
+            .captureSettings
+            .single
+            .mode,
+        CaptureRecommendationMode.equatorial,
+      );
     });
   });
 }

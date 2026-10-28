@@ -3,6 +3,8 @@ import '../../core/constants/object_type.dart';
 import '../../core/constants/surface_brightness_class.dart';
 import '../../data/models/catalog_object.dart';
 import '../../data/models/equipment.dart';
+import '../../data/models/equipment_capture_capability.dart';
+import '../../data/models/equipment_exposure_capability.dart';
 import '../../data/models/equipment_recommendation.dart';
 import '../../data/models/fov_box.dart';
 import '../../data/models/imaging_suitability_assessment.dart';
@@ -12,6 +14,7 @@ import '../../data/models/representative_framing_size.dart';
 import '../../features/home/viewmodel/home_view_model.dart';
 import '../object_imaging_profile_provider.dart';
 import '../observation_score_service.dart';
+import 'capture_setting_recommendation_policy.dart';
 import 'field_orientation_calculator.dart';
 import 'fov_framing_engine.dart';
 import 'representative_framing_resolver.dart';
@@ -26,20 +29,25 @@ class EquipmentRecommendationService {
     ObjectImagingProfileProvider? profileProvider,
     RepresentativeFramingResolver? framingResolver,
     VisualObservationScorer? visualScorer,
+    CaptureSettingRecommendationPolicy? capturePolicy,
   }) : _profileProvider =
            profileProvider ?? const ObjectImagingProfileProvider(),
        _framingResolver =
            framingResolver ?? const RepresentativeFramingResolver(),
-       _visualScorer = visualScorer ?? const VisualObservationScorer();
+       _visualScorer = visualScorer ?? const VisualObservationScorer(),
+       _capturePolicy =
+           capturePolicy ?? const CaptureSettingRecommendationPolicy();
 
   final ObjectImagingProfileProvider _profileProvider;
   final RepresentativeFramingResolver _framingResolver;
   final VisualObservationScorer _visualScorer;
+  final CaptureSettingRecommendationPolicy _capturePolicy;
 
   ObjectEquipmentRecommendation recommendForObject({
     required CatalogObject object,
     required List<Equipment> equipment,
     ImagingOrientationContext? orientation,
+    CaptureRecommendationContext? captureContext,
   }) {
     final active = equipment.where((e) => e.isActive).toList();
     final framing = _framingResolver.resolve(object);
@@ -55,9 +63,11 @@ class EquipmentRecommendationService {
 
     final imaging = _rankImagingEquipment(
       imagingEquipment,
+      object: object,
       framing: framing,
       profile: profile,
       orientation: orientation,
+      captureContext: captureContext,
     );
 
     final visual = showVisual
@@ -107,6 +117,16 @@ class EquipmentRecommendationService {
       object: object,
       equipment: equipment,
       orientation: orientation,
+      captureContext: CaptureRecommendationContext(
+        siteName: condition?.siteName,
+        targetAltitude:
+            targetAltitude ?? recommendation.observationWindow?.optimalAltitude,
+        moonIllumination: condition?.moon.illumination,
+        moonSeparation: recommendation.moonSeparation,
+        observableMinutes:
+            recommendation.observationWindow?.totalObservableMinutes,
+        referenceTime: recommendation.observationWindow?.optimalTime,
+      ),
     );
     if (!base.hasRegisteredEquipment) {
       return TodayEquipmentRecommendation(
@@ -155,6 +175,7 @@ class EquipmentRecommendationService {
         screenFillNote: top.item.screenFillNote,
         framingRecommendation: top.item.framingRecommendation,
         rank: 1,
+        captureSettings: top.item.captureSettings,
       );
     }
 
@@ -269,9 +290,11 @@ class EquipmentRecommendationService {
 
   List<ImagingEquipmentRecommendation> _rankImagingEquipment(
     List<Equipment> imagingEquipment, {
+    required CatalogObject object,
     required RepresentativeFramingSize framing,
     required ObjectImagingProfile profile,
     ImagingOrientationContext? orientation,
+    CaptureRecommendationContext? captureContext,
   }) {
     final results = <ImagingEquipmentRecommendation>[];
 
@@ -311,6 +334,12 @@ class EquipmentRecommendationService {
             supportsMosaic: equipment.supportsMosaic,
           ),
           framingRecommendation: framingResult.recommendation,
+          captureSettings: _captureSettingsFor(
+            equipment: equipment,
+            object: object,
+            profile: profile,
+            context: captureContext,
+          ),
         ),
       );
     }
@@ -327,9 +356,138 @@ class EquipmentRecommendationService {
           screenFillNote: results[i].screenFillNote,
           framingRecommendation: results[i].framingRecommendation,
           rank: i + 1,
+          captureSettings: results[i].captureSettings,
         ),
     ];
   }
+
+  List<CaptureModeRecommendation> _captureSettingsFor({
+    required Equipment equipment,
+    required CatalogObject object,
+    required ObjectImagingProfile profile,
+    CaptureRecommendationContext? context,
+  }) {
+    final capability = equipment.effectiveCaptureCapability;
+    if (capability == null || capability.isEmpty || capability.modes.isEmpty) {
+      return const [];
+    }
+
+    final displayModes = <String, EquipmentCaptureModeCapability>{};
+    for (final mode in capability.modes) {
+      final key = switch (mode.type) {
+        EquipmentCaptureModeType.altAz ||
+        EquipmentCaptureModeType.altAzDerotated => 'az',
+        EquipmentCaptureModeType.equatorial => 'eq',
+        EquipmentCaptureModeType.custom => 'custom:${mode.id}',
+      };
+      final previous = displayModes[key];
+      if (previous == null ||
+          mode.type == EquipmentCaptureModeType.altAzDerotated) {
+        displayModes[key] = mode;
+      }
+    }
+
+    final supportedFilters = capability.filters
+        .map((filter) => filter.name)
+        .toList(growable: false);
+    final gainSupportLabel = _gainSupportLabel(capability.gainCapability);
+
+    return displayModes.values
+        .map((mode) {
+          final decision = _capturePolicy.evaluate(
+            equipment: equipment,
+            capability: capability,
+            mode: mode,
+            profile: profile,
+            target: object,
+            context: context,
+          );
+          final displayMode = switch (mode.type) {
+            EquipmentCaptureModeType.altAz ||
+            EquipmentCaptureModeType.altAzDerotated =>
+              CaptureRecommendationMode.altAz,
+            EquipmentCaptureModeType.equatorial =>
+              CaptureRecommendationMode.equatorial,
+            EquipmentCaptureModeType.custom => CaptureRecommendationMode.custom,
+          };
+          final sensorDerotation =
+              mode.type == EquipmentCaptureModeType.altAzDerotated;
+          final cautions = <String>[
+            if (sensorDerotation)
+              '센서 회전 보정이 적용되는 AZ 모드이며 EQ 추적과 동일하게 간주하지 않습니다.'
+            else if (displayMode == CaptureRecommendationMode.altAz)
+              'AZ 추적은 촬영 구간에 따라 필드 회전 영향을 받을 수 있습니다.',
+          ];
+          return CaptureModeRecommendation(
+            modeId: mode.id,
+            mode: displayMode,
+            label: switch (displayMode) {
+              CaptureRecommendationMode.altAz => 'AZ',
+              CaptureRecommendationMode.equatorial => 'EQ',
+              CaptureRecommendationMode.custom => mode.label,
+            },
+            usesSensorDerotation: sensorDerotation,
+            recommendedExposureSeconds: decision.exposureSeconds,
+            exposureSupportLabel: _exposureSupportLabel(
+              mode.exposureCapability,
+            ),
+            exposureConfidence: decision.exposureConfidence,
+            exposurePolicyId: decision.exposurePolicyId,
+            exposureReason: decision.exposureReason,
+            exposureInputs: decision.exposureInputs,
+            exposureRecommendations: decision.exposureRecommendations,
+            exposureAdvisories: decision.exposureAdvisories,
+            recommendedGain: decision.gain,
+            gainSupportLabel: gainSupportLabel,
+            gainConfidence: decision.gainConfidence,
+            gainPolicyId: decision.gainPolicyId,
+            gainReason: decision.gainReason,
+            gainInputs: decision.gainInputs,
+            recommendedFilters: decision.recommendedFilters,
+            supportedFilters: supportedFilters,
+            filterReason: decision.filterReason,
+            filterConfidence: decision.filterConfidence,
+            filterPolicyId: decision.filterPolicyId,
+            filterInputs: decision.filterInputs,
+            channelCombinations: decision.channelCombinations,
+            cautions: cautions,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  String _exposureSupportLabel(EquipmentExposureCapability? capability) {
+    return switch (capability) {
+      DiscreteExposureCapability(:final valuesSeconds) =>
+        '지원: ${valuesSeconds.map(_formatNumber).join('/')}초',
+      RangeExposureCapability(
+        :final minSeconds,
+        :final maxSeconds,
+        :final stepSeconds,
+      ) =>
+        '지원: ${_formatNumber(minSeconds)}~${_formatNumber(maxSeconds)}초 '
+            '(${_formatNumber(stepSeconds)}초 간격)',
+      FreeInputExposureCapability(:final minSeconds, :final maxSeconds) =>
+        '지원: ${_formatNumber(minSeconds)}~${_formatNumber(maxSeconds)}초 '
+            '(자유 입력)',
+      null => '지원 정보 없음',
+    };
+  }
+
+  String? _gainSupportLabel(EquipmentGainCapability? capability) {
+    return switch (capability) {
+      DiscreteGainCapability(:final values) =>
+        '지원: ${values.map(_formatNumber).join('/')}',
+      RangeGainCapability(:final min, :final max, :final step) =>
+        '지원: ${_formatNumber(min)}~${_formatNumber(max)} '
+            '(${_formatNumber(step)} 간격)',
+      null => null,
+    };
+  }
+
+  String _formatNumber(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
 
   FramingCoverageResult _imagingFraming({
     required RepresentativeFramingSize framing,

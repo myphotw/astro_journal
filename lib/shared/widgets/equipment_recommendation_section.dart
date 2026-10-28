@@ -195,6 +195,35 @@ class EquipmentRecommendationSection extends StatelessWidget {
                 ),
               ),
             ],
+            const SizedBox(height: 10),
+            const Divider(height: 1, color: Color(0x26FFFFFF)),
+            const SizedBox(height: 8),
+            const Text(
+              '촬영 설정',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (item.captureSettings.isEmpty)
+              Text(
+                '장비 등록 화면에서 촬영 설정을 추가하면 모드별 지원 범위를 확인할 수 있습니다.',
+                key: ValueKey(
+                  'equipment-capture-settings-empty-${item.equipment.id}',
+                ),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              )
+            else
+              _CaptureSettingsGrid(
+                equipmentId: item.equipment.id,
+                items: item.captureSettings,
+              ),
           ],
         ),
       ),
@@ -344,6 +373,329 @@ class _ImagingMetric extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _CaptureSettingsGrid extends StatelessWidget {
+  const _CaptureSettingsGrid({required this.equipmentId, required this.items});
+
+  final String equipmentId;
+  final List<CaptureModeRecommendation> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        final itemWidth = constraints.maxWidth >= 560 && items.length > 1
+            ? (constraints.maxWidth - spacing) / 2
+            : constraints.maxWidth;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '노출값은 장비 지원 범위 안의 시험 시작값이며 제조사 최적값이 아닙니다.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Wrap(
+              key: ValueKey('equipment-capture-settings-$equipmentId'),
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                for (final item in items)
+                  SizedBox(
+                    width: itemWidth,
+                    child: _CaptureModeCard(
+                      key: ValueKey(
+                        'equipment-capture-mode-$equipmentId-${item.modeId}',
+                      ),
+                      item: item,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CaptureModeCard extends StatelessWidget {
+  const _CaptureModeCard({super.key, required this.item});
+
+  final CaptureModeRecommendation item;
+
+  @override
+  Widget build(BuildContext context) {
+    final exposureRecommendations = item.exposureRecommendations.isNotEmpty
+        ? item.exposureRecommendations
+        : [
+            CaptureExposureRecommendation(
+              purpose: CaptureExposurePurpose.standard,
+              exposureSeconds: item.recommendedExposureSeconds,
+              confidence: item.exposureConfidence,
+              policyId: item.exposurePolicyId,
+              reason: item.exposureReason,
+              guidance: item.recommendedExposureSeconds == null
+                  ? item.exposureSupportLabel
+                  : null,
+              inputs: item.exposureInputs,
+            ),
+          ];
+    final gain = item.recommendedGain == null
+        ? item.gainSupportLabel
+        : _formatNumber(item.recommendedGain!);
+    final filter = item.recommendedFilters.isNotEmpty
+        ? item.recommendedFilters.join(', ')
+        : item.supportedFilters.isNotEmpty
+        ? '지원: ${item.supportedFilters.join(', ')}'
+        : null;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.background.withValues(alpha: 0.45),
+        border: Border.all(
+          color: AppColors.textSecondary.withValues(alpha: 0.16),
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  item.label,
+                  style: const TextStyle(
+                    color: AppColors.messier,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (item.usesSensorDerotation) ...[
+                  const SizedBox(width: 6),
+                  const Flexible(
+                    child: Text(
+                      '센서 회전 보정',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 7),
+            for (final exposure in exposureRecommendations)
+              _CaptureSettingDetail(
+                label: exposure.purpose.label,
+                value: exposure.exposureSeconds == null
+                    ? exposure.guidance ?? item.exposureSupportLabel
+                    : '${_formatNumber(exposure.exposureSeconds!)}초',
+                confidence: exposure.confidence,
+                reason: exposure.reason,
+                inputs: exposure.inputs,
+              ),
+            for (final advisory in item.exposureAdvisories) ...[
+              Text(
+                '환경 · $advisory',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 10,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 3),
+            ],
+            if (gain != null)
+              _CaptureSettingDetail(
+                label: 'Gain',
+                value: gain,
+                confidence: item.gainConfidence,
+                reason: item.gainReason,
+                inputs: item.gainInputs,
+              ),
+            if (filter != null)
+              _CaptureSettingDetail(
+                label: '필터',
+                value: filter,
+                confidence: item.filterConfidence,
+                reason: item.filterReason,
+                inputs: item.filterInputs,
+              ),
+            for (final combination in item.channelCombinations)
+              _CaptureSettingDetail(
+                label: combination.name,
+                value: combination.guidance,
+                confidence: combination.confidence,
+                reason: combination.reason,
+                inputs: combination.inputs,
+              ),
+            for (final caution in item.cautions) ...[
+              const SizedBox(height: 3),
+              Text(
+                '주의 · $caution',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 10,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatNumber(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+}
+
+class _CaptureSettingDetail extends StatelessWidget {
+  const _CaptureSettingDetail({
+    required this.label,
+    required this.value,
+    required this.confidence,
+    this.reason,
+    this.inputs = const [],
+  });
+
+  final String label;
+  final String value;
+  final CaptureRecommendationConfidence confidence;
+  final String? reason;
+  final List<String> inputs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CaptureSettingLine(label: label, value: value),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(width: 88),
+              _CaptureConfidenceBadge(confidence: confidence),
+            ],
+          ),
+          if (reason != null) ...[
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.only(left: 88),
+              child: Text(
+                reason!,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 10,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+          if (inputs.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Padding(
+              padding: const EdgeInsets.only(left: 88),
+              child: Text(
+                '입력 · ${inputs.join(' · ')}',
+                style: TextStyle(
+                  color: AppColors.textSecondary.withValues(alpha: 0.78),
+                  fontSize: 9,
+                  height: 1.25,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CaptureConfidenceBadge extends StatelessWidget {
+  const _CaptureConfidenceBadge({required this.confidence});
+
+  final CaptureRecommendationConfidence confidence;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (confidence) {
+      CaptureRecommendationConfidence.recommended => const Color(0xFF6EE7B7),
+      CaptureRecommendationConfidence.experimental => const Color(0xFFFBBF24),
+      CaptureRecommendationConfidence.unavailable => AppColors.textSecondary,
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          confidence.label,
+          style: TextStyle(
+            color: color,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CaptureSettingLine extends StatelessWidget {
+  const _CaptureSettingLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// 아이피스별 안시 추천을 가로 비교 표로 표시한다.

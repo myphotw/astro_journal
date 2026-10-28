@@ -11,7 +11,7 @@ void main() {
     databaseFactory = databaseFactoryFfi;
   });
 
-  test('v31 favorites migrate through v35 without data loss', () async {
+  test('v31 favorites migrate through v36 without data loss', () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
     addTearDown(db.close);
     await createLegacyEquipmentTables(db, seedRows: true);
@@ -38,7 +38,7 @@ void main() {
       'created_at': '2026-08-18T12:00:00.000',
     });
 
-    await AppDatabase.migrateForTest(db, 31, 34);
+    await AppDatabase.migrateForTest(db, 31, 36);
 
     final rows = await db.query(DatabaseConstants.tableObservationSites);
     expect(rows, hasLength(1));
@@ -61,13 +61,13 @@ void main() {
     );
     expect(await db.query(DatabaseConstants.tableEquipment), hasLength(1));
     expect(await db.query(DatabaseConstants.tableEyepieces), hasLength(1));
-    expect(DatabaseConstants.databaseVersion, 35);
+    expect(DatabaseConstants.databaseVersion, 36);
   });
 
-  test('fresh v35 schema contains site and equipment sync tables', () async {
+  test('fresh v36 schema contains site and equipment sync tables', () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
     addTearDown(db.close);
-    await AppDatabase.createForTest(db, 34);
+    await AppDatabase.createForTest(db, 36);
 
     final tables = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table'",
@@ -96,9 +96,10 @@ void main() {
       columnNames,
       contains(DatabaseConstants.colEqExposureCapabilityJson),
     );
+    expect(columnNames, contains(DatabaseConstants.colCaptureCapabilityJson));
   });
 
-  test('v32 to v35 adds sync tables without replacing site rows', () async {
+  test('v32 to v36 adds sync tables without replacing site rows', () async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
     addTearDown(db.close);
     await createLegacyEquipmentTables(db, seedRows: true);
@@ -112,7 +113,7 @@ void main() {
       'updated_at': '2026-09-01T00:00:00Z',
     });
 
-    await AppDatabase.migrateForTest(db, 32, 34);
+    await AppDatabase.migrateForTest(db, 32, 36);
 
     expect(
       await db.query(DatabaseConstants.tableObservationSites),
@@ -138,16 +139,17 @@ void main() {
       columnNames,
       contains(DatabaseConstants.colEqExposureCapabilityJson),
     );
+    expect(columnNames, contains(DatabaseConstants.colCaptureCapabilityJson));
   });
 
   test(
-    'v33 to v35 preserves equipment and adds capability sync schema',
+    'v33 to v36 preserves equipment and adds capability sync schema',
     () async {
       final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
       addTearDown(db.close);
       await createLegacyEquipmentTables(db, seedRows: true);
 
-      await AppDatabase.migrateForTest(db, 33, 34);
+      await AppDatabase.migrateForTest(db, 33, 36);
 
       expect(await db.query('equipment'), hasLength(1));
       expect(await db.query('eyepieces'), hasLength(1));

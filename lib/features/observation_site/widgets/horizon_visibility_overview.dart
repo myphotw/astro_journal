@@ -7,22 +7,79 @@ import '../../../data/models/horizon_point.dart';
 import '../../../data/models/site_horizon_profile.dart';
 import '../../../services/horizon_visibility_service.dart';
 
-class HorizonVisibilityOverview extends StatelessWidget {
+enum HorizonBoundaryKind { minimum, maximum }
+
+enum BlockedRangeBoundaryKind { start, end }
+
+@immutable
+class HorizonBlockedRangeSelection {
+  const HorizonBlockedRangeSelection({
+    required this.rangeId,
+    required this.boundary,
+    required this.azimuth,
+  });
+
+  final String rangeId;
+  final BlockedRangeBoundaryKind boundary;
+  final double azimuth;
+}
+
+@immutable
+class HorizonGraphSelection {
+  const HorizonGraphSelection({
+    required this.azimuth,
+    required this.boundary,
+    this.pointId,
+  });
+
+  final String? pointId;
+  final double azimuth;
+  final HorizonBoundaryKind boundary;
+
+  bool get isExistingPoint => pointId != null;
+}
+
+class HorizonVisibilityOverview extends StatefulWidget {
   const HorizonVisibilityOverview({
     super.key,
     required this.points,
     required this.blockedRanges,
+    this.editable = false,
+    this.selection,
+    this.blockedSelection,
+    this.onSelectionChanged,
+    this.onAltitudeChanged,
+    this.onBlockedSelectionChanged,
+    this.onBlockedAzimuthChanged,
   });
 
   final List<HorizonPoint> points;
   final List<BlockedAzimuthRange> blockedRanges;
+  final bool editable;
+  final HorizonGraphSelection? selection;
+  final HorizonBlockedRangeSelection? blockedSelection;
+  final ValueChanged<HorizonGraphSelection>? onSelectionChanged;
+  final void Function(HorizonGraphSelection selection, double altitude)?
+  onAltitudeChanged;
+  final ValueChanged<HorizonBlockedRangeSelection>? onBlockedSelectionChanged;
+  final void Function(HorizonBlockedRangeSelection selection, double azimuth)?
+  onBlockedAzimuthChanged;
+
+  @override
+  State<HorizonVisibilityOverview> createState() =>
+      _HorizonVisibilityOverviewState();
+}
+
+class _HorizonVisibilityOverviewState extends State<HorizonVisibilityOverview> {
+  HorizonGraphSelection? _activeDragSelection;
+  HorizonBlockedRangeSelection? _activeBlockedDragSelection;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final data = HorizonVisibilityProfileData(
-      points: points,
-      blockedRanges: blockedRanges,
+      points: widget.points,
+      blockedRanges: widget.blockedRanges,
     );
     return Column(
       key: const Key('horizon-visibility-profile'),
@@ -45,8 +102,9 @@ class HorizonVisibilityOverview extends StatelessWidget {
                 constraints.maxWidth - plotLeft - plotRight,
               );
               final plotHeight = 168 - plotTop - plotBottom;
-              final labelStyle = Theme.of(context).textTheme.labelSmall
-                  ?.copyWith(fontSize: 10);
+              final labelStyle = Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(fontSize: 10);
               const yTicks = [90.0, 60.0, 30.0, 0.0];
               const xTicks = [
                 (azimuth: 0.0, label: '북 0°'),
@@ -63,15 +121,67 @@ class HorizonVisibilityOverview extends StatelessWidget {
                     right: plotRight,
                     top: plotTop,
                     bottom: plotBottom,
-                    child: CustomPaint(
-                      key: const Key(
-                        'observation-site-horizon-visualization',
-                      ),
-                      painter: HorizonVisibilityProfilePainter(
-                        data: data,
-                        visibleColor: colors.primary,
-                        unavailableColor: colors.errorContainer,
-                        gridColor: colors.outlineVariant,
+                    child: Listener(
+                      onPointerDown: widget.editable
+                          ? (event) => _beginBlockedPointerDrag(
+                              event.localPosition,
+                              Size(plotWidth, plotHeight),
+                              data,
+                            )
+                          : null,
+                      onPointerMove: widget.editable
+                          ? (event) => _updateBlockedPointerDrag(
+                              event.localPosition,
+                              Size(plotWidth, plotHeight),
+                            )
+                          : null,
+                      onPointerUp: widget.editable
+                          ? (_) => _endBlockedPointerDrag()
+                          : null,
+                      onPointerCancel: widget.editable
+                          ? (_) => _endBlockedPointerDrag()
+                          : null,
+                      child: GestureDetector(
+                        key: widget.editable
+                            ? const Key('editable-horizon-graph')
+                            : null,
+                        behavior: HitTestBehavior.opaque,
+                        onTapDown: widget.editable
+                            ? (details) => _selectAt(
+                                details.localPosition,
+                                Size(plotWidth, plotHeight),
+                                data,
+                              )
+                            : null,
+                        onPanDown: widget.editable
+                            ? (details) => _beginDragAt(
+                                details.localPosition,
+                                Size(plotWidth, plotHeight),
+                                data,
+                              )
+                            : null,
+                        onPanUpdate: widget.editable
+                            ? (details) => _dragTo(
+                                details.localPosition,
+                                Size(plotWidth, plotHeight),
+                              )
+                            : null,
+                        onPanEnd: widget.editable ? (_) => _endDrag() : null,
+                        onPanCancel: widget.editable ? _endDrag : null,
+                        child: CustomPaint(
+                          key: const Key(
+                            'observation-site-horizon-visualization',
+                          ),
+                          painter: HorizonVisibilityProfilePainter(
+                            data: data,
+                            visibleColor: colors.primary,
+                            unavailableColor: colors.errorContainer,
+                            gridColor: colors.outlineVariant,
+                            editable: widget.editable,
+                            selection: widget.selection,
+                            blockedSelection: widget.blockedSelection,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -80,11 +190,12 @@ class HorizonVisibilityOverview extends StatelessWidget {
                       left: 0,
                       width: yLabelWidth,
                       height: yLabelHeight,
-                      top: (plotTop +
-                              plotHeight * (1 - altitude / 90) -
-                              yLabelHeight / 2)
-                          .clamp(0.0, 168 - yLabelHeight)
-                          .toDouble(),
+                      top:
+                          (plotTop +
+                                  plotHeight * (1 - altitude / 90) -
+                                  yLabelHeight / 2)
+                              .clamp(0.0, 168 - yLabelHeight)
+                              .toDouble(),
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
@@ -100,9 +211,10 @@ class HorizonVisibilityOverview extends StatelessWidget {
                       left: switch (index) {
                         0 => plotLeft,
                         4 => plotLeft + plotWidth - xLabelWidth,
-                        _ => plotLeft +
-                            plotWidth * xTicks[index].azimuth / 360 -
-                            xLabelWidth / 2,
+                        _ =>
+                          plotLeft +
+                              plotWidth * xTicks[index].azimuth / 360 -
+                              xLabelWidth / 2,
                       },
                       bottom: 0,
                       width: xLabelWidth,
@@ -130,6 +242,229 @@ class HorizonVisibilityOverview extends StatelessWidget {
       ],
     );
   }
+
+  void _selectAt(
+    Offset position,
+    Size size,
+    HorizonVisibilityProfileData data,
+  ) {
+    final blockedSelection = _blockedSelectionAt(position, size, data);
+    if (blockedSelection != null) {
+      _activeDragSelection = null;
+      _activeBlockedDragSelection = blockedSelection;
+      widget.onBlockedSelectionChanged?.call(blockedSelection);
+      return;
+    }
+    final selection = _selectionAt(position, size, data);
+    _activeBlockedDragSelection = null;
+    _activeDragSelection = selection;
+    widget.onSelectionChanged?.call(selection);
+  }
+
+  void _beginDragAt(
+    Offset position,
+    Size size,
+    HorizonVisibilityProfileData data,
+  ) {
+    if (_activeBlockedDragSelection != null) return;
+    _selectAt(position, size, data);
+  }
+
+  void _beginBlockedPointerDrag(
+    Offset position,
+    Size size,
+    HorizonVisibilityProfileData data,
+  ) {
+    final selection = _blockedSelectionAt(position, size, data);
+    if (selection == null) return;
+    _activeDragSelection = null;
+    _activeBlockedDragSelection = selection;
+    widget.onBlockedSelectionChanged?.call(selection);
+  }
+
+  void _updateBlockedPointerDrag(Offset position, Size size) {
+    if (_activeBlockedDragSelection == null) return;
+    _dragTo(position, size);
+  }
+
+  void _endBlockedPointerDrag() {
+    _activeBlockedDragSelection = null;
+  }
+
+  void _endDrag() {
+    _activeDragSelection = null;
+    _activeBlockedDragSelection = null;
+  }
+
+  HorizonBlockedRangeSelection? _blockedSelectionAt(
+    Offset position,
+    Size size,
+    HorizonVisibilityProfileData data,
+  ) {
+    const hitRadius = 28.0;
+    final selected = widget.blockedSelection;
+    if (selected != null) {
+      final selectedRange = data.blockedRanges
+          .cast<BlockedAzimuthRange?>()
+          .firstWhere(
+            (range) => range?.id == selected.rangeId,
+            orElse: () => null,
+          );
+      if (selectedRange != null) {
+        final azimuth = selected.boundary == BlockedRangeBoundaryKind.start
+            ? selectedRange.startAzimuth
+            : selectedRange.endAzimuth;
+        if (_distanceToBlockedHandle(position, size, azimuth) <= hitRadius) {
+          return HorizonBlockedRangeSelection(
+            rangeId: selectedRange.id,
+            boundary: selected.boundary,
+            azimuth: azimuth,
+          );
+        }
+      }
+    }
+
+    HorizonBlockedRangeSelection? nearest;
+    var nearestDistance = double.infinity;
+    for (final range in data.blockedRanges) {
+      for (final candidate in [
+        (boundary: BlockedRangeBoundaryKind.start, azimuth: range.startAzimuth),
+        (boundary: BlockedRangeBoundaryKind.end, azimuth: range.endAzimuth),
+      ]) {
+        final distance = _distanceToBlockedHandle(
+          position,
+          size,
+          candidate.azimuth,
+        );
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = HorizonBlockedRangeSelection(
+            rangeId: range.id,
+            boundary: candidate.boundary,
+            azimuth: candidate.azimuth,
+          );
+        }
+      }
+    }
+    return nearestDistance <= hitRadius ? nearest : null;
+  }
+
+  double _distanceToBlockedHandle(Offset position, Size size, double azimuth) {
+    final handleY = _blockedHandleY(size);
+    return _blockedHandleXPositions(size, azimuth)
+        .map(
+          (x) => math.sqrt(
+            math.pow(position.dx - x, 2) + math.pow(position.dy - handleY, 2),
+          ),
+        )
+        .reduce(math.min);
+  }
+
+  HorizonGraphSelection _selectionAt(
+    Offset position,
+    Size size,
+    HorizonVisibilityProfileData data,
+  ) {
+    final normalizedX = position.dx.clamp(0.0, size.width);
+    final touchedAzimuth = normalizedX >= size.width
+        ? 0.0
+        : 360 * normalizedX / size.width;
+    final touchedAltitude = _altitudeForY(position.dy, size.height);
+    HorizonPoint? nearestPoint;
+    HorizonBoundaryKind? nearestBoundary;
+    var nearestDistance = double.infinity;
+
+    for (final point in data.points) {
+      final pointX = size.width * _normalizeAzimuth(point.azimuth) / 360;
+      final directXDistance = (position.dx - pointX).abs();
+      final xDistance = math.min(
+        directXDistance,
+        (size.width - directXDistance).abs(),
+      );
+      final minY = _yForAltitude(point.minAltitude, size.height);
+      final maxY = _yForAltitude(point.maxAltitude ?? 90, size.height);
+      for (final candidate in [
+        (boundary: HorizonBoundaryKind.minimum, y: minY),
+        (boundary: HorizonBoundaryKind.maximum, y: maxY),
+      ]) {
+        final distance = math.sqrt(
+          xDistance * xDistance +
+              math.pow(position.dy - candidate.y, 2).toDouble(),
+        );
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestPoint = point;
+          nearestBoundary = candidate.boundary;
+        }
+      }
+    }
+
+    if (nearestPoint != null && nearestDistance <= 30) {
+      return HorizonGraphSelection(
+        pointId: nearestPoint.id,
+        azimuth: nearestPoint.azimuth,
+        boundary: nearestBoundary!,
+      );
+    }
+
+    final minimum = data.minAltitudeAt(touchedAzimuth);
+    final maximum = data.maxAltitudeAt(touchedAzimuth);
+    return HorizonGraphSelection(
+      azimuth: touchedAzimuth.roundToDouble() % 360,
+      boundary:
+          (touchedAltitude - minimum).abs() <= (touchedAltitude - maximum).abs()
+          ? HorizonBoundaryKind.minimum
+          : HorizonBoundaryKind.maximum,
+    );
+  }
+
+  void _dragTo(Offset position, Size size) {
+    final blockedSelection = _activeBlockedDragSelection;
+    if (blockedSelection != null) {
+      final azimuth = _azimuthForX(position.dx, size.width);
+      final updated = HorizonBlockedRangeSelection(
+        rangeId: blockedSelection.rangeId,
+        boundary: blockedSelection.boundary,
+        azimuth: azimuth,
+      );
+      _activeBlockedDragSelection = updated;
+      widget.onBlockedAzimuthChanged?.call(updated, azimuth);
+      return;
+    }
+    final selection = _activeDragSelection;
+    if (selection == null || !selection.isExistingPoint) return;
+    final altitude = _altitudeForY(position.dy, size.height).roundToDouble();
+    widget.onAltitudeChanged?.call(selection, altitude);
+  }
+
+  double _altitudeForY(double y, double height) =>
+      (90 * (1 - y.clamp(0.0, height) / height)).clamp(0.0, 90.0);
+
+  double _yForAltitude(num altitude, double height) =>
+      height * (1 - altitude / 90);
+
+  double _normalizeAzimuth(double azimuth) {
+    final normalized = azimuth % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
+  }
+}
+
+double _azimuthForX(double x, double width) {
+  if (width <= 0) return 0;
+  final degrees = (360 * x.clamp(0.0, width) / width).round();
+  return (degrees % 360).toDouble();
+}
+
+double _blockedHandleY(Size size) => math.max(0, size.height - 12);
+
+Iterable<double> _blockedHandleXPositions(Size size, double azimuth) sync* {
+  final normalized = ((azimuth % 360) + 360) % 360;
+  if (normalized == 0) {
+    yield 0;
+    yield size.width;
+    return;
+  }
+  yield size.width * normalized / 360;
 }
 
 class HorizonVisibilityProfileData {
@@ -147,17 +482,11 @@ class HorizonVisibilityProfileData {
   final List<BlockedAzimuthRange> blockedRanges;
   final SiteHorizonProfile _profile;
 
-  double minAltitudeAt(double azimuth) =>
-      const HorizonVisibilityService().minimumVisibleAltitude(
-        _profile,
-        azimuth,
-      );
+  double minAltitudeAt(double azimuth) => const HorizonVisibilityService()
+      .minimumVisibleAltitude(_profile, azimuth);
 
-  double maxAltitudeAt(double azimuth) =>
-      const HorizonVisibilityService().maximumVisibleAltitude(
-        _profile,
-        azimuth,
-      );
+  double maxAltitudeAt(double azimuth) => const HorizonVisibilityService()
+      .maximumVisibleAltitude(_profile, azimuth);
 
   bool isBlocked(double azimuth) {
     final normalized = ((azimuth % 360) + 360) % 360;
@@ -171,12 +500,18 @@ class HorizonVisibilityProfilePainter extends CustomPainter {
     required this.visibleColor,
     required this.unavailableColor,
     required this.gridColor,
+    this.editable = false,
+    this.selection,
+    this.blockedSelection,
   });
 
   final HorizonVisibilityProfileData data;
   final Color visibleColor;
   final Color unavailableColor;
   final Color gridColor;
+  final bool editable;
+  final HorizonGraphSelection? selection;
+  final HorizonBlockedRangeSelection? blockedSelection;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -249,6 +584,11 @@ class HorizonVisibilityProfilePainter extends CustomPainter {
     }
     canvas.drawPath(minPath, minPaint);
     canvas.drawPath(maxPath, maxPaint);
+    if (editable) {
+      _paintMeasurementPoints(canvas, size);
+      _paintBlockedBoundaries(canvas, size);
+      _paintSelection(canvas, size);
+    }
     canvas.drawRect(
       bounds,
       Paint()
@@ -261,13 +601,111 @@ class HorizonVisibilityProfilePainter extends CustomPainter {
   double _yForAltitude(num altitude, double height) =>
       height * (1 - altitude / 90);
 
+  void _paintMeasurementPoints(Canvas canvas, Size size) {
+    final fill = Paint()
+      ..color = visibleColor
+      ..style = PaintingStyle.fill;
+    final outline = Paint()
+      ..color = visibleColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    for (final point in data.points) {
+      final x = size.width * _normalizeAzimuth(point.azimuth) / 360;
+      final xPositions = point.azimuth == 0 ? <double>[0, size.width] : [x];
+      for (final markerX in xPositions) {
+        canvas.drawCircle(
+          Offset(markerX, _yForAltitude(point.minAltitude, size.height)),
+          3.2,
+          fill,
+        );
+        if (point.maxAltitude != null) {
+          canvas.drawCircle(
+            Offset(markerX, _yForAltitude(point.maxAltitude!, size.height)),
+            3.2,
+            outline,
+          );
+        }
+      }
+    }
+  }
+
+  void _paintBlockedBoundaries(Canvas canvas, Size size) {
+    final linePaint = Paint()
+      ..color = unavailableColor.withValues(alpha: 0.9)
+      ..strokeWidth = 1.5;
+    final fillPaint = Paint()
+      ..color = unavailableColor
+      ..style = PaintingStyle.fill;
+    final selectedOutline = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final handleY = _blockedHandleY(size);
+
+    for (final range in data.blockedRanges) {
+      for (final candidate in [
+        (boundary: BlockedRangeBoundaryKind.start, azimuth: range.startAzimuth),
+        (boundary: BlockedRangeBoundaryKind.end, azimuth: range.endAzimuth),
+      ]) {
+        final selected =
+            blockedSelection?.rangeId == range.id &&
+            blockedSelection?.boundary == candidate.boundary;
+        for (final x in _blockedHandleXPositions(size, candidate.azimuth)) {
+          canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
+          canvas.drawCircle(Offset(x, handleY), selected ? 8 : 6, fillPaint);
+          if (selected) {
+            canvas.drawCircle(Offset(x, handleY), 10, selectedOutline);
+          }
+        }
+      }
+    }
+  }
+
+  void _paintSelection(Canvas canvas, Size size) {
+    final current = selection;
+    if (current == null) return;
+    final point = current.pointId == null
+        ? null
+        : data.points.cast<HorizonPoint?>().firstWhere(
+            (item) => item?.id == current.pointId,
+            orElse: () => null,
+          );
+    final azimuth = point?.azimuth ?? current.azimuth;
+    final altitude = switch (current.boundary) {
+      HorizonBoundaryKind.minimum =>
+        point?.minAltitude ?? data.minAltitudeAt(azimuth),
+      HorizonBoundaryKind.maximum =>
+        point?.maxAltitude ?? data.maxAltitudeAt(azimuth),
+    };
+    final center = Offset(
+      size.width * _normalizeAzimuth(azimuth) / 360,
+      _yForAltitude(altitude, size.height),
+    );
+    canvas.drawCircle(
+      center,
+      7,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  double _normalizeAzimuth(double azimuth) {
+    final normalized = azimuth % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
+  }
+
   @override
   bool shouldRepaint(covariant HorizonVisibilityProfilePainter oldDelegate) =>
       oldDelegate.data.points != data.points ||
       oldDelegate.data.blockedRanges != data.blockedRanges ||
       oldDelegate.visibleColor != visibleColor ||
       oldDelegate.unavailableColor != unavailableColor ||
-      oldDelegate.gridColor != gridColor;
+      oldDelegate.gridColor != gridColor ||
+      oldDelegate.editable != editable ||
+      oldDelegate.selection != selection ||
+      oldDelegate.blockedSelection != blockedSelection;
 }
 
 class HorizonVisibilityLegend extends StatelessWidget {
@@ -301,11 +739,7 @@ class HorizonVisibilityLegend extends StatelessWidget {
 }
 
 class _LegendEntry extends StatelessWidget {
-  const _LegendEntry({
-    super.key,
-    required this.color,
-    required this.label,
-  });
+  const _LegendEntry({super.key, required this.color, required this.label});
 
   final Color color;
   final String label;

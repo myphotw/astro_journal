@@ -165,9 +165,14 @@ class EquipmentLocalDataSource {
           metadata!.serverRevision! >= aggregate.revision) {
         return false;
       }
-      final changed =
-          current == null || !_sameAggregate(current, aggregate.equipment);
-      await _upsertAggregate(txn, aggregate.equipment);
+      // The current backend contract does not yet include the generalized
+      // capture capability JSON. Preserve that local extension when applying
+      // a canonical server aggregate so a pull cannot silently erase it.
+      final merged = aggregate.equipment.copyWith(
+        captureCapability: current?.captureCapability,
+      );
+      final changed = current == null || !_sameAggregate(current, merged);
+      await _upsertAggregate(txn, merged);
       await _writeMetadata(txn, aggregate);
       return changed;
     });
