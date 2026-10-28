@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:astro_journal/core/constants/equipment_kind.dart';
 import 'package:astro_journal/core/constants/equipment_purpose.dart';
 import 'package:astro_journal/data/models/equipment.dart';
+import 'package:astro_journal/data/models/equipment_capture_capability.dart';
 import 'package:astro_journal/data/models/equipment_exposure_capability.dart';
 import 'package:astro_journal/data/models/equipment_remote.dart';
 import 'package:astro_journal/services/tc_backend_equipment_service.dart';
@@ -46,6 +47,11 @@ void main() {
     expect(eq.minSeconds, 0.5);
     expect(eq.maxSeconds, 300);
     expect(eq.stepSeconds, 0.5);
+    expect(aggregate.captureCapabilityIncluded, isTrue);
+    expect(
+      aggregate.equipment.captureCapability!.modes.single.type,
+      EquipmentCaptureModeType.altAzDerotated,
+    );
   });
 
   test('create replays the same client UUID and complete aggregate', () async {
@@ -69,7 +75,34 @@ void main() {
       expect(body['eyepieces'], hasLength(1));
       expect(body['az_exposure_capability'], isA<Map>());
       expect(body['eq_exposure_capability'], isA<Map>());
+      expect(body['capture_capability'], isA<Map>());
     }
+  });
+
+  test('patch distinguishes capture capability omission and null', () async {
+    final requests = <http.Request>[];
+    final service = TcBackendEquipmentService(
+      settingsService: settings,
+      client: MockClient((request) async {
+        requests.add(request);
+        return _jsonResponse(_aggregateJson(revision: 5));
+      }),
+    );
+
+    await service.update(
+      _equipment(),
+      expectedRevision: 4,
+      includeCaptureCapability: false,
+    );
+    await service.update(
+      _equipment().copyWith(clearCaptureCapability: true),
+      expectedRevision: 4,
+    );
+
+    final omitted = jsonDecode(requests.first.body) as Map<String, dynamic>;
+    final cleared = jsonDecode(requests.last.body) as Map<String, dynamic>;
+    expect(omitted, isNot(contains('capture_capability')));
+    expect(cleared, containsPair('capture_capability', null));
   });
 
   test('patch and delete carry expected revision', () async {
@@ -192,6 +225,23 @@ Map<String, Object?> _aggregateJson({int revision = 4}) => {
     'min_seconds': 0.5,
     'max_seconds': 300,
     'step_seconds': 0.5,
+  },
+  'capture_capability': {
+    'version': 1,
+    'modes': [
+      {
+        'id': 'alt_az_derotated',
+        'type': 'altAzDerotated',
+        'label': 'AZ 센서 회전 보정',
+        'exposure_capability': {
+          'type': 'discrete',
+          'values_seconds': [30, 60],
+        },
+      },
+    ],
+    'gain_capability': null,
+    'filters': [],
+    'channel_combinations': [],
   },
   'revision': revision,
   'created_at': '2026-09-01T00:00:00Z',

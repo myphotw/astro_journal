@@ -225,7 +225,7 @@ void main() {
   );
 
   test(
-    'remote aggregate excludes local extension and pull preserves it',
+    'remote aggregate round-trip and canonical pull preserve capability',
     () async {
       final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
       addTearDown(db.close);
@@ -242,25 +242,31 @@ void main() {
       );
       await source.insert(local);
       final remote = EquipmentRemoteAggregate(
-        equipment: const Equipment(
+        equipment: Equipment(
           id: 'shared-id',
           name: 'Server name',
           kind: EquipmentKind.smartTelescope,
           purpose: EquipmentPurpose.imaging,
+          captureCapability: EquipmentCapturePresets.build(
+            EquipmentCapturePreset.seestarS30Pro,
+          ),
         ),
         revision: 2,
         createdAt: DateTime.utc(2026, 1, 1),
         updatedAt: DateTime.utc(2026, 1, 2),
       );
 
-      expect(remote.toJson(), isNot(contains('capture_capability')));
+      expect(remote.toJson()['capture_capability'], isA<Map>());
+      final decoded = EquipmentRemoteAggregate.fromJson(remote.toJson());
+      expect(decoded.captureCapabilityIncluded, isTrue);
+      expect(decoded.equipment.captureCapability, isNotNull);
       await source.applyRemoteAggregate(remote, force: true);
       final restored = await source.getById('shared-id');
 
       expect(restored!.name, 'Server name');
       expect(
         restored.captureCapability!.filters.map((item) => item.name),
-        contains('SHO'),
+        contains('듀얼밴드'),
       );
     },
   );

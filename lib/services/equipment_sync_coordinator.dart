@@ -77,7 +77,13 @@ class EquipmentSyncCoordinator implements TcBackendDrainRunner {
 
     for (final aggregate in remoteEquipment) {
       if (await _local.hasPendingSync(aggregate.equipment.id)) {
-        await _local.saveRemoteSnapshotOnly(aggregate);
+        final prepared = await _local.prepareCaptureCapabilityBootstrap(
+          aggregate,
+        );
+        if (!prepared) await _local.saveRemoteSnapshotOnly(aggregate);
+        continue;
+      }
+      if (await _local.prepareCaptureCapabilityBootstrap(aggregate)) {
         continue;
       }
       final before = await _local.getById(aggregate.equipment.id);
@@ -119,8 +125,22 @@ class EquipmentSyncCoordinator implements TcBackendDrainRunner {
   Future<_SyncImpact> _process(EquipmentSyncItem item) async {
     await _local.markSyncProcessing(item.operationId);
     try {
-      final snapshot = EquipmentRemoteAggregate.fromJson(item.payload);
+      var snapshot = EquipmentRemoteAggregate.fromJson(item.payload);
       final before = await _local.getById(item.equipmentId);
+      if (!snapshot.captureCapabilityIncluded &&
+          before?.captureCapability != null &&
+          (item.operation == EquipmentSyncOperation.create ||
+              item.baseRevision == null)) {
+        snapshot = EquipmentRemoteAggregate(
+          equipment: snapshot.equipment.copyWith(
+            captureCapability: before!.captureCapability,
+          ),
+          revision: snapshot.revision,
+          createdAt: snapshot.createdAt,
+          updatedAt: snapshot.updatedAt,
+          deletedAt: snapshot.deletedAt,
+        );
+      }
       switch (item.operation) {
         case EquipmentSyncOperation.create:
           final canonical = await _remoteApi.create(snapshot.equipment);
@@ -156,6 +176,7 @@ class EquipmentSyncCoordinator implements TcBackendDrainRunner {
           final canonical = await _remoteApi.update(
             snapshot.equipment,
             expectedRevision: revision,
+            includeCaptureCapability: snapshot.captureCapabilityIncluded,
           );
           final changed = await _local.applyRemoteAggregate(
             canonical,
@@ -338,6 +359,7 @@ bool _equipmentConditionsDiffer(Equipment? before, Equipment? after) {
     'fov_width': value.fovWidthDegrees,
     'fov_height': value.fovHeightDegrees,
     'eyepieces': value.eyepieces.map((item) => item.toMap()).toList(),
+    'capture_capability': value.captureCapability?.toJson(),
   };
   return jsonEncode(signature(before)) != jsonEncode(signature(after));
 }

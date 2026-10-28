@@ -1,6 +1,7 @@
 import '../../core/constants/equipment_kind.dart';
 import '../../core/constants/equipment_purpose.dart';
 import 'equipment.dart';
+import 'equipment_capture_capability.dart';
 import 'equipment_exposure_capability.dart';
 import 'eyepiece.dart';
 
@@ -11,6 +12,7 @@ class EquipmentRemoteAggregate {
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
+    this.captureCapabilityIncluded = true,
   });
 
   final Equipment equipment;
@@ -18,6 +20,13 @@ class EquipmentRemoteAggregate {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
+
+  /// Whether the capture capability field was present in the source payload.
+  ///
+  /// Server responses from the capability-aware API always include the field,
+  /// including an explicit null. Legacy durable outbox snapshots may omit it,
+  /// so this flag also preserves PATCH omission semantics while they drain.
+  final bool captureCapabilityIncluded;
 
   factory EquipmentRemoteAggregate.fromJson(Map<String, dynamic> json) {
     final id = _requiredString(json, 'id');
@@ -55,11 +64,13 @@ class EquipmentRemoteAggregate {
             .toList(growable: false),
         azExposureCapability: _capability(json['az_exposure_capability']),
         eqExposureCapability: _capability(json['eq_exposure_capability']),
+        captureCapability: _captureCapability(json['capture_capability']),
       ),
       revision: _requiredInt(json, 'revision'),
       createdAt: _requiredDate(json, 'created_at'),
       updatedAt: _requiredDate(json, 'updated_at'),
       deletedAt: _optionalDate(json['deleted_at']),
+      captureCapabilityIncluded: json.containsKey('capture_capability'),
     );
   }
 
@@ -105,6 +116,8 @@ class EquipmentRemoteAggregate {
         .toList(growable: false),
     'az_exposure_capability': equipment.azExposureCapability?.toJson(),
     'eq_exposure_capability': equipment.eqExposureCapability?.toJson(),
+    if (captureCapabilityIncluded)
+      'capture_capability': equipment.captureCapability?.toJson(),
   };
 }
 
@@ -137,6 +150,14 @@ EquipmentExposureCapability? _capability(Object? raw) {
     throw const FormatException('Exposure capability must be an object.');
   }
   return EquipmentExposureCapability.fromJson(Map<String, dynamic>.from(raw));
+}
+
+EquipmentCaptureCapability? _captureCapability(Object? raw) {
+  if (raw == null) return null;
+  if (raw is! Map) {
+    throw const FormatException('Capture capability must be an object.');
+  }
+  return EquipmentCaptureCapability.fromJson(Map<String, dynamic>.from(raw));
 }
 
 List<Map<String, dynamic>> _requiredList(

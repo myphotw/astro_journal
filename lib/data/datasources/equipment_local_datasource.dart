@@ -81,9 +81,18 @@ class EquipmentLocalDataSource {
   Future<void> update(Equipment equipment) async {
     final db = await _db;
     await db.transaction((txn) async {
+      final previous = await _get(txn, equipment.id);
       await _upsertAggregate(txn, equipment);
       if (syncMutationsEnabled) {
-        await _enqueueSnapshot(txn, equipment, EquipmentSyncOperation.update);
+        await _enqueueSnapshot(
+          txn,
+          equipment,
+          EquipmentSyncOperation.update,
+          includeCaptureCapability: !_sameCaptureCapability(
+            previous?.captureCapability,
+            equipment.captureCapability,
+          ),
+        );
       }
     });
   }
@@ -152,6 +161,76 @@ class EquipmentLocalDataSource {
     });
   }
 
+  /// Queues a one-time PATCH for capabilities that were saved locally while
+  /// the previous backend contract did not expose `capture_capability`.
+  ///
+  /// A missing key in the last canonical snapshot is the migration evidence.
+  /// Once a capability-aware server has explicitly returned null, this method
+  /// will not upload the local value again, so a deletion from another device
+  /// cannot be silently reversed.
+  Future<bool> prepareCaptureCapabilityBootstrap(
+    EquipmentRemoteAggregate aggregate,
+  ) async {
+    if (!aggregate.captureCapabilityIncluded ||
+        aggregate.equipment.captureCapability != null) {
+      return false;
+    }
+    final db = await _db;
+    return db.transaction((txn) async {
+      final current = await _get(txn, aggregate.equipment.id);
+      final capability = current?.captureCapability;
+      if (capability == null) return false;
+
+      final metadata = await _metadata(txn, aggregate.equipment.id);
+      final canonical = metadata?.canonicalSnapshot;
+      if (canonical == null || canonical.containsKey('capture_capability')) {
+        return false;
+      }
+
+      final pendingRows = await txn.query(
+        DatabaseConstants.tableEquipmentSyncOutbox,
+        columns: const ['operation_id', 'operation_type', 'payload_json'],
+        where: "equipment_id = ? AND state IN ('QUEUED','PROCESSING','FAILED')",
+        whereArgs: [aggregate.equipment.id],
+        orderBy: 'created_at ASC, id ASC',
+      );
+      var upgradedPending = false;
+      for (final row in pendingRows) {
+        if (row['operation_type'] ==
+            EquipmentSyncOperation.delete.databaseValue) {
+          continue;
+        }
+        final decoded = jsonDecode(row['payload_json'] as String);
+        if (decoded is! Map) continue;
+        final payload = Map<String, dynamic>.from(decoded);
+        if (!payload.containsKey('capture_capability')) {
+          payload['capture_capability'] = capability.toJson();
+          await txn.update(
+            DatabaseConstants.tableEquipmentSyncOutbox,
+            {
+              'payload_json': jsonEncode(payload),
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            },
+            where: 'operation_id = ?',
+            whereArgs: [row['operation_id']],
+          );
+        }
+        upgradedPending = true;
+      }
+
+      await _writeMetadata(txn, aggregate);
+      if (!upgradedPending && !await _hasPendingSync(txn, current!.id)) {
+        await _enqueueSnapshot(
+          txn,
+          current,
+          EquipmentSyncOperation.update,
+          includeCaptureCapability: true,
+        );
+      }
+      return true;
+    });
+  }
+
   Future<bool> applyRemoteAggregate(
     EquipmentRemoteAggregate aggregate, {
     bool force = false,
@@ -165,14 +244,9 @@ class EquipmentLocalDataSource {
           metadata!.serverRevision! >= aggregate.revision) {
         return false;
       }
-      // The current backend contract does not yet include the generalized
-      // capture capability JSON. Preserve that local extension when applying
-      // a canonical server aggregate so a pull cannot silently erase it.
-      final merged = aggregate.equipment.copyWith(
-        captureCapability: current?.captureCapability,
-      );
-      final changed = current == null || !_sameAggregate(current, merged);
-      await _upsertAggregate(txn, merged);
+      final changed =
+          current == null || !_sameAggregate(current, aggregate.equipment);
+      await _upsertAggregate(txn, aggregate.equipment);
       await _writeMetadata(txn, aggregate);
       return changed;
     });
@@ -496,18 +570,21 @@ class EquipmentLocalDataSource {
   Future<void> _enqueueSnapshot(
     DatabaseExecutor db,
     Equipment equipment,
-    EquipmentSyncOperation requestedOperation,
-  ) async {
+    EquipmentSyncOperation requestedOperation, {
+    bool includeCaptureCapability = true,
+  }) async {
     final metadata = await _metadata(db, equipment.id);
     var operation = requestedOperation;
-    final payload = jsonEncode(
+    String payloadFor({required bool includeCapability}) => jsonEncode(
       EquipmentRemoteAggregate(
         equipment: equipment,
         revision: metadata?.serverRevision ?? 0,
         createdAt: metadata?.serverUpdatedAt ?? DateTime.now().toUtc(),
         updatedAt: DateTime.now().toUtc(),
+        captureCapabilityIncluded: includeCapability,
       ).toJson(),
     );
+    var payload = payloadFor(includeCapability: includeCaptureCapability);
     final now = DateTime.now().toUtc().toIso8601String();
 
     if (requestedOperation == EquipmentSyncOperation.update &&
@@ -519,10 +596,12 @@ class EquipmentLocalDataSource {
         states: const ['QUEUED', 'FAILED'],
       );
       if (queuedCreate != null) {
+        payload = payloadFor(includeCapability: true);
         await _replacePendingPayload(db, queuedCreate, payload, now);
         return;
       }
       operation = EquipmentSyncOperation.create;
+      payload = payloadFor(includeCapability: true);
     }
 
     if (operation == EquipmentSyncOperation.create) {
@@ -533,6 +612,7 @@ class EquipmentLocalDataSource {
         states: const ['QUEUED', 'FAILED'],
       );
       if (existing != null) {
+        payload = payloadFor(includeCapability: true);
         await _replacePendingPayload(db, existing, payload, now);
         return;
       }
@@ -546,6 +626,10 @@ class EquipmentLocalDataSource {
         states: const ['QUEUED', 'FAILED'],
       );
       if (existing != null) {
+        if (!includeCaptureCapability &&
+            await _outboxPayloadContainsCaptureCapability(db, existing)) {
+          payload = payloadFor(includeCapability: true);
+        }
         await _replacePendingPayload(db, existing, payload, now);
         return;
       }
@@ -602,6 +686,22 @@ class EquipmentLocalDataSource {
     });
   }
 
+  Future<bool> _outboxPayloadContainsCaptureCapability(
+    DatabaseExecutor db,
+    String operationId,
+  ) async {
+    final rows = await db.query(
+      DatabaseConstants.tableEquipmentSyncOutbox,
+      columns: const ['payload_json'],
+      where: 'operation_id = ?',
+      whereArgs: [operationId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return false;
+    final decoded = jsonDecode(rows.single['payload_json'] as String);
+    return decoded is Map && decoded.containsKey('capture_capability');
+  }
+
   Future<void> _replacePendingPayload(
     DatabaseExecutor db,
     String operationId,
@@ -649,6 +749,9 @@ class EquipmentLocalDataSource {
     };
     return jsonEncode(normalized(left)) == jsonEncode(normalized(right));
   }
+
+  bool _sameCaptureCapability(Object? left, Object? right) =>
+      jsonEncode(left) == jsonEncode(right);
 
   Future<List<Eyepiece>> _getEyepiecesForEquipment(
     DatabaseExecutor db,

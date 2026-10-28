@@ -56,6 +56,7 @@ abstract interface class EquipmentRemoteApi {
   Future<EquipmentRemoteAggregate> update(
     Equipment equipment, {
     required int expectedRevision,
+    bool includeCaptureCapability = true,
   });
   Future<EquipmentRemoteDeleteResult> delete(
     String equipmentId, {
@@ -130,6 +131,7 @@ class TcBackendEquipmentService implements EquipmentRemoteApi {
   Future<EquipmentRemoteAggregate> update(
     Equipment equipment, {
     required int expectedRevision,
+    bool includeCaptureCapability = true,
   }) async {
     final now = DateTime.now().toUtc();
     final body = EquipmentRemoteAggregate(
@@ -137,6 +139,7 @@ class TcBackendEquipmentService implements EquipmentRemoteApi {
       revision: expectedRevision,
       createdAt: now,
       updatedAt: now,
+      captureCapabilityIncluded: includeCaptureCapability,
     ).toPatchJson(expectedRevision: expectedRevision);
     return _aggregate(
       (await _send(
