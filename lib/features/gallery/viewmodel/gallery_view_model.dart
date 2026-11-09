@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -77,6 +78,9 @@ class GalleryViewModel extends ChangeNotifier {
   final EquipmentRepository? _equipmentRepository;
 
   bool _isLoading = false;
+  bool _loadInProgress = false;
+  bool _reloadAfterCurrent = false;
+  Completer<void>? _reloadCompleter;
   bool _hasLoaded = false;
   String? _errorMessage;
   List<ShootingRecord> _allRecords = [];
@@ -360,7 +364,11 @@ class GalleryViewModel extends ChangeNotifier {
   }
 
   Future<void> load({bool silent = false}) async {
-    if (_isLoading) return;
+    if (_loadInProgress) {
+      _reloadAfterCurrent = true;
+      return (_reloadCompleter ??= Completer<void>()).future;
+    }
+    _loadInProgress = true;
     if (!silent) {
       _isLoading = true;
       _errorMessage = null;
@@ -389,8 +397,16 @@ class GalleryViewModel extends ChangeNotifier {
         _errorMessage = error.toString();
       }
     } finally {
+      _loadInProgress = false;
       _isLoading = false;
       notifyListeners();
+      if (_reloadAfterCurrent) {
+        _reloadAfterCurrent = false;
+        final queued = _reloadCompleter;
+        _reloadCompleter = null;
+        await load(silent: true);
+        queued?.complete();
+      }
     }
   }
 

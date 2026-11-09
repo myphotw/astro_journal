@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +22,7 @@ import '../../features/sky_map/view/sky_map_screen.dart';
 import '../../features/sky_map/viewmodel/sky_map_view_model.dart';
 import '../../features/stats/view/stats_screen.dart';
 import '../../features/stats/viewmodel/stats_view_model.dart';
+import '../../services/gallery_incremental_refresh_service.dart';
 
 /// GNB 탭 인덱스:
 /// 0=홈, 1=카탈로그, 2=갤러리, 3=광해지도, 4=성도, 5=통계 (+ nav 6=사진등록 액션)
@@ -120,7 +122,11 @@ class _MainShellState extends State<MainShell> {
         if (!catalog.hasLoaded) unawaited(catalog.load());
       case 2:
         final gallery = context.read<GalleryViewModel>();
-        if (!gallery.hasLoaded) unawaited(gallery.load());
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          unawaited(_refreshGalleryOnEntry());
+        } else if (!gallery.hasLoaded) {
+          unawaited(gallery.load());
+        }
       case 3:
         final map = context.read<LightPollutionMapViewModel>();
         if (!map.hasLoaded) unawaited(map.load());
@@ -132,6 +138,17 @@ class _MainShellState extends State<MainShell> {
         if (!stats.hasLoaded) unawaited(stats.load());
       default:
         break;
+    }
+  }
+
+  Future<void> _refreshGalleryOnEntry() async {
+    try {
+      final gallery = context.read<GalleryViewModel>();
+      if (!gallery.hasLoaded) await gallery.load();
+      if (!mounted) return;
+      await context.read<GalleryIncrementalRefreshService>().refresh();
+    } catch (error) {
+      debugPrint('Gallery entry refresh skipped: $error');
     }
   }
 

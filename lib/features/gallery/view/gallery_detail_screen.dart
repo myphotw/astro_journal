@@ -21,10 +21,10 @@ import '../../../data/repositories/sync_outbox_repository.dart';
 import '../../../services/app_logger.dart';
 import '../../../services/google_maps_key_readiness.dart';
 import '../../../services/geocoding_service.dart';
+import '../../../services/gallery_incremental_refresh_service.dart';
 import '../../../services/metadata_field_trace.dart';
 import '../../../services/metadata_format.dart';
 import '../../../services/photo_overlay_service.dart';
-import '../../../services/tc_backend_pull_sync_coordinator.dart';
 import '../../../services/tc_backend_sync_coordinator.dart';
 import '../../../shared/widgets/integration_minutes_field.dart';
 import '../../../shared/widgets/app_file_image.dart';
@@ -82,7 +82,7 @@ class GalleryDetailScreen extends StatefulWidget {
   }) async {
     final galleryViewModel = context.read<GalleryViewModel>();
     final syncCoordinator = context.read<TcBackendSyncCoordinator?>();
-    final pullSyncCoordinator = context.read<TcBackendPullSyncCoordinator?>();
+    final pullSyncCoordinator = context.read<GalleryIncrementalRefreshService?>();
     final outbox = context.read<SyncOutboxRepository?>();
     final photoOutbox = outbox is PhotoSyncOutboxRepository
         ? outbox as PhotoSyncOutboxRepository

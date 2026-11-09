@@ -16,6 +16,7 @@ import '../../../data/models/observation_site.dart';
 import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/observation_site_repository.dart';
 import '../../../services/geocoding_service.dart';
+import '../../../services/metadata_format.dart';
 import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/integration_minutes_field.dart';
 import '../../../shared/widgets/material_date_time_picker_field.dart';
@@ -87,6 +88,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   RegistrationSession? _listenedSession;
   VoidCallback? _exifListener;
+  final _autoIntegrationBySession = <RegistrationSession, String>{};
+  bool _bindingSession = false;
 
   RegistrationSession get session => widget.sessions[_photoIndex];
   int get _photoTotal => widget.sessions.length;
@@ -101,6 +104,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _stackCtrl = TextEditingController();
     _singleExpCtrl = TextEditingController();
     _totalExpCtrl = TextEditingController();
+    _stackCtrl.addListener(_recalculateIntegration);
+    _singleExpCtrl.addListener(_recalculateIntegration);
+    _totalExpCtrl.addListener(_trackManualIntegrationChange);
     _filterCtrl = TextEditingController();
     _isoCtrl = TextEditingController();
     _fstopCtrl = TextEditingController();
@@ -154,17 +160,55 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   void _bindSessionControllers(RegistrationSession s) {
-    _stackCtrl.text = s.stackNum != null ? '${s.stackNum}' : '';
-    _singleExpCtrl.text = s.singleExpSecDigits ?? '';
-    _totalExpCtrl.text = s.totalExpMinutesDigits ?? '';
-    _filterCtrl.text = s.filter ?? '';
-    _isoCtrl.text = s.isoDigits ?? '';
-    _fstopCtrl.text = s.fstopDigits ?? '';
-    _focalCtrl.text = s.focalDigits ?? '';
-    _locationNameCtrl.text = s.locationName ?? '';
-    _latCtrl.text = s.lat != null ? s.lat!.toStringAsFixed(6) : '';
-    _lngCtrl.text = s.lng != null ? s.lng!.toStringAsFixed(6) : '';
-    _memoCtrl.text = s.memo ?? '';
+    _bindingSession = true;
+    try {
+      _stackCtrl.text = s.stackNum != null ? '${s.stackNum}' : '';
+      _singleExpCtrl.text = s.singleExpSecDigits ?? '';
+      _totalExpCtrl.text = s.totalExpMinutesDigits ?? '';
+      _filterCtrl.text = s.filter ?? '';
+      _isoCtrl.text = s.isoDigits ?? '';
+      _fstopCtrl.text = s.fstopDigits ?? '';
+      _focalCtrl.text = s.focalDigits ?? '';
+      _locationNameCtrl.text = s.locationName ?? '';
+      _latCtrl.text = s.lat != null ? s.lat!.toStringAsFixed(6) : '';
+      _lngCtrl.text = s.lng != null ? s.lng!.toStringAsFixed(6) : '';
+      _memoCtrl.text = s.memo ?? '';
+    } finally {
+      _bindingSession = false;
+    }
+  }
+
+  void _recalculateIntegration() {
+    if (_bindingSession) return;
+    session.stackNum = int.tryParse(_stackCtrl.text.trim());
+    session.singleExpSecDigits = _singleExpCtrl.text.trim();
+    final calculated = MetadataFormat.integrationMinutesFromStackAndExposure(
+      stackCount: _stackCtrl.text,
+      singleExposureSeconds: _singleExpCtrl.text,
+    );
+    final previousAuto = _autoIntegrationBySession[session];
+    if (calculated == null) {
+      if (previousAuto != null && _totalExpCtrl.text == previousAuto) {
+        _autoIntegrationBySession.remove(session);
+        _totalExpCtrl.clear();
+      }
+      return;
+    }
+    if (_totalExpCtrl.text.isNotEmpty && _totalExpCtrl.text != previousAuto) {
+      return;
+    }
+    _autoIntegrationBySession[session] = calculated;
+    if (_totalExpCtrl.text != calculated) _totalExpCtrl.text = calculated;
+    session.totalExpMinutesDigits = calculated;
+  }
+
+  void _trackManualIntegrationChange() {
+    if (_bindingSession) return;
+    session.totalExpMinutesDigits = _totalExpCtrl.text.trim();
+    final previousAuto = _autoIntegrationBySession[session];
+    if (previousAuto != null && _totalExpCtrl.text != previousAuto) {
+      _autoIntegrationBySession.remove(session);
+    }
   }
 
   void _attachExifListener(RegistrationSession s) {
@@ -253,6 +297,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   void dispose() {
     _detachExifListener();
+    _stackCtrl.removeListener(_recalculateIntegration);
+    _singleExpCtrl.removeListener(_recalculateIntegration);
+    _totalExpCtrl.removeListener(_trackManualIntegrationChange);
     _stackCtrl.dispose();
     _singleExpCtrl.dispose();
     _totalExpCtrl.dispose();

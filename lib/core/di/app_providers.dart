@@ -88,6 +88,7 @@ import '../../services/tc_backend_catalog_favorite_service.dart';
 import '../../services/tc_backend_upload_service.dart';
 import '../../services/tc_backend_record_service.dart';
 import '../../services/tc_backend_sync_coordinator.dart';
+import '../../services/gallery_incremental_refresh_service.dart';
 import '../../services/tc_backend_startup_resume_service.dart';
 import '../../services/tc_backend_changes_service.dart';
 import '../../services/tc_backend_external_api_client.dart';
@@ -313,6 +314,10 @@ class AppProviders {
       multiNightFramingChangeApplier:
           multiNightFramingSyncCoordinator.applyChange,
     );
+    final galleryIncrementalRefresh = GalleryIncrementalRefreshService(
+      pull: pullSyncCoordinator,
+      connection: tcBackendConnectionManager,
+    );
     final startupResumeService = TcBackendStartupResumeService(
       tcBackendSettingsService,
       TcBackendCompositeSyncRunner([
@@ -320,7 +325,7 @@ class AppProviders {
         observationSiteSyncCoordinator,
         multiNightFramingSyncCoordinator,
         syncCoordinator,
-        pullSyncCoordinator,
+        galleryIncrementalRefresh,
       ]),
       reconcileCatalog: () async {
         await catalogCaptureProjection.reconcileAll();
@@ -611,6 +616,9 @@ class AppProviders {
       ),
       Provider<TcBackendSyncCoordinator>.value(value: syncCoordinator),
       Provider<TcBackendPullSyncCoordinator>.value(value: pullSyncCoordinator),
+      Provider<GalleryIncrementalRefreshService>.value(
+        value: galleryIncrementalRefresh,
+      ),
       Provider<TcBackendStartupResumeService>.value(
         value: startupResumeService,
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../services/gallery_incremental_refresh_service.dart';
+import '../../../services/tc_backend_connection_manager.dart';
 
 import '../../../core/constants/analysis_status.dart';
 import '../../../core/constants/catalog_type.dart';
@@ -32,6 +34,7 @@ class GalleryScreen extends StatefulWidget {
 
 class _GalleryScreenState extends State<GalleryScreen> {
   bool _isSearching = false;
+  bool _isRefreshing = false;
   late final TextEditingController _searchController;
 
   @override
@@ -44,6 +47,29 @@ class _GalleryScreenState extends State<GalleryScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshGallery() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    String message;
+    try {
+      await context.read<TcBackendConnectionManager>().reconnect();
+      if (!mounted) return;
+      final result = await context
+          .read<GalleryIncrementalRefreshService>()
+          .refresh(force: true);
+      message = result == GalleryRefreshResult.offline
+          ? '서버에 연결할 수 없습니다. 저장된 사진은 계속 볼 수 있습니다.'
+          : '새 사진 확인을 완료했습니다.';
+    } catch (_) {
+      message = '새 사진을 확인하지 못했습니다. 기존 사진은 유지됩니다.';
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   @override
@@ -97,6 +123,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   )
                 : const Text('갤러리'),
             actions: [
+              IconButton(
+                icon: _isRefreshing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                tooltip: '새 사진 확인',
+                onPressed: _isRefreshing ? null : _refreshGallery,
+              ),
               IconButton(
                 icon: Icon(_isSearching ? Icons.close : Icons.search),
                 tooltip: _isSearching ? '검색 닫기' : '검색',

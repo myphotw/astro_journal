@@ -22,6 +22,7 @@ import 'services/recommendation_settings_service.dart';
 import 'services/splash_image_service.dart';
 import 'services/tc_backend_startup_resume_service.dart';
 import 'services/tc_backend_connection_manager.dart';
+import 'services/gallery_incremental_refresh_service.dart';
 import 'shared/widgets/main_shell.dart';
 import 'shared/widgets/pc_main_shell.dart';
 
@@ -63,6 +64,9 @@ class _BackendConnectionLifecycleState
     switch (state) {
       case AppLifecycleState.resumed:
         _connectionManager.resume();
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          unawaited(_refreshGalleryAfterResume());
+        }
         break;
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
@@ -71,6 +75,16 @@ class _BackendConnectionLifecycleState
         break;
       case AppLifecycleState.inactive:
         break;
+    }
+  }
+
+  Future<void> _refreshGalleryAfterResume() async {
+    try {
+      await _connectionManager.reconnect();
+      if (!mounted) return;
+      await context.read<GalleryIncrementalRefreshService>().refresh();
+    } catch (error) {
+      debugPrint('Gallery foreground refresh skipped: $error');
     }
   }
 

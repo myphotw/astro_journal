@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/core/constants/gallery_object_category.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
@@ -186,6 +188,60 @@ void main() {
       expect(viewModel.targetGroups.first.object.id, 'M27');
     });
   });
+
+  test(
+    'pull notification during initial load gets a follow-up silent load',
+    () async {
+      final delayed = _DelayedShootingRecordRepository();
+      final viewModel = GalleryViewModel(
+        delayed,
+        _FakeCatalogRepository([
+          const CatalogObject(
+            id: 'M42',
+            number: 42,
+            catalog: CatalogType.messier,
+            name: '오리온 대성운',
+            type: '성운',
+            constellation: '오리온',
+            ra: '-',
+            dec: '-',
+            magnitude: '-',
+          ),
+        ]),
+        CatalogSearchService(),
+      );
+
+      final initialLoad = viewModel.load();
+      final pullTriggeredLoad = viewModel.load(silent: true);
+      delayed.first.complete([]);
+      await Future.wait([initialLoad, pullTriggeredLoad]);
+
+      expect(delayed.calls, 2);
+      expect(viewModel.filteredRecords.single.id, 'remote-new');
+    },
+  );
+}
+
+class _DelayedShootingRecordRepository extends _FakeShootingRecordRepository {
+  _DelayedShootingRecordRepository() : super([]);
+
+  final first = Completer<List<ShootingRecord>>();
+  int calls = 0;
+
+  @override
+  Future<List<ShootingRecord>> getAll() {
+    calls++;
+    if (calls == 1) return first.future;
+    return Future.value([
+      ShootingRecord(
+        id: 'remote-new',
+        celestialObjectId: 'M42',
+        capturedAt: DateTime(2026, 11, 9),
+        photoUri: '/remote.jpg',
+        createdAt: DateTime(2026, 11, 9),
+      ),
+    ]);
+  }
 }
 
 class _FakeShootingRecordRepository implements ShootingRecordRepository {
