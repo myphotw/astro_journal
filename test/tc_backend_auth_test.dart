@@ -274,6 +274,9 @@ void main() {
               'revision': 1,
             },
           ],
+          'total': 1,
+          'page': 1,
+          'page_size': 20,
         }),
         200,
       );

@@ -1,6 +1,7 @@
 import '../data/datasources/gallery_record_link_datasource.dart';
 import '../data/datasources/sync_checkpoint_datasource.dart';
 import '../data/models/tc_backend_change.dart';
+import '../data/models/gallery_item.dart';
 import '../data/models/gallery_observation_projection.dart';
 import '../data/repositories/gallery_repository.dart';
 import '../data/repositories/shooting_record_repository.dart';
@@ -98,59 +99,83 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
   Future<void> _drainExclusive() async {
     var cursor = await _checkpoints.readCursor(streamName);
     var observationRecordsChanged = false;
-    for (var pageIndex = 0; pageIndex < maxPagesPerDrain; pageIndex++) {
-      final page = await _changesApi.getChanges(cursor: cursor);
-      for (final change in page.changes) {
-        if (change.isAstroJournalReset) {
-          await _localCaptureReset?.clearCaptureData();
-          continue;
+    try {
+      for (var pageIndex = 0; pageIndex < maxPagesPerDrain; pageIndex++) {
+        final page = await _changesApi.getChanges(cursor: cursor);
+        for (final change in page.changes) {
+          if (change.isAstroJournalReset) {
+            await _localCaptureReset?.clearCaptureData();
+            continue;
+          }
+          if (change.isObservationSite) {
+            await _observationSiteChangeApplier?.call(change);
+            continue;
+          }
+          if (change.isEquipment) {
+            await _equipmentChangeApplier?.call(change);
+            continue;
+          }
+          if (change.isMultiNightFramingReference) {
+            await _multiNightFramingChangeApplier?.call(change);
+            continue;
+          }
+          if (change.isGalleryVisibility) {
+            observationRecordsChanged =
+                await _applyVisibility(change) || observationRecordsChanged;
+            continue;
+          }
+          if (!change.isObservationRecord) continue;
+          observationRecordsChanged =
+              await _apply(change) || observationRecordsChanged;
         }
-        if (change.isObservationSite) {
-          await _observationSiteChangeApplier?.call(change);
-          continue;
-        }
-        if (change.isEquipment) {
-          await _equipmentChangeApplier?.call(change);
-          continue;
-        }
-        if (change.isMultiNightFramingReference) {
-          await _multiNightFramingChangeApplier?.call(change);
-          continue;
-        }
-        if (!change.isObservationRecord) continue;
-        observationRecordsChanged =
-            await _apply(change) || observationRecordsChanged;
-      }
 
-      final nextCursor = page.nextCursor;
-      if (page.changes.isNotEmpty && nextCursor == null) {
-        throw const TcBackendChangesException(
-          'A non-empty changes page has no next cursor.',
-        );
-      }
-      if (nextCursor != null && nextCursor != cursor) {
-        await _checkpoints.writeCursor(streamName, nextCursor);
-        cursor = nextCursor;
-      }
-      if (!page.hasMore) {
-        observationRecordsChanged =
-            await _reconcileTombstonedRecordProjections() ||
-            observationRecordsChanged;
-        await _reconcileCatalog();
-        if (observationRecordsChanged) {
-          try {
-            await _onObservationRecordsChanged?.call();
-          } catch (_) {
-            // The change and cursor are already durable. A UI refresh failure
-            // must not replay the same remote mutation page.
+        final nextCursor = page.nextCursor;
+        if (page.changes.isNotEmpty && nextCursor == null) {
+          throw const TcBackendChangesException(
+            'A non-empty changes page has no next cursor.',
+          );
+        }
+        // Finish bounded legacy-hidden rechecks before committing this page.
+        // Transient detail errors preserve its checkpoint, but finally still
+        // refreshes any successful mutations earlier in the page/recheck list.
+        final gallery = _galleryRepository;
+        if (!page.hasMore && gallery is GalleryVisibilityRepository) {
+          final visibility = gallery as GalleryVisibilityRepository;
+          for (final id in await visibility.takeHiddenRechecks()) {
+            try {
+              final item = await _changesApi.getObservationRecord(id);
+              observationRecordsChanged =
+                  await gallery.upsertPulledItem(item) ||
+                  observationRecordsChanged;
+            } on TcBackendChangesException catch (error) {
+              if (error.statusCode != 404) rethrow;
+            }
           }
         }
-        return;
+        if (nextCursor != null && nextCursor != cursor) {
+          await _checkpoints.writeCursor(streamName, nextCursor);
+          cursor = nextCursor;
+        }
+        if (!page.hasMore) {
+          observationRecordsChanged =
+              await _reconcileTombstonedRecordProjections() ||
+              observationRecordsChanged;
+          return;
+        }
+      }
+      throw const TcBackendChangesException(
+        'Changes pagination exceeded the per-drain page limit.',
+      );
+    } finally {
+      // Include successful mutations in an unfinished page. Refresh failures
+      // must neither hide the original error nor advance the page checkpoint.
+      if (observationRecordsChanged) {
+        await _reconcileCatalog();
+        try {
+          await _onObservationRecordsChanged?.call();
+        } catch (_) {}
       }
     }
-    throw const TcBackendChangesException(
-      'Changes pagination exceeded the per-drain page limit.',
-    );
   }
 
   Future<bool> _reconcileTombstonedRecordProjections() async {
@@ -159,7 +184,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
       for (final entry in links.entries) entry.value: entry.key,
     };
     var changed = false;
-    for (final record in await _shootingRecordRepository.getAll()) {
+    for (final record in List.of(await _shootingRecordRepository.getAll())) {
       final backendRecordId =
           GalleryObservationProjection.backendRecordIdFromRemoteLocalId(
             record.id,
@@ -182,7 +207,7 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     final projection = _catalogCaptureProjection;
     if (projection == null) return;
     try {
-      await projection.reconcileAll();
+      await projection.reconcileAll(cacheOnly: true);
     } catch (_) {
       // Changes and cursor remain durable. Startup reconciliation retries the
       // rebuild without replaying remote mutations.
@@ -193,15 +218,42 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
     switch (change.operation) {
       case TcBackendChangeOperation.create:
       case TcBackendChangeOperation.update:
+        if (change.currentResourceState == TcBackendResourceState.deleted ||
+            change.currentResourceState == TcBackendResourceState.missing ||
+            change.currentResourceState == TcBackendResourceState.unavailable) {
+          return _removeProjection(change);
+        }
         final cachedRevision = await _galleryRepository.getCachedRevision(
           change.resourceId,
         );
-        if (change.revision != null &&
-            cachedRevision != null &&
-            cachedRevision >= change.revision!) {
+        final effectiveRevision = change.currentRevision ?? change.revision;
+        final gallery = _galleryRepository;
+        if (gallery is GalleryResourceStateRepository) {
+          if (!await (gallery as GalleryResourceStateRepository)
+              .shouldFetchPulledItem(change.resourceId, effectiveRevision)) {
+            return false;
+          }
+        } else if (await gallery.getAuthoritativeDeleteRevision(
+                  change.resourceId,
+                ) !=
+                null ||
+            (effectiveRevision != null &&
+                cachedRevision != null &&
+                cachedRevision >= effectiveRevision)) {
           return false;
         }
-        final item = await _changesApi.getObservationRecord(change.resourceId);
+        final GalleryItem item;
+        try {
+          item = await _changesApi.getObservationRecord(change.resourceId);
+        } on TcBackendChangesException catch (error) {
+          // Only a canonical ObservationRecord detail 404 is absence evidence.
+          // Authentication, transport, parsing and all other HTTP errors retry.
+          if (error.statusCode != 404) rethrow;
+          return _removeProjection(
+            change,
+            hiddenState: TcBackendResourceState.missing,
+          );
+        }
         return _galleryRepository.upsertPulledItem(item);
       case TcBackendChangeOperation.delete:
         final revision = change.revision;
@@ -210,23 +262,123 @@ class TcBackendPullSyncCoordinator implements TcBackendDrainRunner {
             'ObservationRecord tombstone has no revision.',
           );
         }
-        final applied = await _galleryRepository.applyPulledDelete(
-          change.resourceId,
-          revision: revision,
-          deletedAt: change.deletedAt,
-        );
-        if (!applied) return false;
-        final linkedLocalId = (await _recordLinks
-            .localIdsByBackendRecordId())[change.resourceId];
-        final localIds = <String>{
-          if (linkedLocalId != null) linkedLocalId,
-          GalleryObservationProjection.remoteLocalId(change.resourceId),
-        };
-        for (final localId in localIds) {
-          await _shootingRecordRepository.delete(localId);
-        }
-        return true;
+        return _removeProjection(change, revision: revision);
     }
+  }
+
+  Future<bool> _applyVisibility(TcBackendChange change) async {
+    if (change.operation != TcBackendChangeOperation.update) return false;
+    final gallery = _galleryRepository;
+    if (await gallery.getAuthoritativeDeleteRevision(change.resourceId) !=
+        null) {
+      return false;
+    }
+    if (gallery is! GalleryVisibilityRepository) {
+      // Older repository implementations still get safe detail/404 handling.
+      return _apply(change);
+    }
+    final visibility = gallery as GalleryVisibilityRepository;
+    final cursor = change.cursor;
+    if (cursor == null || BigInt.tryParse(cursor) == null) {
+      throw const TcBackendChangesException(
+        'Visibility event has no valid cursor.',
+      );
+    }
+    if (!await visibility.shouldApplyVisibilityEvent(
+      change.resourceId,
+      cursor,
+    )) {
+      return false;
+    }
+    final state = change.currentResourceState;
+    if (state == TcBackendResourceState.deleted ||
+        state == TcBackendResourceState.missing ||
+        state == TcBackendResourceState.unavailable) {
+      return _removeProjection(change, visibilityCursor: cursor);
+    }
+    // Null/unknown state is not deletion evidence: confirm via canonical detail.
+    final GalleryItem item;
+    try {
+      item = await _changesApi.getObservationRecord(change.resourceId);
+    } on TcBackendChangesException catch (error) {
+      if (error.statusCode != 404) rethrow;
+      return _removeProjection(
+        change,
+        hiddenState: TcBackendResourceState.missing,
+        visibilityCursor: cursor,
+      );
+    }
+    return visibility.upsertVisibilityItem(item, cursor);
+  }
+
+  Future<bool> _removeProjection(
+    TcBackendChange change, {
+    int? revision,
+    TcBackendResourceState? hiddenState,
+    String? visibilityCursor,
+  }) async {
+    final cachedRevision = await _galleryRepository.getCachedRevision(
+      change.resourceId,
+    );
+    final removalRevision =
+        revision ??
+        change.currentRevision ??
+        change.revision ??
+        cachedRevision ??
+        0;
+    final state = hiddenState ?? change.currentResourceState;
+    final gallery = _galleryRepository;
+    final soft =
+        revision == null &&
+        (state == TcBackendResourceState.missing ||
+            state == TcBackendResourceState.unavailable) &&
+        gallery is GalleryResourceStateRepository;
+    final applied =
+        soft &&
+            visibilityCursor != null &&
+            gallery is GalleryVisibilityRepository
+        ? await (gallery as GalleryVisibilityRepository).applyVisibilityHidden(
+            change.resourceId,
+            revision: removalRevision,
+            state: state!,
+            cursor: visibilityCursor,
+          )
+        : soft
+        ? await (gallery as GalleryResourceStateRepository).applyPulledHidden(
+            change.resourceId,
+            revision: removalRevision,
+            state: state!,
+          )
+        : await gallery.applyPulledDelete(
+            change.resourceId,
+            revision: removalRevision,
+            deletedAt: change.deletedAt,
+          );
+    // A crash can leave local rows behind an already durable tombstone.
+    // Never remove rows if a newer live revision supersedes that tombstone.
+    final removal =
+        await gallery.getAuthoritativeDeleteRevision(change.resourceId) ??
+        (gallery is GalleryResourceStateRepository
+            ? await (gallery as GalleryResourceStateRepository)
+                  .getHiddenRevision(change.resourceId)
+            : null);
+    if (removal == null) {
+      return false;
+    }
+    final linkedLocalId = (await _recordLinks
+        .localIdsByBackendRecordId())[change.resourceId];
+    final localIds = <String>{
+      ?linkedLocalId,
+      GalleryObservationProjection.remoteLocalId(change.resourceId),
+    };
+    var changed = applied;
+    for (final localId in localIds) {
+      if (await _shootingRecordRepository.getById(localId) != null) {
+        await _shootingRecordRepository.delete(localId);
+        changed = true;
+      }
+    }
+    return changed;
   }
 }
 

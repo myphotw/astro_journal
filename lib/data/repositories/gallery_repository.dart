@@ -1,4 +1,5 @@
 import '../models/gallery_item.dart';
+import '../models/tc_backend_change.dart';
 
 enum GallerySnapshotSource { remote, cache, none }
 
@@ -40,4 +41,33 @@ abstract class GalleryRepository {
     required int revision,
     DateTime? deletedAt,
   });
+}
+
+/// Reads the projection already applied by incremental sync, without a rescan.
+abstract interface class CachedGallerySnapshotReader {
+  Future<GallerySnapshot> getCachedSnapshot();
+}
+
+/// Optional incremental-sync capability. Visibility is not an actual DELETE.
+abstract interface class GalleryResourceStateRepository {
+  Future<bool> shouldFetchPulledItem(String id, int? revision);
+  Future<int?> getHiddenRevision(String id);
+  Future<bool> applyPulledHidden(
+    String id, {
+    required int revision,
+    required TcBackendResourceState state,
+  });
+}
+
+/// Projection ordering is independent of ObservationRecord revision.
+abstract interface class GalleryVisibilityRepository {
+  Future<bool> shouldApplyVisibilityEvent(String id, String cursor);
+  Future<bool> applyVisibilityHidden(
+    String id, {
+    required int revision,
+    required TcBackendResourceState state,
+    required String cursor,
+  });
+  Future<bool> upsertVisibilityItem(GalleryItem item, String cursor);
+  Future<List<String>> takeHiddenRechecks({int limit = 5});
 }

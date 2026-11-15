@@ -31,6 +31,10 @@ val backendAuthTokenConfigured =
 val releaseBuildRequested = gradle.startParameter.taskNames.any {
     it.contains("release", ignoreCase = true)
 }
+val releaseStoreFile = System.getenv("ASTROJOURNAL_RELEASE_STORE_FILE")
+val releaseStorePassword = System.getenv("ASTROJOURNAL_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = System.getenv("ASTROJOURNAL_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("ASTROJOURNAL_RELEASE_KEY_PASSWORD")
 
 android {
     namespace = "com.example.astro_journal"
@@ -58,9 +62,18 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = releaseStoreFile?.let { file(it) }
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -124,6 +137,11 @@ abstract class RenameApksTask : DefaultTask() {
 androidComponents {
     beforeVariants(selector().withBuildType("release")) {
         if (!releaseBuildRequested) return@beforeVariants
+        if (releaseStoreFile.isNullOrBlank() || !file(releaseStoreFile).isFile ||
+            releaseStorePassword.isNullOrBlank() || releaseKeyAlias.isNullOrBlank() ||
+            releaseKeyPassword.isNullOrBlank()) {
+            throw GradleException("Dedicated Release signing is required. Use scripts/build_app.ps1 -Mode Release.")
+        }
         if (googleMapsApiKey.isBlank()) {
             throw GradleException(
                 "Release configuration is missing GOOGLE_MAPS_API_KEY. " +

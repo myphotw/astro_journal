@@ -1,5 +1,7 @@
 enum TcBackendChangeOperation { create, update, delete }
 
+enum TcBackendResourceState { active, deleted, missing, unavailable }
+
 class TcBackendChange {
   const TcBackendChange({
     required this.resourceType,
@@ -7,6 +9,9 @@ class TcBackendChange {
     required this.operation,
     this.revision,
     this.deletedAt,
+    this.currentResourceState,
+    this.currentRevision,
+    this.cursor,
   });
 
   final String resourceType;
@@ -14,6 +19,11 @@ class TcBackendChange {
   final TcBackendChangeOperation operation;
   final int? revision;
   final DateTime? deletedAt;
+  final TcBackendResourceState? currentResourceState;
+  final int? currentRevision;
+  final String? cursor;
+
+  bool get isGalleryVisibility => resourceType == 'AstroGalleryVisibility';
 
   bool get isObservationRecord {
     final normalized = resourceType

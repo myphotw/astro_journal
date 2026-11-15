@@ -21,6 +21,9 @@ void main() {
         return http.Response(
           jsonEncode({
             'items': [_astroItemJson()],
+            'total': 1,
+            'page': 1,
+            'page_size': 20,
           }),
           200,
         );

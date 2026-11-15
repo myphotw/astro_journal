@@ -65,6 +65,8 @@ migrate_working_dir/
 *.keystore
 *.p12
 *.pfx
+*.dpapi
+/android/key.properties
 *.pem
 *.key
 google-services.json

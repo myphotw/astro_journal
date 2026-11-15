@@ -12,6 +12,37 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('CatalogCaptureProjectionService', () {
     test(
+      'uninitialized remote cache does not clear existing captured projection',
+      () async {
+        final harness = _Harness();
+        harness.local.records.add(_record('local', 'M54', 'photo.jpg'));
+        await harness.service.reconcileAll();
+        expect(harness.catalog.captured('M54'), isTrue);
+        harness.local.records.clear();
+        harness.gallery.cacheSource = GallerySnapshotSource.none;
+        await expectLater(
+          harness.service.reconcileAll(cacheOnly: true),
+          throwsStateError,
+        );
+        expect(harness.catalog.captured('M54'), isTrue);
+        expect(harness.gallery.snapshotReads, 1);
+      },
+    );
+    test(
+      'cache-only reconciliation preserves all 51 remote photos without a remote request',
+      () async {
+        final harness = _Harness();
+        harness.gallery.items.addAll([
+          for (var i = 0; i < 51; i++) _gallery('record-$i', 'file-$i', 'M54'),
+        ]);
+        final result = await harness.service.reconcileAll(cacheOnly: true);
+        expect(result.single.photoCount, 51);
+        expect(harness.catalog.captured('M54'), isTrue);
+        expect(harness.gallery.cachedReads, 1);
+        expect(harness.gallery.snapshotReads, 0);
+      },
+    );
+    test(
       'local M54 registration is projected and survives reconstruction',
       () async {
         final harness = _Harness();
@@ -295,16 +326,32 @@ class _FakeShootingRecordRepository implements ShootingRecordRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _FakeGalleryRepository implements GalleryRepository {
+class _FakeGalleryRepository
+    implements GalleryRepository, CachedGallerySnapshotReader {
   final List<GalleryItem> items = [];
+  int cachedReads = 0;
+  int snapshotReads = 0;
+  GallerySnapshotSource cacheSource = GallerySnapshotSource.cache;
 
   @override
-  Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async =>
-      GallerySnapshot(
-        items: List.of(items),
-        source: GallerySnapshotSource.cache,
-        backendEnabled: true,
-      );
+  Future<GallerySnapshot> getCachedSnapshot() async {
+    cachedReads++;
+    return GallerySnapshot(
+      items: List.of(items),
+      source: cacheSource,
+      backendEnabled: true,
+    );
+  }
+
+  @override
+  Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async {
+    snapshotReads++;
+    return GallerySnapshot(
+      items: List.of(items),
+      source: GallerySnapshotSource.cache,
+      backendEnabled: true,
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

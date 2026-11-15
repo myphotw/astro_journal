@@ -81,6 +81,7 @@ class GalleryViewModel extends ChangeNotifier {
   bool _loadInProgress = false;
   bool _reloadAfterCurrent = false;
   Completer<void>? _reloadCompleter;
+  bool _reloadFromPull = false;
   bool _hasLoaded = false;
   String? _errorMessage;
   List<ShootingRecord> _allRecords = [];
@@ -363,9 +364,10 @@ class GalleryViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> load({bool silent = false}) async {
+  Future<void> load({bool silent = false, bool afterPull = false}) async {
     if (_loadInProgress) {
       _reloadAfterCurrent = true;
+      _reloadFromPull = _reloadFromPull || afterPull;
       return (_reloadCompleter ??= Completer<void>()).future;
     }
     _loadInProgress = true;
@@ -376,8 +378,11 @@ class GalleryViewModel extends ChangeNotifier {
     }
 
     try {
+      final repository = _shootingRecordRepository;
       final records = await _resolveEquipmentNames(
-        await _shootingRecordRepository.getAll(),
+        afterPull && repository is ShootingRecordPullReader
+            ? await (repository as ShootingRecordPullReader).getAllAfterPull()
+            : await repository.getAll(),
       );
       final catalogObjects = await _catalogRepository.getAll(listOnly: true);
 
@@ -404,7 +409,9 @@ class GalleryViewModel extends ChangeNotifier {
         _reloadAfterCurrent = false;
         final queued = _reloadCompleter;
         _reloadCompleter = null;
-        await load(silent: true);
+        final fromPull = _reloadFromPull;
+        _reloadFromPull = false;
+        await load(silent: true, afterPull: fromPull);
         queued?.complete();
       }
     }

@@ -12,6 +12,39 @@ $configPath = Join-Path $projectRoot 'config\local.env'
 $temporaryDefines = $null
 $variant = $Mode.ToLowerInvariant()
 $isAndroidBuild = $TargetPlatform -eq 'Android'
+. (Join-Path $PSScriptRoot 'android_release_signing.ps1')
+
+function Test-AndroidReleaseArtifact {
+    param([string]$Path, [string]$ExpectedCertificate)
+    $localProperties = Join-Path $projectRoot 'android\local.properties'
+    $sdkLine = Get-Content -LiteralPath $localProperties |
+        Where-Object { $_.StartsWith('sdk.dir=') } | Select-Object -First 1
+    if (-not $sdkLine) { throw 'Android SDK path is not available for APK verification.' }
+    $sdk = $sdkLine.Substring(8).Replace('\\', '\').Replace('\:', ':')
+    $buildTools = Get-ChildItem -LiteralPath (Join-Path $sdk 'build-tools') -Directory |
+        Where-Object { (Test-Path -LiteralPath (Join-Path $_.FullName 'apksigner.bat')) -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName 'aapt.exe')) } |
+        Sort-Object Name -Descending | Select-Object -First 1
+    if (-not $buildTools) { throw 'APK verification tools are missing.' }
+    $certificateOutput = & (Join-Path $buildTools.FullName 'apksigner.bat') verify --print-certs $Path 2>&1
+    if ($LASTEXITCODE -ne 0) { throw 'Release APK signature verification failed; dist was not changed.' }
+    $certificateMatch = [regex]::Match(($certificateOutput -join "`n"), 'Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F]+)')
+    if (-not $certificateMatch.Success -or
+        $certificateMatch.Groups[1].Value.ToLowerInvariant() -ne $ExpectedCertificate) {
+        throw 'APK signer does not match the dedicated Release certificate; dist was not changed.'
+    }
+    $badging = & (Join-Path $buildTools.FullName 'aapt.exe') dump badging $Path 2>&1
+    if ($LASTEXITCODE -ne 0) { throw 'Release APK package verification failed.' }
+    $package = [regex]::Match(($badging -join "`n"), "package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'")
+    if (-not $package.Success -or $package.Groups[1].Value -ne 'com.example.astro_journal' -or
+        [long]$package.Groups[2].Value -lt 2 -or ($badging -match '^application-debuggable')) {
+        throw 'Release APK package/version/variant validation failed; dist was not changed.'
+    }
+    Write-Host ('RELEASE_CERTIFICATE_SHA256=' + $ExpectedCertificate)
+    Write-Host ('APK_PACKAGE=' + $package.Groups[1].Value)
+    Write-Host ('APK_VERSION_NAME=' + $package.Groups[3].Value)
+    Write-Host ('APK_VERSION_CODE=' + $package.Groups[2].Value)
+}
 
 function Read-LocalBuildConfig {
     param([Parameter(Mandatory)][string]$Path)
@@ -48,6 +81,12 @@ function Publish-AndroidRelease {
     $stagingPath = "$DestinationPath.$([guid]::NewGuid()).tmp"
     try {
         Copy-Item -LiteralPath $SourcePath -Destination $stagingPath -Force
+        if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
+            $backupPath = Join-Path $destinationDirectory ("AstroJournal.previous-{0}-{1}.apk" -f
+                (Get-Date -Format 'yyyyMMdd-HHmmss'), [guid]::NewGuid().ToString('N').Substring(0, 8))
+            Copy-Item -LiteralPath $DestinationPath -Destination $backupPath
+            Write-Host ("Previous Android APK preserved: {0}" -f $backupPath)
+        }
         Move-Item -LiteralPath $stagingPath -Destination $DestinationPath -Force
     }
     catch {
@@ -113,6 +152,9 @@ function Publish-WindowsRelease {
 }
 
 try {
+    if ($isAndroidBuild -and $Mode -eq 'Release') {
+        $expectedReleaseCertificate = Enable-AstroJournalReleaseSigning
+    }
     $config = Read-LocalBuildConfig -Path $configPath
     $requiredNames = @('TC_BACKEND_AUTH_TOKEN')
     if ($isAndroidBuild) {
@@ -209,6 +251,7 @@ try {
             Write-Host ("{0} APK: {1}" -f $Mode, $apk.FullName)
             Write-Host ("Size: {0:N0} bytes" -f $apk.Length)
             if ($Mode -eq 'Release') {
+                Test-AndroidReleaseArtifact -Path $apk.FullName -ExpectedCertificate $expectedReleaseCertificate
                 $distApk = Publish-AndroidRelease `
                     -SourcePath $apk.FullName `
                     -DestinationPath (Join-Path $projectRoot 'dist\android\AstroJournal.apk')
@@ -233,6 +276,7 @@ try {
     }
 }
 finally {
+    Clear-AstroJournalReleaseSigning
     Remove-Item Env:\GOOGLE_MAPS_API_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:\TC_BACKEND_AUTH_TOKEN -ErrorAction SilentlyContinue
     if ($temporaryDefines -and (Test-Path -LiteralPath $temporaryDefines)) {

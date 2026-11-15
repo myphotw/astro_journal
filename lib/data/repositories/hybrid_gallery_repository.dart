@@ -6,13 +6,19 @@ import '../../services/tc_backend_settings_service.dart';
 import '../datasources/gallery_cache_local_datasource.dart';
 import '../datasources/remote_gallery_datasource.dart';
 import '../models/gallery_item.dart';
+import '../models/tc_backend_change.dart';
 import '../models/plate_solve_queue.dart';
 import 'gallery_repository.dart';
 import '../../services/tc_backend_auth_service.dart';
 
 typedef GalleryRemoteFactory = GalleryRemoteDataSource Function(String baseUrl);
 
-class HybridGalleryRepository implements GalleryRepository {
+class HybridGalleryRepository
+    implements
+        GalleryRepository,
+        CachedGallerySnapshotReader,
+        GalleryResourceStateRepository,
+        GalleryVisibilityRepository {
   static const _listCacheKey = 'astro:gallery:list';
   static const _fullSnapshotCacheKey = 'astro:gallery:full_snapshot';
 
@@ -59,6 +65,20 @@ class HybridGalleryRepository implements GalleryRepository {
       (await getSnapshot(forceRefresh: forceRefresh)).items;
 
   @override
+  Future<GallerySnapshot> getCachedSnapshot() =>
+      _serializeListMutation(() async {
+        final entry = await _cache.read(_listCacheKey);
+        final settings = await _settingsService.load();
+        return GallerySnapshot(
+          items: await _visibleItems(_cachedItems(entry)),
+          source: entry == null
+              ? GallerySnapshotSource.none
+              : GallerySnapshotSource.cache,
+          backendEnabled: settings.enabled,
+        );
+      });
+
+  @override
   Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) =>
       _serializeListMutation(
         () => _getSnapshotLocked(forceRefresh: forceRefresh),
@@ -71,7 +91,7 @@ class HybridGalleryRepository implements GalleryRepository {
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
     final cached = await _cache.read(_listCacheKey);
     final fullSnapshot = await _cache.read(_fullSnapshotCacheKey);
-    final cachedItems = _cachedItems(cached);
+    final cachedItems = await _visibleItems(_cachedItems(cached));
     if (!settings.enabled || baseUrl == null) {
       return GallerySnapshot(
         items: cachedItems,
@@ -81,9 +101,7 @@ class HybridGalleryRepository implements GalleryRepository {
         backendEnabled: false,
       );
     }
-    if (!forceRefresh &&
-        cached != null &&
-        _isFresh(fullSnapshot, listTtl)) {
+    if (!forceRefresh && cached != null && _isFresh(fullSnapshot, listTtl)) {
       return GallerySnapshot(
         items: cachedItems,
         source: GallerySnapshotSource.cache,
@@ -96,26 +114,25 @@ class HybridGalleryRepository implements GalleryRepository {
       final cachedByRecordId = {
         for (final item in cachedItems) item.backendRecordId: item,
       };
-      final synced = fetched
-          .map(
-            (item) => item.copyWith(
-              syncedAt: syncedAt,
-              plateSolveStatus:
-                  item.plateSolveStatus ??
-                  cachedByRecordId[item.backendRecordId]?.plateSolveStatus,
-              plateSolveJobId:
-                  item.plateSolveJobId ??
-                  cachedByRecordId[item.backendRecordId]?.plateSolveJobId,
-              plateSolve:
-                  item.plateSolve ??
-                  cachedByRecordId[item.backendRecordId]?.plateSolve,
-            ),
-          )
-          .toList(growable: false);
-      await _write(
-        _listCacheKey,
-        synced.map((item) => item.toJson()).toList(),
+      final synced = await _visibleItems(
+        fetched
+            .map(
+              (item) => item.copyWith(
+                syncedAt: syncedAt,
+                plateSolveStatus:
+                    item.plateSolveStatus ??
+                    cachedByRecordId[item.backendRecordId]?.plateSolveStatus,
+                plateSolveJobId:
+                    item.plateSolveJobId ??
+                    cachedByRecordId[item.backendRecordId]?.plateSolveJobId,
+                plateSolve:
+                    item.plateSolve ??
+                    cachedByRecordId[item.backendRecordId]?.plateSolve,
+              ),
+            )
+            .toList(growable: false),
       );
+      await _write(_listCacheKey, synced.map((item) => item.toJson()).toList());
       await _write(_fullSnapshotCacheKey, const {'completed': true});
       return GallerySnapshot(
         items: synced,
@@ -139,6 +156,10 @@ class HybridGalleryRepository implements GalleryRepository {
     String backendRecordId, {
     bool forceRefresh = false,
   }) async {
+    if (await getAuthoritativeDeleteRevision(backendRecordId) != null ||
+        await getHiddenRevision(backendRecordId) != null) {
+      return null;
+    }
     final key = 'astro:gallery:detail:$backendRecordId';
     final settings = await _settingsService.load();
     final baseUrl = TcBackendSettings.normalizeBaseUrl(settings.baseUrl);
@@ -234,11 +255,7 @@ class HybridGalleryRepository implements GalleryRepository {
     Map<String, Object?> fields, {
     int? revision,
   }) => _serializeListMutation(
-    () => _applyLocalPatchLocked(
-      backendRecordId,
-      fields,
-      revision: revision,
-    ),
+    () => _applyLocalPatchLocked(backendRecordId, fields, revision: revision),
   );
 
   Future<void> _applyLocalPatchLocked(
@@ -322,6 +339,8 @@ class HybridGalleryRepository implements GalleryRepository {
       await _cache.read('astro:gallery:tombstone:$backendRecordId'),
     );
     if (tombstone != null) revisions.add(tombstone.revision);
+    final visibility = await _visibility(backendRecordId);
+    if (visibility != null) revisions.add(visibility.revision);
     if (revisions.isEmpty) return null;
     return revisions.reduce((left, right) => left > right ? left : right);
   }
@@ -338,28 +357,133 @@ class HybridGalleryRepository implements GalleryRepository {
     final tombstone = _tombstone(
       await _cache.read('astro:gallery:tombstone:$backendRecordId'),
     );
-    if (tombstone == null) return null;
+    // Legacy tombstones without a state are actual DELETEs too. No live
+    // revision can implicitly undo an authoritative DELETE for this identity.
+    return tombstone?.revision;
+  }
 
-    final detail = _cachedItem(
-      await _cache.read('astro:gallery:detail:$backendRecordId'),
+  Future<({int revision, String state, String? cursor})?> _visibility(
+    String id,
+  ) async {
+    final entry = await _cache.read('astro:gallery:visibility:$id');
+    if (entry == null) return null;
+    final json = jsonDecode(entry.payloadJson) as Map;
+    return (
+      revision: (json['revision'] as num).toInt(),
+      state: json['state'] as String,
+      cursor: json['event_cursor']?.toString(),
     );
-    if (detail != null && detail.revision > tombstone.revision) return null;
-    for (final item in _cachedItems(await _cache.read(_listCacheKey))) {
-      if (item.backendRecordId == backendRecordId &&
-          item.revision > tombstone.revision) {
-        return null;
+  }
+
+  Future<List<GalleryItem>> _visibleItems(List<GalleryItem> items) async {
+    final visible = <GalleryItem>[];
+    for (final item in items) {
+      if (await _getAuthoritativeDeleteRevisionLocked(item.backendRecordId) ==
+              null &&
+          await getHiddenRevision(item.backendRecordId) == null) {
+        visible.add(item);
       }
     }
-    return tombstone.revision;
+    return visible;
+  }
+
+  @override
+  Future<int?> getHiddenRevision(String id) async {
+    final visibility = await _visibility(id);
+    return visibility != null && visibility.state != 'ACTIVE'
+        ? visibility.revision
+        : null;
+  }
+
+  @override
+  Future<bool> shouldFetchPulledItem(String id, int? revision) async {
+    if (await getAuthoritativeDeleteRevision(id) != null) return false;
+    final cached = await getCachedRevision(id);
+    if (revision == null || cached == null || revision > cached) return true;
+    final hidden = await getHiddenRevision(id);
+    return revision == cached && hidden != null && hidden <= revision;
+  }
+
+  @override
+  Future<bool> applyPulledHidden(
+    String id, {
+    required int revision,
+    required TcBackendResourceState state,
+  }) => _serializeListMutation(
+    () => _applyPulledHiddenLocked(id, revision: revision, state: state),
+  );
+
+  Future<bool> _applyPulledHiddenLocked(
+    String id, {
+    required int revision,
+    required TcBackendResourceState state,
+    String? visibilityCursor,
+  }) async {
+    if (state != TcBackendResourceState.missing &&
+        state != TcBackendResourceState.unavailable) {
+      throw ArgumentError.value(state, 'state');
+    }
+    if (await _getAuthoritativeDeleteRevisionLocked(id) != null) return false;
+    final visibility = await _visibility(id);
+    // A successful ACTIVE fetch wins over replayed soft absence at this revision.
+    if (visibility != null &&
+        (visibility.revision > revision ||
+            (visibilityCursor == null &&
+                visibility.state == 'ACTIVE' &&
+                visibility.revision >= revision))) {
+      return false;
+    }
+    final cached = await getCachedRevision(id);
+    if (cached != null && cached > revision) return false;
+    final current = _cachedItems(await _cache.read(_listCacheKey));
+    final detail = _cachedItem(await _cache.read('astro:gallery:detail:$id'));
+    final changed =
+        visibility == null ||
+        visibility.revision != revision ||
+        current.any((item) => item.backendRecordId == id) ||
+        detail != null;
+    // Persist the hiding decision first; a replay finishes interrupted cleanup.
+    final previousEntry = await _cache.read('astro:gallery:visibility:$id');
+    final previousPayload = previousEntry == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(
+            jsonDecode(previousEntry.payloadJson) as Map,
+          );
+    await _write('astro:gallery:visibility:$id', {
+      ...previousPayload,
+      'revision': revision,
+      'state': state.name.toUpperCase(),
+      'event_cursor': visibilityCursor ?? visibility?.cursor,
+      if (previousPayload['next_retry_at'] == null)
+        'next_retry_at': _now()
+            .toUtc()
+            .add(const Duration(minutes: 1))
+            .toIso8601String(),
+    });
+    await _applyLocalDeleteLocked(id);
+    return changed;
   }
 
   @override
   Future<bool> upsertPulledItem(GalleryItem item) =>
       _serializeListMutation(() => _upsertPulledItemLocked(item));
 
-  Future<bool> _upsertPulledItemLocked(GalleryItem item) async {
+  Future<bool> _upsertPulledItemLocked(
+    GalleryItem item, {
+    String? visibilityCursor,
+  }) async {
+    if (await _getAuthoritativeDeleteRevisionLocked(item.backendRecordId) !=
+        null) {
+      return false;
+    }
     final currentRevision = await getCachedRevision(item.backendRecordId);
-    if (currentRevision != null && currentRevision >= item.revision) {
+    final hiddenRevision = await getHiddenRevision(item.backendRecordId);
+    if (currentRevision != null &&
+        (currentRevision > item.revision ||
+            (currentRevision == item.revision &&
+                (visibilityCursor == null && hiddenRevision == null ||
+                    hiddenRevision != null &&
+                        hiddenRevision > item.revision)))) {
       return false;
     }
     final current = _cachedItems(await _cache.read(_listCacheKey));
@@ -386,8 +510,107 @@ class HybridGalleryRepository implements GalleryRepository {
       plateSolve: synced.plateSolve ?? existingDetail?.plateSolve,
     );
     await _write(detailKey, mergedDetail.toJson());
+    // Keep an ACTIVE watermark so an old soft-absence event cannot hide the
+    // restored row again, including after restarting the app.
+    await _write('astro:gallery:visibility:${item.backendRecordId}', {
+      'revision': item.revision,
+      'state': 'ACTIVE',
+      'event_cursor':
+          visibilityCursor ?? (await _visibility(item.backendRecordId))?.cursor,
+    });
     return true;
   }
+
+  @override
+  Future<bool> shouldApplyVisibilityEvent(String id, String cursor) =>
+      _serializeListMutation(() => _canApplyVisibility(id, cursor));
+
+  Future<bool> _canApplyVisibility(String id, String cursor) async {
+    if (await _getAuthoritativeDeleteRevisionLocked(id) != null) return false;
+    final incoming = BigInt.tryParse(cursor);
+    if (incoming == null || incoming < BigInt.zero) return false;
+    final marker = await _visibility(id);
+    final previous = BigInt.tryParse(marker?.cursor ?? '');
+    if (previous == null) return true;
+    if (incoming < previous) return false;
+    // Hidden writes precede cleanup, so an equal-cursor replay may finish it.
+    return incoming > previous || marker?.state != 'ACTIVE';
+  }
+
+  @override
+  Future<bool> applyVisibilityHidden(
+    String id, {
+    required int revision,
+    required TcBackendResourceState state,
+    required String cursor,
+  }) => _serializeListMutation(() async {
+    if (!await _canApplyVisibility(id, cursor)) return false;
+    return _applyPulledHiddenLocked(
+      id,
+      revision: revision,
+      state: state,
+      visibilityCursor: cursor,
+    );
+  });
+
+  @override
+  Future<bool> upsertVisibilityItem(GalleryItem item, String cursor) =>
+      _serializeListMutation(() async {
+        if (!await _canApplyVisibility(item.backendRecordId, cursor)) {
+          return false;
+        }
+        return _upsertPulledItemLocked(item, visibilityCursor: cursor);
+      });
+
+  @override
+  Future<List<String>> takeHiddenRechecks({
+    int limit = 5,
+  }) => _serializeListMutation(() async {
+    final cache = _cache;
+    if (limit <= 0 || cache is! GalleryCachePrefixReader) return [];
+    const prefix = 'astro:gallery:visibility:';
+    final entries = await (cache as GalleryCachePrefixReader).readPrefix(
+      prefix,
+    );
+    // Old markers without retry metadata are due immediately. Sorting by
+    // due time ensures a permanently missing first ID cannot starve others.
+    entries.sort((a, b) {
+      final left = jsonDecode(a.payloadJson) as Map;
+      final right = jsonDecode(b.payloadJson) as Map;
+      return (left['next_retry_at']?.toString() ?? '').compareTo(
+        right['next_retry_at']?.toString() ?? '',
+      );
+    });
+    final due = <String>[];
+    for (final entry in entries) {
+      if (due.length >= limit) break;
+      final marker = Map<String, dynamic>.from(
+        jsonDecode(entry.payloadJson) as Map,
+      );
+      if (marker['state'] != 'MISSING' && marker['state'] != 'UNAVAILABLE') {
+        continue;
+      }
+      final id = entry.key.substring(prefix.length);
+      final next = DateTime.tryParse(marker['next_retry_at']?.toString() ?? '');
+      if (next != null && next.isAfter(_now())) continue;
+      if (await _getAuthoritativeDeleteRevisionLocked(id) != null) continue;
+      final attempts = ((marker['retry_attempts'] as num?)?.toInt() ?? 0).clamp(
+        0,
+        9,
+      );
+      // Persist reservation before I/O; crashes cannot cause a retry storm.
+      await _write(entry.key, {
+        ...marker,
+        'retry_attempts': attempts + 1,
+        'next_retry_at': _now()
+            .toUtc()
+            .add(Duration(minutes: (1 << attempts).clamp(1, 360)))
+            .toIso8601String(),
+      });
+      due.add(id);
+    }
+    return due;
+  });
 
   @override
   Future<bool> applyPulledDelete(
@@ -418,6 +641,7 @@ class HybridGalleryRepository implements GalleryRepository {
     await _write(tombstoneKey, {
       'record_id': backendRecordId,
       'revision': revision,
+      'state': 'DELETED',
       'deleted_at': (deletedAt ?? _now()).toUtc().toIso8601String(),
     });
     return true;
@@ -454,9 +678,7 @@ class HybridGalleryRepository implements GalleryRepository {
         fields.containsKey('equipment_name') ||
         fields.containsKey('equipment_ref_id'),
     equipmentNameSnapshot: fields['equipment_name_snapshot'] as String?,
-    updateEquipmentNameSnapshot: fields.containsKey(
-      'equipment_name_snapshot',
-    ),
+    updateEquipmentNameSnapshot: fields.containsKey('equipment_name_snapshot'),
     equipmentIsActive: fields['equipment_is_active'] as bool?,
     updateEquipmentIsActive:
         fields.containsKey('equipment_is_active') ||
@@ -552,9 +774,7 @@ class HybridGalleryRepository implements GalleryRepository {
     );
   }
 
-  Future<T> _serializeListMutation<T>(
-    Future<T> Function() operation,
-  ) async {
+  Future<T> _serializeListMutation<T>(Future<T> Function() operation) async {
     final previous = _listMutationTail;
     final completed = Completer<void>();
     _listMutationTail = completed.future;

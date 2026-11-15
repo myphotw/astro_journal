@@ -61,6 +61,366 @@ void main() {
     equipmentChangeApplier: equipmentChangeApplier,
   );
 
+  for (final operation in [
+    TcBackendChangeOperation.create,
+    TcBackendChangeOperation.update,
+  ]) {
+    test('ACTIVE $operation fetches canonical detail', () async {
+      final api = _FakeChangesApi(
+        {
+          null: _page([
+            _change(
+              'active',
+              operation,
+              1,
+              state: TcBackendResourceState.active,
+              currentRevision: 3,
+            ),
+          ], 'done'),
+        },
+        details: {'active': _item('active', 3)},
+      );
+      final gallery = _FakeGallery()..items['active'] = _item('active', 1);
+      final checkpoint = _FakeCheckpoints();
+      await subject(
+        api: api,
+        checkpoints: checkpoint,
+        gallery: gallery,
+      ).drain();
+      expect(api.detailCalls, ['active']);
+      expect(gallery.items['active']?.revision, 3);
+      expect(checkpoint.cursor, 'done');
+    });
+    for (final state in [
+      TcBackendResourceState.deleted,
+      TcBackendResourceState.missing,
+      TcBackendResourceState.unavailable,
+    ]) {
+      test(
+        '$state $operation removes projections without detail fetch',
+        () async {
+          final api = _FakeChangesApi({
+            null: _page([
+              _change('gone', operation, 1, state: state, currentRevision: 4),
+            ], 'done'),
+          });
+          final gallery = _FakeGallery()..items['gone'] = _item('gone', 2);
+          final records = _FakeRecords([
+            _record('remote:gone'),
+            _record('linked'),
+            _record('local-only'),
+          ]);
+          final checkpoint = _FakeCheckpoints();
+          await subject(
+            api: api,
+            checkpoints: checkpoint,
+            gallery: gallery,
+            records: records,
+            links: {'gone': 'linked'},
+          ).drain();
+          expect(api.detailCalls, isEmpty);
+          expect(gallery.items, isEmpty);
+          expect(
+            state == TcBackendResourceState.deleted
+                ? gallery.tombstones['gone']
+                : gallery.hidden['gone'],
+            4,
+          );
+          expect(records.records.map((r) => r.id), ['local-only']);
+          expect(checkpoint.cursor, 'done');
+        },
+      );
+    }
+  }
+
+  for (final state in [null, TcBackendResourceState.active]) {
+    test('$state detail 404 removes item and commits page', () async {
+      final api =
+          _FakeChangesApi({
+              null: _page([
+                _change(
+                  'gone',
+                  TcBackendChangeOperation.create,
+                  2,
+                  state: state,
+                ),
+              ], 'done'),
+            })
+            ..detailErrors['gone'] = const TcBackendChangesException(
+              'not found',
+              statusCode: 404,
+            );
+      final gallery = _FakeGallery()..items['gone'] = _item('gone', 1);
+      final checkpoint = _FakeCheckpoints();
+      var refreshes = 0;
+      await subject(
+        api: api,
+        checkpoints: checkpoint,
+        gallery: gallery,
+        onObservationRecordsChanged: () async {
+          refreshes++;
+        },
+      ).drain();
+      expect(api.detailCalls, ['gone']);
+      expect(gallery.items, isEmpty);
+      expect(gallery.hidden['gone'], 2);
+      expect(gallery.tombstones, isEmpty);
+      expect(checkpoint.cursor, 'done');
+      expect(refreshes, 1);
+    });
+  }
+
+  for (final status in [401, 403, 429, 500, 503, null]) {
+    test(
+      'detail error $status does not commit cursor or remove data',
+      () async {
+        final api =
+            _FakeChangesApi({
+                null: _page([
+                  _change('record', TcBackendChangeOperation.update, 2),
+                ], 'done'),
+              })
+              ..detailErrors['record'] = TcBackendChangesException(
+                status == null ? 'timed out' : 'HTTP failure',
+                statusCode: status,
+              );
+        final gallery = _FakeGallery()..items['record'] = _item('record', 1);
+        final checkpoint = _FakeCheckpoints();
+        await expectLater(
+          subject(api: api, checkpoints: checkpoint, gallery: gallery).drain(),
+          throwsA(isA<TcBackendChangesException>()),
+        );
+        expect(checkpoint.writes, isEmpty);
+        expect(gallery.items['record']?.revision, 1);
+        expect(gallery.tombstones, isEmpty);
+      },
+    );
+  }
+
+  test(
+    'unavailable fallback revision protects deletion and higher ACTIVE restores',
+    () async {
+      final gallery = _FakeGallery()..items['record'] = _item('record', 1);
+      Future<void> apply(TcBackendChange change, {int detailRevision = 1}) =>
+          subject(
+            api: _FakeChangesApi(
+              {
+                null: _page([change], 'done'),
+              },
+              details: {'record': _item('record', detailRevision)},
+            ),
+            checkpoints: _FakeCheckpoints(),
+            gallery: gallery,
+          ).drain();
+      await apply(
+        _change(
+          'record',
+          TcBackendChangeOperation.update,
+          3,
+          state: TcBackendResourceState.unavailable,
+        ),
+      );
+      expect(gallery.hidden['record'], 3);
+      expect(gallery.tombstones, isEmpty);
+      await apply(_change('record', TcBackendChangeOperation.create, 1));
+      await apply(_change('record', TcBackendChangeOperation.update, 2));
+      expect(gallery.items, isEmpty);
+      await apply(
+        _change(
+          'record',
+          TcBackendChangeOperation.update,
+          4,
+          state: TcBackendResourceState.active,
+        ),
+        detailRevision: 4,
+      );
+      expect(gallery.items['record']?.revision, 4);
+      expect(await gallery.getAuthoritativeDeleteRevision('record'), isNull);
+    },
+  );
+
+  test(
+    'stale detail and absent-state events cannot overwrite a higher revision',
+    () async {
+      final gallery = _FakeGallery()..items['record'] = _item('record', 5);
+      final api = _FakeChangesApi(
+        {
+          null: _page([
+            _change(
+              'record',
+              TcBackendChangeOperation.update,
+              6,
+              state: TcBackendResourceState.active,
+            ),
+            _change(
+              'record',
+              TcBackendChangeOperation.update,
+              1,
+              state: TcBackendResourceState.deleted,
+              currentRevision: 4,
+            ),
+          ], 'done'),
+        },
+        details: {'record': _item('record', 4)},
+      );
+      await subject(
+        api: api,
+        checkpoints: _FakeCheckpoints(),
+        gallery: gallery,
+      ).drain();
+      expect(gallery.items['record']?.revision, 5);
+      expect(gallery.tombstones, isEmpty);
+    },
+  );
+
+  test(
+    '72 historical events and 20 absent resources drain across pages',
+    () async {
+      final events = [
+        for (var i = 0; i < 72; i++)
+          _change(
+            'r$i',
+            i.isEven
+                ? TcBackendChangeOperation.create
+                : TcBackendChangeOperation.update,
+            1,
+            state: i < 20
+                ? TcBackendResourceState.deleted
+                : TcBackendResourceState.active,
+            currentRevision: i < 20 ? 2 : 1,
+          ),
+      ];
+      final api = _FakeChangesApi(
+        {
+          null: _page(events.take(50).toList(), 'page1', hasMore: true),
+          'page1': _page(events.skip(50).toList(), 'page2'),
+        },
+        details: {for (var i = 20; i < 72; i++) 'r$i': _item('r$i', 1)},
+      );
+      final gallery = _FakeGallery();
+      final checkpoint = _FakeCheckpoints();
+      var refreshes = 0;
+      await subject(
+        api: api,
+        checkpoints: checkpoint,
+        gallery: gallery,
+        onObservationRecordsChanged: () async {
+          refreshes++;
+        },
+      ).drain();
+      expect(gallery.items, hasLength(52));
+      expect(gallery.tombstones, hasLength(20));
+      expect(api.detailCalls, hasLength(52));
+      expect(api.requestedCursors, [null, 'page1']);
+      expect(checkpoint.writes, ['page1', 'page2']);
+      expect(refreshes, 1);
+    },
+  );
+
+  test(
+    'partial page failure refreshes successes and restart replays idempotently',
+    () async {
+      final api = _FakeChangesApi(
+        {
+          null: _page(
+            [_change('first', TcBackendChangeOperation.create, 1)],
+            'page1',
+            hasMore: true,
+          ),
+          'page1': _page([
+            _change('second', TcBackendChangeOperation.create, 1),
+            _change('failed', TcBackendChangeOperation.create, 1),
+          ], 'page2'),
+        },
+        details: {
+          for (final id in ['first', 'second', 'failed']) id: _item(id, 1),
+        },
+      )..detailErrors['failed'] = const TcBackendChangesException('timeout');
+      final gallery = _FakeGallery();
+      final checkpoint = _FakeCheckpoints();
+      final visible = <List<String>>[];
+      TcBackendPullSyncCoordinator restart() => subject(
+        api: api,
+        checkpoints: checkpoint,
+        gallery: gallery,
+        onObservationRecordsChanged: () async {
+          visible.add(gallery.items.keys.toList());
+        },
+      );
+      await expectLater(
+        restart().drain(),
+        throwsA(isA<TcBackendChangesException>()),
+      );
+      expect(checkpoint.writes, ['page1']);
+      expect(visible.single, ['first', 'second']);
+      api.detailErrors.clear();
+      await restart().drain();
+      expect(checkpoint.writes, ['page1', 'page2']);
+      expect(api.detailCalls, ['first', 'second', 'failed', 'failed']);
+      expect(gallery.upserts, 3);
+      expect(visible.last, ['first', 'second', 'failed']);
+    },
+  );
+
+  test('next page request failure still refreshes completed page', () async {
+    final api = _FakeChangesApi(
+      {
+        null: _page(
+          [_change('first', TcBackendChangeOperation.create, 1)],
+          'page1',
+          hasMore: true,
+        ),
+      },
+      details: {'first': _item('first', 1)},
+    )..failOnceAt = 'page1';
+    final gallery = _FakeGallery();
+    final checkpoint = _FakeCheckpoints();
+    var refreshes = 0;
+    await expectLater(
+      subject(
+        api: api,
+        checkpoints: checkpoint,
+        gallery: gallery,
+        onObservationRecordsChanged: () async {
+          refreshes++;
+        },
+      ).drain(),
+      throwsA(isA<TcBackendChangesException>()),
+    );
+    expect(refreshes, 1);
+    expect(checkpoint.cursor, 'page1');
+  });
+
+  test('DELETE blocks historical CREATE UPDATE and newer ACTIVE', () async {
+    final gallery = _FakeGallery()..items['record'] = _item('record', 1);
+    final api = _FakeChangesApi(
+      {
+        null: _page([
+          _change('record', TcBackendChangeOperation.delete, 3),
+          _change('record', TcBackendChangeOperation.create, 1),
+          _change('record', TcBackendChangeOperation.update, 2),
+        ], 'deleted'),
+        'deleted': _page([
+          _change(
+            'record',
+            TcBackendChangeOperation.update,
+            4,
+            state: TcBackendResourceState.active,
+          ),
+        ], 'restored'),
+      },
+      details: {'record': _item('record', 4)},
+    );
+    final checkpoint = _FakeCheckpoints();
+    await subject(api: api, checkpoints: checkpoint, gallery: gallery).drain();
+    expect(gallery.items, isEmpty);
+    expect(api.detailCalls, isEmpty);
+    await subject(api: api, checkpoints: checkpoint, gallery: gallery).drain();
+    expect(gallery.items, isEmpty);
+    expect(gallery.tombstones['record'], 3);
+    expect(api.detailCalls, isEmpty);
+  });
+
   test('ObservationSite changes use the shared cursor consumer', () async {
     final change = TcBackendChange(
       resourceType: 'ObservationSite',
@@ -145,6 +505,41 @@ void main() {
     expect(api.detailCalls, ['record-1']);
     expect(catalog.captured, isTrue);
   });
+
+  test(
+    'empty pull does not repeat Catalog reconciliation after successful projection',
+    () async {
+      final api = _FakeChangesApi(
+        {
+          null: _page([
+            _change('r', TcBackendChangeOperation.create, 1),
+          ], 'done'),
+          'done': _page([], 'done'),
+        },
+        details: {'r': _item('r', 1)},
+      );
+      final gallery = _FakeGallery();
+      final catalog = _FakeCatalog();
+      final records = _FakeRecords();
+      final coordinator = subject(
+        api: api,
+        checkpoints: _FakeCheckpoints(),
+        gallery: gallery,
+        records: records,
+        captureProjection: CatalogCaptureProjectionService(
+          catalogRepository: catalog,
+          localRecords: records,
+          galleryRepository: gallery,
+        ),
+      );
+      await coordinator.drain();
+      expect(catalog.captured, isTrue);
+      expect(gallery.cachedReads, 1);
+      await coordinator.drain();
+      expect(gallery.cachedReads, 1);
+      expect(catalog.captured, isTrue);
+    },
+  );
 
   test('UPDATE applies only a newer revision', () async {
     final api = _FakeChangesApi(
@@ -240,28 +635,25 @@ void main() {
     expect(catalog.captured, isFalse);
   });
 
-  test(
-    'DELETE without outbox link removes remote local projection',
-    () async {
-      final api = _FakeChangesApi({
-        null: _page([
-          _change('record-1', TcBackendChangeOperation.delete, 3),
-        ], 'cursor-1'),
-      });
-      final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
-      final records = _FakeRecords([_record('remote:record-1')]);
+  test('DELETE without outbox link removes remote local projection', () async {
+    final api = _FakeChangesApi({
+      null: _page([
+        _change('record-1', TcBackendChangeOperation.delete, 3),
+      ], 'cursor-1'),
+    });
+    final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
+    final records = _FakeRecords([_record('remote:record-1')]);
 
-      await subject(
-        api: api,
-        checkpoints: _FakeCheckpoints(),
-        gallery: gallery,
-        records: records,
-      ).drain();
+    await subject(
+      api: api,
+      checkpoints: _FakeCheckpoints(),
+      gallery: gallery,
+      records: records,
+    ).drain();
 
-      expect(records.records, isEmpty);
-      expect(records.deleted, ['remote:record-1']);
-    },
-  );
+    expect(records.records, isEmpty);
+    expect(records.deleted, ['remote:record-1']);
+  });
 
   test('DELETE removes a modified durable remote projection', () async {
     final api = _FakeChangesApi({
@@ -271,10 +663,9 @@ void main() {
     });
     final gallery = _FakeGallery()..items['record-1'] = _item('record-1', 2);
     final records = _FakeRecords([
-      _record('remote:record-1').copyWith(
-        isFavorite: true,
-        memo: 'edited on this device',
-      ),
+      _record(
+        'remote:record-1',
+      ).copyWith(isFavorite: true, memo: 'edited on this device'),
     ]);
 
     await subject(
@@ -327,30 +718,34 @@ void main() {
     expect(records.deleted, ['remote:record-1']);
   });
 
-  test('unrelated DELETE preserves local-only pending and V1 records', () async {
-    final api = _FakeChangesApi({
-      null: _page([
-        _change('deleted-record', TcBackendChangeOperation.delete, 1),
-      ], 'cursor-1'),
-    });
-    final records = _FakeRecords([
-      _record('local-only'),
-      _record('pending-upload'),
-      _record('legacy-v1'),
-    ]);
+  test(
+    'unrelated DELETE preserves local-only pending and V1 records',
+    () async {
+      final api = _FakeChangesApi({
+        null: _page([
+          _change('deleted-record', TcBackendChangeOperation.delete, 1),
+        ], 'cursor-1'),
+      });
+      final records = _FakeRecords([
+        _record('local-only'),
+        _record('pending-upload'),
+        _record('legacy-v1'),
+      ]);
 
-    await subject(
-      api: api,
-      checkpoints: _FakeCheckpoints(),
-      gallery: _FakeGallery(),
-      records: records,
-    ).drain();
+      await subject(
+        api: api,
+        checkpoints: _FakeCheckpoints(),
+        gallery: _FakeGallery(),
+        records: records,
+      ).drain();
 
-    expect(
-      records.records.map((record) => record.id),
-      ['local-only', 'pending-upload', 'legacy-v1'],
-    );
-  });
+      expect(records.records.map((record) => record.id), [
+        'local-only',
+        'pending-upload',
+        'legacy-v1',
+      ]);
+    },
+  );
 
   test(
     'startup reconciliation removes stale shell after DELETE checkpoint',
@@ -521,12 +916,16 @@ void main() {
 TcBackendChange _change(
   String id,
   TcBackendChangeOperation operation,
-  int revision,
-) => TcBackendChange(
+  int revision, {
+  TcBackendResourceState? state,
+  int? currentRevision,
+}) => TcBackendChange(
   resourceType: 'ObservationRecord',
   resourceId: id,
   operation: operation,
   revision: revision,
+  currentResourceState: state,
+  currentRevision: currentRevision,
 );
 
 TcBackendChangesPage _page(
@@ -573,6 +972,7 @@ class _FakeChangesApi implements TcBackendChangesApi {
   final List<String?> requestedCursors = [];
   final List<String> detailCalls = [];
   String? failOnceAt;
+  final Map<String, TcBackendChangesException> detailErrors = {};
 
   @override
   Future<TcBackendChangesPage> getChanges({String? cursor}) async {
@@ -587,6 +987,7 @@ class _FakeChangesApi implements TcBackendChangesApi {
   @override
   Future<GalleryItem> getObservationRecord(String recordId) async {
     detailCalls.add(recordId);
+    if (detailErrors[recordId] case final error?) throw error;
     return details[recordId]!;
   }
 }
@@ -605,10 +1006,23 @@ class _FakeCheckpoints implements SyncCheckpointDataSource {
   }
 }
 
-class _FakeGallery implements GalleryRepository {
+class _FakeGallery
+    implements
+        GalleryRepository,
+        GalleryResourceStateRepository,
+        CachedGallerySnapshotReader {
   final Map<String, GalleryItem> items = {};
   final Map<String, int> tombstones = {};
+  final Map<String, int> hidden = {};
+  final Map<String, int> active = {};
   int upserts = 0;
+  int cachedReads = 0;
+
+  @override
+  Future<GallerySnapshot> getCachedSnapshot() {
+    cachedReads++;
+    return getSnapshot();
+  }
 
   @override
   Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async =>
@@ -620,21 +1034,61 @@ class _FakeGallery implements GalleryRepository {
 
   @override
   Future<int?> getCachedRevision(String backendRecordId) async =>
-      tombstones[backendRecordId] ?? items[backendRecordId]?.revision;
+      tombstones[backendRecordId] ??
+      hidden[backendRecordId] ??
+      items[backendRecordId]?.revision;
 
   @override
   Future<int?> getAuthoritativeDeleteRevision(String backendRecordId) async {
     final tombstone = tombstones[backendRecordId];
     if (tombstone == null) return null;
-    final liveRevision = items[backendRecordId]?.revision;
-    return liveRevision != null && liveRevision > tombstone ? null : tombstone;
+    return tombstone;
+  }
+
+  @override
+  Future<int?> getHiddenRevision(String id) async => hidden[id];
+
+  @override
+  Future<bool> shouldFetchPulledItem(String id, int? revision) async {
+    if (tombstones.containsKey(id)) return false;
+    final cached = await getCachedRevision(id);
+    return revision == null ||
+        cached == null ||
+        revision > cached ||
+        (revision == cached && hidden[id] == revision);
+  }
+
+  @override
+  Future<bool> applyPulledHidden(
+    String id, {
+    required int revision,
+    required TcBackendResourceState state,
+  }) async {
+    if (tombstones.containsKey(id) ||
+        (active[id] != null && active[id]! >= revision)) {
+      return false;
+    }
+    final cached = await getCachedRevision(id);
+    if (cached != null && cached > revision) return false;
+    final changed = hidden[id] != revision || items.containsKey(id);
+    hidden[id] = revision;
+    items.remove(id);
+    return changed;
   }
 
   @override
   Future<bool> upsertPulledItem(GalleryItem item) async {
+    if (tombstones.containsKey(item.backendRecordId)) return false;
     final revision = await getCachedRevision(item.backendRecordId);
-    if (revision != null && revision >= item.revision) return false;
+    if (revision != null &&
+        (revision > item.revision ||
+            (revision == item.revision &&
+                hidden[item.backendRecordId] != revision))) {
+      return false;
+    }
     items[item.backendRecordId] = item;
+    hidden.remove(item.backendRecordId);
+    active[item.backendRecordId] = item.revision;
     upserts++;
     return true;
   }
@@ -669,6 +1123,14 @@ class _FakeRecords implements ShootingRecordRepository {
 
   @override
   Future<List<ShootingRecord>> getAll() async => List.of(records);
+
+  @override
+  Future<ShootingRecord?> getById(String id) async {
+    for (final record in records) {
+      if (record.id == id) return record;
+    }
+    return null;
+  }
 
   @override
   Future<void> delete(String id) async {

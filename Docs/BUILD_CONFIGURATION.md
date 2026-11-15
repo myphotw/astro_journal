@@ -30,6 +30,58 @@ The helper validates both required values without printing them, runs `flutter p
 
 Release builds fail fast when either required value is absent. `flutter analyze` and `flutter test` remain credential-free.
 
+## Dedicated personal Android Release signing
+
+Android Release uses a dedicated key, not the automatic Debug key. Debug builds
+retain their standard Debug signing. On Windows, initialize the Release identity
+**once** with `scripts/android_release_signing.ps1 -CreateKey`. This refuses to
+overwrite existing signing material. Normal Release builds load the existing key
+through `scripts/build_app.ps1 -Mode Release`.
+
+The private key is outside the repository at
+`%USERPROFILE%/.astrojournal-signing/release/astrojournal-release.p12`.
+The sibling `password.dpapi` contains a random password encrypted for the current
+Windows account; `release-public.cer` is a public certificate. Directory access
+is restricted to the owning account and SYSTEM. Passwords are passed through
+temporary process environment variables, not command-line values or source.
+
+Before replacing `dist/android/AstroJournal.apk`, the build helper verifies the
+APK signature against this certificate and checks the package, versionCode and
+non-debuggable variant. The previous dist APK is copied to a uniquely named
+`AstroJournal.previous-*.apk` backup. Verification/build failure leaves dist intact.
+
+### Permanent backup and future updates
+
+- Keep this signing key for every future phone/tablet update. Never recreate it
+  to solve a build failure. Increase versionCode for each release.
+- Back up the `.p12` and public certificate to at least two encrypted, separate
+  locations (for example an encrypted offline drive and a password-manager vault).
+- **DPAPI ciphertext alone is not a portable password backup.** A Windows
+  reinstall or another account/computer may not decrypt `password.dpapi`.
+  Save the underlying password separately in a trusted password manager.
+- To transfer the password without printing it, the owner can manually run the
+  following in a private local PowerShell session, paste into the password manager,
+  and then clear the clipboard. Disable clipboard history/cloud synchronization
+  first. Do not run this in a shared/recorded terminal or CI:
+
+  ```powershell
+  $signingSecret = Get-Content "$env:USERPROFILE\.astrojournal-signing\release\password.dpapi" -Raw | ConvertTo-SecureString
+  $signingCredential = [PSCredential]::new('AstroJournalRelease', $signingSecret)
+  Set-Clipboard -Value $signingCredential.GetNetworkCredential().Password
+  Remove-Variable signingCredential, signingSecret
+  # After pasting into the password manager:
+  Set-Clipboard -Value ''
+  ```
+
+The build agent does not execute this clipboard-export procedure. No password
+or private key should be pasted into chat, source files, Git or build logs.
+
+The new key cannot update older APKs signed with unrelated Debug keys in place.
+Any reinstall/data transfer must be handled separately by the owner; build
+scripts never install/uninstall apps or reset data. Register the new certificate
+SHA-1 for the Android package in Google Cloud if the Maps API key has Android
+certificate restrictions. This does not require changing the Backend.
+
 ## Fixed release package locations
 
 Run these commands from the project root:

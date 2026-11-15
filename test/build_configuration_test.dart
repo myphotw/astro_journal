@@ -7,6 +7,48 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/source_text_helper.dart';
 
 void main() {
+  test('Release uses a dedicated signing identity, never the debug config', () {
+    final gradle = readSourceText('android/app/build.gradle.kts');
+    final signing = readSourceText('scripts/android_release_signing.ps1');
+    expect(
+      gradle,
+      contains('signingConfig = signingConfigs.getByName("release")'),
+    );
+    expect(
+      gradle,
+      isNot(contains('signingConfig = signingConfigs.getByName("debug")')),
+    );
+    expect(
+      gradle,
+      contains('System.getenv("ASTROJOURNAL_RELEASE_STORE_PASSWORD")'),
+    );
+    expect(signing, contains('ConvertFrom-SecureString'));
+    expect(signing, contains('SetAccessRuleProtection'));
+    expect(
+      signing,
+      contains('-storepass:env ASTROJOURNAL_RELEASE_STORE_PASSWORD'),
+    );
+    expect(signing, isNot(contains('Write-Host \$password')));
+    expect(signing, isNot(contains('Write-Output \$password')));
+  });
+
+  test(
+    'Release APK is verified before dist publication, with previous APK backup',
+    () {
+      final script = readSourceText('scripts/build_app.ps1');
+      expect(
+        script.indexOf('Test-AndroidReleaseArtifact -Path \$apk.FullName'),
+        lessThan(script.indexOf('\$distApk = Publish-AndroidRelease')),
+      );
+      expect(script, contains('apksigner.bat'));
+      expect(script, contains('AstroJournal.previous-'));
+      expect(script, contains('Clear-AstroJournalReleaseSigning'));
+    },
+  );
+
+  test('personal patch release increments Android version code', () {
+    expect(readSourceText('pubspec.yaml'), contains('version: 1.0.1+2'));
+  });
   test(
     'auto configuration ignores stale runtime backend preferences',
     () async {

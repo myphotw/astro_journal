@@ -20,7 +20,13 @@ abstract class GalleryCacheDataSource {
   Future<void> write(GalleryCacheEntry entry);
 }
 
-class GalleryCacheLocalDataSource implements GalleryCacheDataSource {
+/// Optional enumeration of small durable visibility markers, not photo data.
+abstract interface class GalleryCachePrefixReader {
+  Future<List<GalleryCacheEntry>> readPrefix(String prefix);
+}
+
+class GalleryCacheLocalDataSource
+    implements GalleryCacheDataSource, GalleryCachePrefixReader {
   factory GalleryCacheLocalDataSource({Database? database}) =>
       GalleryCacheLocalDataSource._(database);
 
@@ -61,5 +67,23 @@ class GalleryCacheLocalDataSource implements GalleryCacheDataSource {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  @override
+  Future<List<GalleryCacheEntry>> readPrefix(String prefix) async {
+    final rows = await (await _db).query(
+      DatabaseConstants.tableGalleryCache,
+      where: 'cache_key >= ? AND cache_key < ?',
+      whereArgs: [prefix, '$prefix\uffff'],
+    );
+    return rows
+        .map(
+          (row) => GalleryCacheEntry(
+            key: row['cache_key'] as String,
+            payloadJson: row['payload_json'] as String,
+            cachedAt: DateTime.parse(row['cached_at'] as String),
+          ),
+        )
+        .toList();
   }
 }

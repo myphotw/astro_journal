@@ -47,6 +47,21 @@ void main() {
     expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, now);
   });
 
+  test(
+    'pull refresh reads partial cache without fetching a full snapshot',
+    () async {
+      final subject = repository();
+      await subject.upsertPulledItem(_item('partial'));
+      final snapshot = await subject.getCachedSnapshot();
+      expect(snapshot.items.single.backendRecordId, 'record-partial');
+      expect(remote.galleryCalls, 0);
+      expect(cache.entries['astro:gallery:full_snapshot'], isNull);
+      await subject.applyPulledDelete('record-partial', revision: 2);
+      expect((await subject.getCachedSnapshot()).items, isEmpty);
+      expect(remote.galleryCalls, 0);
+    },
+  );
+
   test('fresh cache is returned without backend call', () async {
     cache.putItems('astro:gallery:list', [_item('cached')], now);
     cache.putFullSnapshot(now);
@@ -110,9 +125,7 @@ void main() {
 
   test('backend failure falls back to expired SQLite cache', () async {
     final staleSnapshotAt = now.subtract(const Duration(hours: 2));
-    cache.putItems('astro:gallery:list', [
-      _item('fallback'),
-    ], staleSnapshotAt);
+    cache.putItems('astro:gallery:list', [_item('fallback')], staleSnapshotAt);
     cache.putFullSnapshot(staleSnapshotAt);
     remote.failure = const RemoteGalleryException('offline');
 
@@ -249,29 +262,32 @@ void main() {
     },
   );
 
-  test('fresh legacy detail cache missing general info is rehydrated', () async {
-    final legacyPayload = _item('cached', commonFileId: 178).toJson()
-      ..remove('equipment_ref_id')
-      ..remove('equipment_name')
-      ..remove('equipment_name_snapshot')
-      ..remove('equipment_is_active')
-      ..remove('equipment_deleted')
-      ..remove('integration_seconds')
-      ..remove('address');
-    cache.entries['astro:gallery:detail:record-cached'] = GalleryCacheEntry(
-      key: 'astro:gallery:detail:record-cached',
-      payloadJson: jsonEncode(legacyPayload),
-      cachedAt: now,
-    );
-    remote.detail = _item('cached', commonFileId: 178);
+  test(
+    'fresh legacy detail cache missing general info is rehydrated',
+    () async {
+      final legacyPayload = _item('cached', commonFileId: 178).toJson()
+        ..remove('equipment_ref_id')
+        ..remove('equipment_name')
+        ..remove('equipment_name_snapshot')
+        ..remove('equipment_is_active')
+        ..remove('equipment_deleted')
+        ..remove('integration_seconds')
+        ..remove('address');
+      cache.entries['astro:gallery:detail:record-cached'] = GalleryCacheEntry(
+        key: 'astro:gallery:detail:record-cached',
+        payloadJson: jsonEncode(legacyPayload),
+        cachedAt: now,
+      );
+      remote.detail = _item('cached', commonFileId: 178);
 
-    final result = await repository().getById('record-cached');
+      final result = await repository().getById('record-cached');
 
-    expect(remote.detailCalls, 1);
-    expect(result?.equipmentFieldsPresent, isTrue);
-    expect(result?.integrationSecondsPresent, isTrue);
-    expect(result?.addressPresent, isTrue);
-  });
+      expect(remote.detailCalls, 1);
+      expect(result?.equipmentFieldsPresent, isTrue);
+      expect(result?.integrationSecondsPresent, isTrue);
+      expect(result?.addressPresent, isTrue);
+    },
+  );
 
   test(
     'remote COMPLETED replaces stale WAITING and survives cache restart',
@@ -486,12 +502,11 @@ void main() {
     expect(await subject.getAuthoritativeDeleteRevision('record-pulled'), 3);
 
     final revision4 = _item('pulled', revision: 4);
-    expect(await subject.upsertPulledItem(revision4), isTrue);
-    expect(
-      await subject.getAuthoritativeDeleteRevision('record-pulled'),
-      isNull,
-    );
-    expect((await subject.getAll()).single.revision, 4);
+    // An actual DELETE is permanent for this record identity, even at a
+    // higher revision. Soft absence recovery is covered by integration tests.
+    expect(await subject.upsertPulledItem(revision4), isFalse);
+    expect(await subject.getAuthoritativeDeleteRevision('record-pulled'), 3);
+    expect(await subject.getAll(), isEmpty);
   });
 
   test(
@@ -528,30 +543,17 @@ void main() {
 
     final created = _item('created', catalogObjectId: 'M31');
     expect(await subject.upsertPulledItem(created), isTrue);
-    expect(
-      cache.entries['astro:gallery:full_snapshot']?.cachedAt,
-      snapshotAt,
-    );
+    expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, snapshotAt);
 
-    final updated = _item(
-      'created',
-      catalogObjectId: 'M31',
-      revision: 2,
-    );
+    final updated = _item('created', catalogObjectId: 'M31', revision: 2);
     expect(await subject.upsertPulledItem(updated), isTrue);
-    expect(
-      cache.entries['astro:gallery:full_snapshot']?.cachedAt,
-      snapshotAt,
-    );
+    expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, snapshotAt);
 
     expect(
       await subject.applyPulledDelete('record-created', revision: 3),
       isTrue,
     );
-    expect(
-      cache.entries['astro:gallery:full_snapshot']?.cachedAt,
-      snapshotAt,
-    );
+    expect(cache.entries['astro:gallery:full_snapshot']?.cachedAt, snapshotAt);
   });
 
   test('full snapshot followed by pull keeps the complete list', () async {

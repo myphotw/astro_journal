@@ -40,8 +40,62 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
   final TcBackendAuthHeaders _authHeaders;
 
   @override
-  Future<List<GalleryItem>> getGallery({Map<String, String>? query}) async =>
-      _items(await _get('/api/astro/gallery', query: query));
+  Future<List<GalleryItem>> getGallery({Map<String, String>? query}) async {
+    // A gallery list is a complete snapshot, never an arbitrary starting page.
+    // Offset pagination has no server snapshot token. Reject observable count
+    // or page drift; equal-count concurrent replacements remain undetectable.
+    final parameters = {...?query, 'page': '1'};
+    final collected = <String, GalleryItem>{};
+    int? total;
+    int? pageSize;
+    var page = 1;
+    while (true) {
+      final body = _object(await _get('/api/astro/gallery', query: parameters));
+      final reportedTotal = body['total'];
+      final reportedPage = body['page'];
+      final reportedSize = body['page_size'];
+      if (reportedTotal is! int ||
+          reportedTotal < 0 ||
+          reportedPage is! int ||
+          reportedPage != page ||
+          reportedSize is! int ||
+          reportedSize <= 0 ||
+          (total != null && total != reportedTotal) ||
+          (pageSize != null && pageSize != reportedSize)) {
+        throw const RemoteGalleryException(
+          'Gallery pagination metadata is incomplete or changed.',
+        );
+      }
+      total = reportedTotal;
+      pageSize = reportedSize;
+      final items = _items(body);
+      final lastPage = total == 0 ? 1 : (total + pageSize - 1) ~/ pageSize;
+      if (items.length > pageSize ||
+          (page < lastPage && items.length != pageSize) ||
+          (total > 0 && items.isEmpty)) {
+        throw const RemoteGalleryException('Gallery page is incomplete.');
+      }
+      for (final item in items) {
+        final existing = collected[item.backendRecordId];
+        // Keep first-seen ordering, but never replace a newer duplicate.
+        if (existing == null || item.revision > existing.revision) {
+          collected[item.backendRecordId] = item;
+        }
+      }
+      if (page == lastPage) {
+        if (collected.length != total) {
+          throw const RemoteGalleryException(
+            'Gallery total does not match collected records.',
+          );
+        }
+        return collected.values.toList(growable: false);
+      }
+      page++;
+      parameters['page'] = '$page';
+      // Pin the server's first-page size without changing its default.
+      parameters['page_size'] = '$pageSize';
+    }
+  }
 
   @override
   Future<GalleryItem> getDetail(String recordId) async {
@@ -120,7 +174,8 @@ class RemoteGalleryDataSource implements GalleryRemoteDataSource {
     }
     final item = _item(json);
     final plateSolvePayload = json['plate_solve_result'];
-    final payloadHasWcs = plateSolvePayload is Map &&
+    final payloadHasWcs =
+        plateSolvePayload is Map &&
         (plateSolvePayload['wcs'] is Map ||
             plateSolvePayload['fits_wcs'] is Map ||
             plateSolvePayload['fitsWcs'] is Map);

@@ -114,6 +114,23 @@ void main() {
     expect(projection.originalUrl, '/original/sha-1');
   });
 
+  test('pull refresh projects cached changes without a remote snapshot', () async {
+    final h = harness(
+      snapshot: GallerySnapshot(
+        items: [_item('record-1', 'file-1', 'M42', capturedAt)],
+        source: GallerySnapshotSource.cache,
+        backendEnabled: true,
+      ),
+    );
+    final records = await h.adapter.getAllAfterPull();
+    expect(records, hasLength(1));
+    expect(h.gallery.cachedReads, 1);
+    expect(h.gallery.snapshotReads, 0);
+    h.gallery.snapshot = const GallerySnapshot(items: [], source: GallerySnapshotSource.cache, backendEnabled: true);
+    expect(await h.adapter.getAllAfterPull(), isEmpty);
+    expect(h.gallery.snapshotReads, 0);
+  });
+
   test(
     'remote-only M54 drives capture projection and Catalog photo source',
     () async {
@@ -944,7 +961,7 @@ class _Harness {
   final CatalogCaptureProjectionService? captureProjection;
 }
 
-class _FakeGalleryRepository implements GalleryRepository {
+class _FakeGalleryRepository implements GalleryRepository, CachedGallerySnapshotReader {
   _FakeGalleryRepository(
     this.snapshot, {
     this.detail,
@@ -956,10 +973,20 @@ class _FakeGalleryRepository implements GalleryRepository {
   final List<String> detailIds = [];
   final List<Map<String, Object?>> localPatches = [];
   final List<String> localDeletes = [];
+  int cachedReads = 0;
+  int snapshotReads = 0;
 
   @override
-  Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async =>
-      snapshot;
+  Future<GallerySnapshot> getCachedSnapshot() async {
+    cachedReads++;
+    return snapshot;
+  }
+
+  @override
+  Future<GallerySnapshot> getSnapshot({bool forceRefresh = false}) async {
+    snapshotReads++;
+    return snapshot;
+  }
 
   @override
   Future<List<GalleryItem>> getAll({bool forceRefresh = false}) async =>

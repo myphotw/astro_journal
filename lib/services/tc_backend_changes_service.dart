@@ -126,6 +126,17 @@ class TcBackendChangesService implements TcBackendChangesApi {
       operation: operation,
       revision: (json['revision'] as num?)?.toInt(),
       deletedAt: DateTime.tryParse(_string(json['deleted_at']) ?? ''),
+      currentResourceState: switch (_string(
+        json['current_resource_state'],
+      )?.toUpperCase()) {
+        'ACTIVE' => TcBackendResourceState.active,
+        'DELETED' => TcBackendResourceState.deleted,
+        'MISSING' => TcBackendResourceState.missing,
+        'UNAVAILABLE' => TcBackendResourceState.unavailable,
+        _ => null,
+      },
+      currentRevision: (json['current_revision'] as num?)?.toInt(),
+      cursor: _string(json['cursor'] ?? json['id']),
     );
   }
 

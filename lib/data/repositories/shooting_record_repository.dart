@@ -22,3 +22,7 @@ abstract class ShootingRecordRepository {
 abstract interface class ShootingRecordDetailRefresher {
   Future<ShootingRecord?> refreshById(String id);
 }
+
+abstract interface class ShootingRecordPullReader {
+  Future<List<ShootingRecord>> getAllAfterPull();
+}

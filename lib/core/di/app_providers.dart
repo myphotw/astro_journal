@@ -328,7 +328,7 @@ class AppProviders {
         galleryIncrementalRefresh,
       ]),
       reconcileCatalog: () async {
-        await catalogCaptureProjection.reconcileAll();
+        await catalogCaptureProjection.reconcileAll(cacheOnly: true);
       },
     );
     final metadataService = MetadataService();
@@ -521,7 +521,7 @@ class AppProviders {
       connectionManager: tcBackendConnectionManager,
     );
     refreshAfterPull = () async {
-      await galleryViewModel.load(silent: true);
+      await galleryViewModel.load(silent: true, afterPull: true);
       await tcBackendViewModel.refreshPlateSolveSummary();
     };
 

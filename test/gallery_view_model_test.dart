@@ -162,8 +162,9 @@ void main() {
         CatalogSearchService(),
       );
       await viewModel.load();
-      final group =
-          viewModel.targetGroups.firstWhere((g) => g.object.id == 'M27');
+      final group = viewModel.targetGroups.firstWhere(
+        (g) => g.object.id == 'M27',
+      );
       expect(group.photoCount, 2);
     });
 
@@ -212,21 +213,38 @@ void main() {
       );
 
       final initialLoad = viewModel.load();
-      final pullTriggeredLoad = viewModel.load(silent: true);
+      final pullTriggeredLoad = viewModel.load(silent: true, afterPull: true);
       delayed.first.complete([]);
       await Future.wait([initialLoad, pullTriggeredLoad]);
 
-      expect(delayed.calls, 2);
+      expect(delayed.calls, 1);
+      expect(delayed.pullCalls, 1);
       expect(viewModel.filteredRecords.single.id, 'remote-new');
     },
   );
 }
 
-class _DelayedShootingRecordRepository extends _FakeShootingRecordRepository {
+class _DelayedShootingRecordRepository extends _FakeShootingRecordRepository
+    implements ShootingRecordPullReader {
   _DelayedShootingRecordRepository() : super([]);
 
   final first = Completer<List<ShootingRecord>>();
   int calls = 0;
+  int pullCalls = 0;
+
+  @override
+  Future<List<ShootingRecord>> getAllAfterPull() {
+    pullCalls++;
+    return Future.value([
+      ShootingRecord(
+        id: 'remote-new',
+        celestialObjectId: 'M42',
+        capturedAt: DateTime(2026, 11, 9),
+        photoUri: '/remote.jpg',
+        createdAt: DateTime(2026, 11, 9),
+      ),
+    ]);
+  }
 
   @override
   Future<List<ShootingRecord>> getAll() {
@@ -260,12 +278,12 @@ class _FakeShootingRecordRepository implements ShootingRecordRepository {
     String celestialObjectId,
     DateTime capturedAt, {
     Duration tolerance = const Duration(minutes: 1),
-  }) async =>
-      null;
+  }) async => null;
 
   @override
-  Future<ShootingRecord?> findByOriginalFilename(String originalFilename) async =>
-      null;
+  Future<ShootingRecord?> findByOriginalFilename(
+    String originalFilename,
+  ) async => null;
 
   @override
   Future<List<ShootingRecord>> getAll() async => _records;

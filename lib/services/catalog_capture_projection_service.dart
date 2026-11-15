@@ -143,8 +143,12 @@ class CatalogCaptureProjectionService extends ChangeNotifier {
 
   Future<List<CatalogCaptureProjection>> reconcileAll({
     bool includeRemote = true,
+    bool cacheOnly = false,
   }) => _serialized(() async {
-    final context = await _loadContext(includeRemote: includeRemote);
+    final context = await _loadContext(
+      includeRemote: includeRemote,
+      cacheOnly: cacheOnly,
+    );
     final targetIds = <String>{};
     for (final fact in context.facts) {
       targetIds.add(fact.catalogObjectId);
@@ -229,15 +233,34 @@ class CatalogCaptureProjectionService extends ChangeNotifier {
     return completer.future;
   }
 
-  Future<_ProjectionContext> _loadContext({required bool includeRemote}) async {
+  Future<_ProjectionContext> _loadContext({
+    required bool includeRemote,
+    bool cacheOnly = false,
+  }) async {
     final catalog = await _catalogRepository.getAll(listOnly: true);
     final exactByLowerId = {
       for (final object in catalog) object.id.toLowerCase(): object,
     };
     final local = await _localRecords.getAll();
-    final remote = includeRemote
-        ? (await _galleryRepository.getSnapshot()).items
-        : const <GalleryItem>[];
+    final gallery = _galleryRepository;
+    if (includeRemote && cacheOnly && gallery is! CachedGallerySnapshotReader) {
+      throw StateError(
+        'Cache-only reconciliation requires a cached snapshot reader.',
+      );
+    }
+    final snapshot = includeRemote
+        ? (cacheOnly && gallery is CachedGallerySnapshotReader
+              ? await (gallery as CachedGallerySnapshotReader)
+                    .getCachedSnapshot()
+              : await gallery.getSnapshot())
+        : null;
+    // No cache is an unknown remote state, not an authoritative empty gallery.
+    if (cacheOnly &&
+        snapshot?.backendEnabled == true &&
+        snapshot?.source == GallerySnapshotSource.none) {
+      throw StateError('Remote projection cache is not initialized.');
+    }
+    final remote = snapshot?.items ?? const <GalleryItem>[];
     final links = includeRemote
         ? await _recordLinks.localIdsByBackendRecordId()
         : const <String, String>{};
