@@ -249,6 +249,53 @@ void main() {
     },
   );
 
+  testWidgets('swipe continues across target boundaries in both directions', (
+    tester,
+  ) async {
+    final source = _records(4);
+    final records = [
+      source[0],
+      source[1].copyWith(celestialObjectId: 'M1'),
+      source[2].copyWith(celestialObjectId: 'M2'),
+      source[3].copyWith(celestialObjectId: 'M3'),
+    ];
+    final detail = await _pumpGalleryDetail(
+      tester,
+      records,
+      platform: TargetPlatform.android,
+    );
+    final pageView = find.byKey(const Key('gallery-detail-page-view'));
+
+    await tester.drag(pageView, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(detail.currentRecord.id, 'record-2');
+    expect(find.text('M1'), findsOneWidget);
+    expect(find.text('2 / 4'), findsOneWidget);
+
+    await tester.drag(pageView, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(detail.currentRecord.id, 'record-3');
+    expect(find.text('M2'), findsOneWidget);
+    expect(find.text('3 / 4'), findsOneWidget);
+
+    await tester.drag(pageView, const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(detail.currentRecord.id, 'record-2');
+    expect(find.text('M1'), findsOneWidget);
+
+    await tester.drag(pageView, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.drag(pageView, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(detail.currentRecord.id, 'record-4');
+    expect(find.text('M3'), findsOneWidget);
+    expect(find.text('4 / 4'), findsOneWidget);
+
+    await tester.drag(pageView, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(detail.currentRecord.id, 'record-4');
+  });
+
   test('removing the selected photo keeps a valid neighboring index', () {
     final records = _records(3);
     final detail = GalleryDetailViewModel(records: records, initialIndex: 2);

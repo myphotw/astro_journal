@@ -247,6 +247,11 @@ class GalleryViewModel extends ChangeNotifier {
     return groups;
   }
 
+  /// 대상별 보기의 정렬·필터 결과를 상세 화면의 연속 탐색 순서로 펼친다.
+  static List<ShootingRecord> photosInTargetOrder(List<TargetGroup> groups) => [
+        for (final group in groups) ...group.records,
+      ];
+
   /// 하위 호환 — 대상별 1장 목록.
   List<ShootingRecord> get objectViewRecords =>
       targetGroups.map((g) => g.representativeRecord).toList();

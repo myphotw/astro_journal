@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/catalog_type.dart';
-import '../../../core/constants/detect_method.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/shooting_record.dart';
@@ -17,9 +16,7 @@ import '../../../services/catalog_favorite_controller.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
 import '../../gallery/view/gallery_detail_screen.dart';
-import '../../photo_first/models/registration_session.dart';
-import '../../photo_first/services/registration_image_cache.dart';
-import '../../photo_first/view/registration_screen.dart';
+import '../../desktop/view/pc_photo_registration_screen.dart';
 import '../viewmodel/catalog_detail_view_model.dart';
 import '../widgets/multi_night_framing_section.dart';
 
@@ -929,41 +926,13 @@ class _AddPhotoFab extends StatelessWidget {
     BuildContext context,
     CatalogDetailViewModel viewModel,
   ) async {
-    final payload = await viewModel.pickPhotoAndPrepare();
-    if (!context.mounted) return;
-
-    if (payload == null) {
-      if (viewModel.errorMessage != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(viewModel.errorMessage!)));
-      }
-      return;
-    }
-
-    final session = RegistrationSession(
-      payload: payload,
-      selectedObject: viewModel.object,
-      detectMethod: DetectMethod.manual,
-    );
-    unawaited(session.ensureThumbnailLoaded());
-    unawaited(() async {
-      try {
-        final enriched = await viewModel.enrichPayload(payload);
-        session.applyEnrichedPayload(enriched);
-      } catch (e) {
-        session.markAnalysisFailed(e);
-      }
-    }());
-
-    final outcomes = await Navigator.of(context)
-        .push<List<RegistrationOutcome>>(
-          PageRouteBuilder<List<RegistrationOutcome>>(
+    final savedRecords = await Navigator.of(context)
+        .push<List<ShootingRecord>>(
+          PageRouteBuilder<List<ShootingRecord>>(
             pageBuilder: (context, animation, secondaryAnimation) {
-              return RegistrationScreen.single(
-                session: session,
-                allObjects: const [],
-                skipTargetStep: true,
+              return PcPhotoRegistrationScreen(
+                initialObject: viewModel.object,
+                popWhenFinished: true,
               );
             },
             transitionsBuilder:
@@ -980,29 +949,11 @@ class _AddPhotoFab extends StatelessWidget {
           ),
         );
 
+    if (!context.mounted || savedRecords == null || savedRecords.isEmpty) return;
+    await viewModel.refreshAfterPhotoRegistration();
     if (!context.mounted) return;
-    if (outcomes == null || outcomes.isEmpty) {
-      RegistrationImageCache.evict(session.localPath);
-      return;
-    }
-
-    final outcome = outcomes.first;
-    final saved = await viewModel.savePhotoRecord(
-      outcome.session.payload,
-      outcome.confirmed,
-      plateSolve: outcome.session.plateSolveResult,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('사진 ${savedRecords.length}장이 저장되었습니다.')),
     );
-    RegistrationImageCache.evict(session.localPath);
-    if (!context.mounted) return;
-
-    if (viewModel.errorMessage != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(viewModel.errorMessage!)));
-    } else if (saved != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('사진이 저장되었습니다.')));
-    }
   }
 }

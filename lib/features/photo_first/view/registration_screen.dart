@@ -872,6 +872,9 @@ class _LocationStep extends StatefulWidget {
     required this.geocodedLocation,
     required this.showMap,
     required this.onOpenMaps,
+    this.embedded = false,
+    this.showMapPreview = true,
+    this.showManualFields = true,
   });
 
   final TextEditingController locationNameCtrl;
@@ -881,6 +884,9 @@ class _LocationStep extends StatefulWidget {
   final ValueNotifier<String?> geocodedLocation;
   final ValueNotifier<bool> showMap;
   final VoidCallback onOpenMaps;
+  final bool embedded;
+  final bool showMapPreview;
+  final bool showManualFields;
 
   @override
   State<_LocationStep> createState() => _LocationStepState();
@@ -1073,9 +1079,7 @@ class _LocationStepState extends State<_LocationStep> {
       MediaQuery.sizeOf(context).height * 0.28,
     );
 
-    return ListView(
-      padding: const EdgeInsets.all(AppTheme.spacingLg),
-      children: [
+    final content = <Widget>[
         if (_favoritesLoading)
           const Padding(
             padding: EdgeInsets.only(bottom: 12),
@@ -1285,7 +1289,7 @@ class _LocationStepState extends State<_LocationStep> {
           ),
         ],
         const SizedBox(height: 12),
-        ValueListenableBuilder<bool>(
+        if (widget.showManualFields) ValueListenableBuilder<bool>(
           valueListenable: widget.isGeocoding,
           builder: (context, geocoding, _) {
             return _Field(
@@ -1311,7 +1315,7 @@ class _LocationStepState extends State<_LocationStep> {
             );
           },
         ),
-        Row(
+        if (widget.showManualFields) Row(
           children: [
             Expanded(
               child: _Field(
@@ -1340,24 +1344,85 @@ class _LocationStepState extends State<_LocationStep> {
             ),
           ],
         ),
-        RepaintBoundary(
-          child: _StableGpsMap(
-            latController: widget.latCtrl,
-            lngController: widget.lngCtrl,
-            showMapListenable: widget.showMap,
-            onOpenMaps: widget.onOpenMaps,
+        if (widget.showMapPreview)
+          RepaintBoundary(
+            child: _StableGpsMap(
+              latController: widget.latCtrl,
+              lngController: widget.lngCtrl,
+              showMapListenable: widget.showMap,
+              onOpenMaps: widget.onOpenMaps,
+            ),
           ),
-        ),
-      ],
-    );
+      ];
+    return widget.embedded
+        ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: content)
+        : ListView(padding: const EdgeInsets.all(AppTheme.spacingLg), children: content);
   }
 }
 
+/// Reuses the former mobile location tools inside the shared registration form.
+class RegistrationLocationSection extends StatelessWidget {
+  const RegistrationLocationSection({
+    super.key,
+    required this.locationNameCtrl,
+    required this.latCtrl,
+    required this.lngCtrl,
+    required this.isGeocoding,
+    required this.geocodedLocation,
+    required this.showMap,
+    required this.onOpenMaps,
+    required this.showMapPreview,
+  });
+
+  final TextEditingController locationNameCtrl;
+  final TextEditingController latCtrl;
+  final TextEditingController lngCtrl;
+  final ValueNotifier<bool> isGeocoding;
+  final ValueNotifier<String?> geocodedLocation;
+  final ValueNotifier<bool> showMap;
+  final VoidCallback onOpenMaps;
+  final bool showMapPreview;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _LocationStep(
+        embedded: true,
+        showMapPreview: showMapPreview,
+        showManualFields: false,
+        locationNameCtrl: locationNameCtrl,
+        latCtrl: latCtrl,
+        lngCtrl: lngCtrl,
+        isGeocoding: isGeocoding,
+        geocodedLocation: geocodedLocation,
+        showMap: showMap,
+        onOpenMaps: onOpenMaps,
+      ),
+      if (!showMapPreview)
+        AnimatedBuilder(
+          animation: Listenable.merge([latCtrl, lngCtrl]),
+          builder: (context, _) => OutlinedButton.icon(
+            onPressed: double.tryParse(latCtrl.text) != null &&
+                    double.tryParse(lngCtrl.text) != null
+                ? onOpenMaps
+                : null,
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('지도에서 위치 보기'),
+          ),
+        ),
+    ],
+  );
+}
+
 class _MemoStep extends StatelessWidget {
-  const _MemoStep({required this.session, required this.memoCtrl});
+  const _MemoStep({required this.session, required this.memoCtrl, this.embedded = false, this.showMemoField = true, this.dateOnly = false});
 
   final RegistrationSession session;
   final TextEditingController memoCtrl;
+  final bool embedded;
+  final bool showMemoField;
+  final bool dateOnly;
 
   static String _dash(String? value) {
     final t = value?.trim();
@@ -1365,11 +1430,12 @@ class _MemoStep extends StatelessWidget {
     return t;
   }
 
-  static String _formatCapturedAt(DateTime? dt) {
+  static String _formatCapturedAt(DateTime? dt, {bool dateOnly = false}) {
     if (dt == null) return '-';
     final y = dt.year.toString().padLeft(4, '0');
     final m = dt.month.toString().padLeft(2, '0');
     final d = dt.day.toString().padLeft(2, '0');
+    if (dateOnly) return '$y-$m-$d';
     final h = dt.hour.toString().padLeft(2, '0');
     final min = dt.minute.toString().padLeft(2, '0');
     return '$y-$m-$d $h:$min';
@@ -1402,9 +1468,7 @@ class _MemoStep extends StatelessWidget {
       return '-';
     }();
 
-    return ListView(
-      padding: const EdgeInsets.all(AppTheme.spacingLg),
-      children: [
+    final content = <Widget>[
         if (object != null) ...[
           Text(
             object.displayName,
@@ -1423,12 +1487,13 @@ class _MemoStep extends StatelessWidget {
           ),
           const SizedBox(height: AppTheme.spacingMd),
         ],
-        _Field(
-          controller: memoCtrl,
-          label: '메모',
-          hint: '촬영 메모를 입력하세요',
-          maxLines: 4,
-        ),
+        if (showMemoField)
+          _Field(
+            controller: memoCtrl,
+            label: '메모',
+            hint: '촬영 메모를 입력하세요',
+            maxLines: 4,
+          ),
         const SizedBox(height: AppTheme.spacingSm),
         const Row(
           children: [
@@ -1462,7 +1527,7 @@ class _MemoStep extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '이전 단계에서 입력·확인한 내용입니다.',
+                embedded ? '등록 전 입력·확인한 내용입니다.' : '이전 단계에서 입력·확인한 내용입니다.',
                 style: TextStyle(
                   color: AppColors.textSecondary.withValues(alpha: 0.9),
                   fontSize: 11,
@@ -1478,7 +1543,7 @@ class _MemoStep extends StatelessWidget {
               const _SummarySectionTitle('촬영'),
               _SummaryRow(
                 label: '촬영일',
-                value: _formatCapturedAt(session.capturedAt),
+                value: _formatCapturedAt(session.capturedAt, dateOnly: dateOnly),
               ),
               _SummaryRow(label: '장비', value: _dash(session.equipment)),
               _SummaryRow(
@@ -1545,9 +1610,27 @@ class _MemoStep extends StatelessWidget {
             ],
           ),
         ),
-      ],
-    );
+      ];
+    return embedded
+        ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: content)
+        : ListView(padding: const EdgeInsets.all(AppTheme.spacingLg), children: content);
   }
+}
+
+/// The former final-step summary, without introducing another registration step.
+class RegistrationSummarySection extends StatelessWidget {
+  const RegistrationSummarySection({super.key, required this.session, required this.memoCtrl});
+  final RegistrationSession session;
+  final TextEditingController memoCtrl;
+
+  @override
+  Widget build(BuildContext context) => _MemoStep(
+    session: session,
+    memoCtrl: memoCtrl,
+    embedded: true,
+    showMemoField: false,
+    dateOnly: true,
+  );
 }
 
 class _SummarySectionTitle extends StatelessWidget {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'core/di/app_providers.dart';
@@ -99,6 +100,12 @@ class _BackendConnectionLifecycleState
   Widget build(BuildContext context) => MaterialApp(
     title: '천체 기록장',
     debugShowCheckedModeBanner: false,
+    localizationsDelegates: const [
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: const [Locale('ko', 'KR'), Locale('en')],
     theme: AppTheme.dark,
     home: const _AppStartupGate(),
   );

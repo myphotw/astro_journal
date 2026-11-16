@@ -31,8 +31,8 @@ class EquipmentCaptureCapabilityEditor extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         const Text(
-          '지원 사양은 추천값이 아니며, 현재 확장 항목은 이 기기에 안전하게 저장됩니다. '
-          'NAS API 지원 전에는 다른 기기로 동기화되지 않습니다.',
+          '지원 사양은 추천값이 아닙니다. 프리셋은 촬영 모드·Gain·필터 등을 '
+          '한꺼번에 교체하므로 저장 전에 실제 장비 설정을 확인하세요.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
         const SizedBox(height: 12),
@@ -96,32 +96,30 @@ class EquipmentCaptureCapabilityEditor extends StatelessWidget {
         _sectionHeader(
           context,
           title: '지원 필터',
-          onAdd: () => _addCustomFilter(context),
-          addLabel: '사용자 필터',
+          onAdd: () => _addFilter(context),
+          addLabel: '필터 추가',
         ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            for (final option in _standardFilters)
-              FilterChip(
-                key: ValueKey('equipment-filter-${option.id}'),
-                label: Text(option.name),
-                selected: value.filters.any((item) => item.id == option.id),
-                onSelected: (selected) => _toggleFilter(option, selected),
-              ),
-            for (final option in value.filters.where(
-              (item) =>
-                  !_standardFilters.any((standard) => standard.id == item.id),
-            ))
-              InputChip(
-                key: ValueKey('equipment-filter-${option.id}'),
-                label: Text(option.name),
-                onDeleted: () => _removeFilter(option.id),
-              ),
-          ],
+        const Text(
+          '프리셋으로 등록된 필터도 목록에서 삭제할 수 있습니다.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
-        if (value.filters.isEmpty) const _EmptyHint('지원 필터가 등록되지 않았습니다.'),
+        const SizedBox(height: 8),
+        if (value.filters.isEmpty)
+          const _EmptyHint('지원 필터가 등록되지 않았습니다.')
+        else
+          for (final filter in value.filters)
+            Card(
+              margin: const EdgeInsets.only(top: 6),
+              child: ListTile(
+                key: ValueKey('equipment-filter-${filter.id}'),
+                title: Text(filter.name),
+                trailing: IconButton(
+                  tooltip: '필터 삭제',
+                  onPressed: () => _removeFilter(filter.id),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ),
+            ),
         const SizedBox(height: 18),
         _sectionHeader(
           context,
@@ -519,6 +517,40 @@ class EquipmentCaptureCapabilityEditor extends StatelessWidget {
     if (result != null) onChanged(value.copyWith(gainCapability: result));
   }
 
+  Future<void> _addFilter(BuildContext context) async {
+    final presetFilters = <String, EquipmentFilterCapability>{
+      for (final preset in EquipmentCapturePreset.values)
+        for (final filter in EquipmentCapturePresets.build(preset).filters)
+          filter.id: filter,
+    };
+    final available = presetFilters.values
+        .where((filter) => !value.filters.any((item) => item.id == filter.id))
+        .toList(growable: false);
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('필터 추가'),
+        children: [
+          for (var index = 0; index < available.length; index++)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, index),
+              child: Text(available[index].name),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, -1),
+            child: const Text('직접 입력'),
+          ),
+        ],
+      ),
+    );
+    if (selected == -1) {
+      if (context.mounted) await _addCustomFilter(context);
+    } else if (selected != null) {
+      final filter = available[selected];
+      onChanged(value.copyWith(filters: [...value.filters, filter]));
+    }
+  }
+
   Future<void> _addCustomFilter(BuildContext context) async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
@@ -689,14 +721,6 @@ class EquipmentCaptureCapabilityEditor extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  void _toggleFilter(EquipmentFilterCapability option, bool selected) {
-    final filters = value.filters
-        .where((item) => item.id != option.id)
-        .toList(growable: true);
-    if (selected) filters.add(option);
-    onChanged(value.copyWith(filters: filters));
   }
 
   void _removeFilter(String id) {
@@ -872,26 +896,3 @@ void _showDialogError(BuildContext context, Object error) {
   final message = error.toString().replaceFirst('Invalid argument(s): ', '');
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
-
-const _standardFilters = <EquipmentFilterCapability>[
-  EquipmentFilterCapability(
-    id: 'filter_off',
-    type: EquipmentFilterType.off,
-    name: '필터 끄기',
-  ),
-  EquipmentFilterCapability(
-    id: 'broadband',
-    type: EquipmentFilterType.broadband,
-    name: '광대역',
-  ),
-  EquipmentFilterCapability(
-    id: 'dual_band',
-    type: EquipmentFilterType.dualBand,
-    name: '듀얼밴드',
-  ),
-  EquipmentFilterCapability(
-    id: 'narrow_band',
-    type: EquipmentFilterType.narrowBand,
-    name: '협대역',
-  ),
-];

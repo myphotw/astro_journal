@@ -20,9 +20,14 @@ import 'gallery_detail_screen.dart';
 Color _catalogColor(CatalogType? type) => type?.accentColor ?? AppColors.messier;
 
 int _gridCrossAxisCount(double width) {
-  if (width >= 840) return 4;
-  if (width >= 600) return 3;
-  return 2;
+  const minTileWidth = 152.0;
+  final contentWidth = width - AppTheme.spacingLg * 2;
+  final count = ((contentWidth + AppTheme.spacingSm) /
+          (minTileWidth + AppTheme.spacingSm))
+      .floor();
+  if (count < 1) return 1;
+  if (count > 8) return 8;
+  return count;
 }
 
 class GalleryScreen extends StatefulWidget {
@@ -978,16 +983,29 @@ class _ObjectGridView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final groups = viewModel.targetGroups;
+    final photos = GalleryViewModel.photosInTargetOrder(groups);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = _gridCrossAxisCount(constraints.maxWidth);
+        final spacing = columns >= 6 ? 6.0 : AppTheme.spacingSm;
+        final tileWidth = (constraints.maxWidth -
+                AppTheme.spacingLg * 2 -
+                spacing * (columns - 1)) /
+            columns;
+        final requestedCacheSize =
+            (tileWidth * MediaQuery.of(context).devicePixelRatio).ceil();
+        final thumbnailCacheSize = requestedCacheSize < 256
+            ? 256
+            : requestedCacheSize > 480
+                ? 480
+                : requestedCacheSize;
         return GridView.builder(
           padding: const EdgeInsets.all(AppTheme.spacingLg),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            crossAxisSpacing: AppTheme.spacingSm,
-            mainAxisSpacing: AppTheme.spacingSm,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
             childAspectRatio: 0.85,
           ),
           itemCount: groups.length,
@@ -995,12 +1013,13 @@ class _ObjectGridView extends StatelessWidget {
             final group = groups[index];
             return _GalleryGroupCard(
               group: group,
+              thumbnailCacheSize: thumbnailCacheSize,
               onTap: () {
                 if (group.records.isEmpty) return;
                 // 대표사진은 그리드 썸네일만 — 상세는 촬영순 1번부터
                 GalleryDetailScreen.open(
                   context,
-                  records: group.records,
+                  records: photos,
                   record: group.records.first,
                 );
               },
@@ -1015,10 +1034,12 @@ class _ObjectGridView extends StatelessWidget {
 class _GalleryGroupCard extends StatelessWidget {
   const _GalleryGroupCard({
     required this.group,
+    required this.thumbnailCacheSize,
     required this.onTap,
   });
 
   final TargetGroup group;
+  final int thumbnailCacheSize;
   final VoidCallback onTap;
 
   @override
@@ -1042,8 +1063,8 @@ class _GalleryGroupCard extends StatelessWidget {
                     AppFileImage(
                       path: photoUri,
                       fit: BoxFit.cover,
-                      memCacheWidth: 480,
-                      memCacheHeight: 480,
+                      memCacheWidth: thumbnailCacheSize,
+                      memCacheHeight: thumbnailCacheSize,
                       filterQuality: FilterQuality.low,
                       gaplessPlayback: true,
                       errorBuilder: (_, _, _) => const _PhotoPlaceholder(),

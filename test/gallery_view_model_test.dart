@@ -188,6 +188,42 @@ void main() {
       viewModel.setSortOrder(GallerySortOrder.shootCountDesc);
       expect(viewModel.targetGroups.first.object.id, 'M27');
     });
+
+    test('상세 탐색 순서는 현재 대상 정렬과 필터를 따른다', () async {
+      viewModel = GalleryViewModel(
+        _FakeShootingRecordRepository([
+          ...records,
+          ShootingRecord(
+            id: 'r3',
+            celestialObjectId: 'M27',
+            capturedAt: DateTime(2026, 3, 1),
+            photoUri: '/c.jpg',
+            createdAt: DateTime(2026, 3, 1),
+          ),
+          ShootingRecord(
+            id: 'no-photo',
+            celestialObjectId: 'M13',
+            capturedAt: DateTime(2026, 4, 1),
+            createdAt: DateTime(2026, 4, 1),
+          ),
+        ]),
+        _FakeCatalogRepository(catalog),
+        CatalogSearchService(),
+      );
+      await viewModel.load();
+
+      List<String> photoIds() => GalleryViewModel.photosInTargetOrder(
+            viewModel.targetGroups,
+          ).map((record) => record.id).toList();
+
+      expect(photoIds(), ['r3', 'r1', 'r2']);
+      viewModel.setSortOrder(GallerySortOrder.nameAsc);
+      expect(photoIds(), ['r2', 'r3', 'r1']);
+      viewModel.setCategoryFilter(GalleryObjectCategory.nebula);
+      expect(photoIds(), ['r3', 'r1']);
+      viewModel.toggleFavoritesOnly();
+      expect(photoIds(), ['r1']);
+    });
   });
 
   test(

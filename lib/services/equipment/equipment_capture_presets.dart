@@ -112,12 +112,12 @@ abstract final class EquipmentCapturePresets {
       EquipmentFilterCapability(
         id: 'dual_band_ho',
         type: EquipmentFilterType.dualBand,
-        name: 'HO 듀얼밴드',
+        name: 'HOO 듀얼밴드',
       ),
       EquipmentFilterCapability(
         id: 'dual_band_so',
         type: EquipmentFilterType.dualBand,
-        name: 'SO 듀얼밴드',
+        name: 'SOO 듀얼밴드',
       ),
       EquipmentFilterCapability(
         id: 'sho',

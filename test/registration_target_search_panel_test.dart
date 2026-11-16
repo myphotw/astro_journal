@@ -102,4 +102,90 @@ void main() {
     expect(selected?.ra, '-');
     expect(selected?.dec, '-');
   });
+
+  testWidgets('embedded results float below search and close after selection', (
+    tester,
+  ) async {
+    const m42 = CatalogObject(
+      id: 'M42',
+      number: 42,
+      catalog: CatalogType.messier,
+      name: 'M42',
+      commonName: 'Orion Nebula',
+      type: 'Nebula',
+      constellation: 'Ori',
+      ra: '-',
+      dec: '-',
+      magnitude: '-',
+    );
+    const m45 = CatalogObject(
+      id: 'M45',
+      number: 45,
+      catalog: CatalogType.messier,
+      name: 'M45',
+      commonName: 'Pleiades',
+      type: 'Cluster',
+      constellation: 'Tau',
+      ra: '-',
+      dec: '-',
+      magnitude: '-',
+    );
+    CatalogObject? selected;
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RegistrationTargetSearchPanel(
+                      embedded: true,
+                      allObjects: const [m42, m45],
+                      selected: selected,
+                      onSelected: (value) => update(() => selected = value),
+                    ),
+                    const Text('기본 정보'),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final search = find.byType(TextField);
+    final followingY = tester.getTopLeft(find.text('기본 정보')).dy;
+    await tester.enterText(search, 'M42');
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.byType(MenuItemButton), findsOneWidget);
+    expect(tester.getTopLeft(find.text('기본 정보')).dy, followingY);
+    expect(
+      tester.getTopLeft(find.byType(MenuItemButton)).dy,
+      greaterThanOrEqualTo(tester.getBottomLeft(search).dy - 1),
+    );
+
+    await tester.tap(find.byType(MenuItemButton));
+    await tester.pump();
+    await tester.pump();
+    expect(selected?.id, 'M42');
+    expect(find.byType(MenuItemButton), findsNothing);
+    expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+    expect(find.textContaining('M42'), findsOneWidget);
+
+    await tester.enterText(search, 'M45');
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.byType(MenuItemButton), findsOneWidget);
+    await tester.tap(find.byType(MenuItemButton));
+    await tester.pump();
+    expect(selected?.id, 'M45');
+    expect(tester.takeException(), isNull);
+  });
 }

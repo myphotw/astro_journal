@@ -204,6 +204,13 @@ class CatalogDetailViewModel extends ChangeNotifier {
 
   bool get dataChanged => _dataChanged;
 
+  /// Shared registration screens save through PhotoFirstRegistrationViewModel.
+  /// Keep the detail caller's refresh signal when that path adds a photo.
+  Future<void> refreshAfterPhotoRegistration() async {
+    _dataChanged = true;
+    await load();
+  }
+
   List<ShootingRecord> get records => _records;
 
   bool get isCaptured => _capturedState ?? object.captured;
