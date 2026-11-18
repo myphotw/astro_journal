@@ -29,22 +29,22 @@ void main() {
         'child: const CatalogScreen()',
         pagesStart,
       );
-      final menuStart = source.indexOf('static const _items');
-      final home = source.indexOf("label: '홈'", menuStart);
-      final photo = source.indexOf("label: '사진 등록'", menuStart);
-      final catalog = source.indexOf("label: '천체 카탈로그'", menuStart);
-      final settings = source.indexOf("label: '설정'", menuStart);
-
       expect(source, contains('child: const PcHomeScreen()'));
       expect(defaultHome, greaterThanOrEqualTo(0));
       expect(defaultHome, lessThan(defaultCatalog));
-      expect(source, contains("(index: 0, label: '홈'"));
-      expect(source, contains("(index: 6, label: '사진 등록'"));
-      expect(source, contains("(index: 1, label: '천체 카탈로그'"));
-      expect(source, contains("(index: 7, label: '설정'"));
-      expect(home, lessThan(photo));
-      expect(photo, lessThan(catalog));
-      expect(catalog, lessThan(settings));
+      expect(source, contains('return IndexedStack('));
+      expect(source, contains('index: index,'));
+      expect(source, contains("_section('home', '홈'"));
+      expect(source, contains("_section('observation', '관측'"));
+      expect(source, contains("('month', '월별 계획')"));
+      expect(source, isNot(contains("('observation_tonight', '오늘 밤 촬영')")));
+      expect(source, contains("_section('library', '천체와 사진'"));
+      expect(source, contains("_section('analysis', '촬영 분석'"));
+      expect(source, contains("_section('settings', '설정'"));
+      expect(source, contains("'catalog' => 1"));
+      expect(source, contains("'gallery' => 2"));
+      expect(source, contains("'photo' => 6"));
+      expect(source, contains("'settings' || 'settings_recommendations'"));
     },
   );
 
@@ -156,7 +156,7 @@ void main() {
       greaterThanOrEqualTo(2),
     );
     expect(source, contains('userPhotoPath: home.userPhotoFor(object)'));
-    expect(source, contains('const AstronomyEventsSection()'));
+    expect(source, contains('const AstronomyEventsSection(compactList: true)'));
     expect(source, contains('HomeObservationContextControls('));
     expect(source, contains('HomeRecommendationRefreshNotice('));
     expect(source, contains('HomeScheduleComputationStatus('));
@@ -236,7 +236,8 @@ void main() {
     );
 
     expect(find.byKey(const Key('pc-home-context-controls')), findsOneWidget);
-    expect(find.byKey(const Key('pc-home-sticky-header')), findsOneWidget);
+    expect(find.byKey(const Key('pc-home-hero')), findsOneWidget);
+    expect(find.byKey(const Key('pc-home-observation-context')), findsOneWidget);
     expect(find.byKey(const Key('pc-home-astronomy-panel')), findsOneWidget);
     expect(
       find.byKey(const Key('pc-home-hourly-weather-panel')),
@@ -249,12 +250,33 @@ void main() {
     expect(find.byKey(const Key('pc-home-schedule-panel')), findsOneWidget);
     expect(find.byKey(const Key('pc-home-astronomy-events')), findsOneWidget);
     expect(find.byKey(const Key('pc-home-layout-wide')), findsOneWidget);
+    final statusTop = tester.getTopLeft(
+      find.byKey(const Key('pc-home-astronomy-panel')),
+    );
+    final weatherTop = tester.getTopLeft(
+      find.byKey(const Key('pc-home-hourly-weather-panel')),
+    );
+    final recommendationTop = tester.getTopLeft(
+      find.byKey(const Key('pc-home-recommendations-panel')),
+    );
+    final scheduleTop = tester.getTopLeft(
+      find.byKey(const Key('pc-home-schedule-panel')),
+    );
+    expect(weatherTop.dy, greaterThan(statusTop.dy));
+    expect(recommendationTop.dx, greaterThan(statusTop.dx));
+    expect(scheduleTop.dx, greaterThan(recommendationTop.dx));
     expect(
       find.ancestor(
         of: find.byKey(const Key('pc-home-context-controls')),
         matching: find.byKey(const Key('pc-home-scroll-view')),
       ),
-      findsNothing,
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('pc-home-hero'))).dy,
+      lessThan(tester.getTopLeft(
+        find.byKey(const Key('pc-home-observation-context')),
+      ).dy),
     );
     expect(
       find.ancestor(

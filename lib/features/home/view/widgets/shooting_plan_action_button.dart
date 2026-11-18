@@ -10,12 +10,16 @@ class ShootingPlanActionButton extends StatelessWidget {
     required this.isScheduled,
     required this.onToggle,
     this.compact = false,
+    this.backgroundColor,
+    this.foregroundColor,
   });
 
   final bool isPlanned;
   final bool isScheduled;
   final VoidCallback onToggle;
   final bool compact;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +41,7 @@ class ShootingPlanActionButton extends StatelessWidget {
     }
 
     return Material(
-      color: bg,
+      color: backgroundColor ?? bg,
       borderRadius: BorderRadius.circular(compact ? 6 : 8),
       child: InkWell(
         onTap: onToggle,
@@ -50,7 +54,7 @@ class ShootingPlanActionButton extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: fg,
+              color: foregroundColor ?? fg,
               fontSize: compact ? 9 : 12,
               fontWeight: FontWeight.w600,
               height: 1.2,

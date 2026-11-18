@@ -49,7 +49,7 @@ void main() {
   testWidgets('앱이 홈 화면을 표시한다', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     final isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-    final homeTitle = isWindows ? '오늘 밤 촬영 도우미' : '천체 촬영 도우미';
+    final homeTitle = isWindows ? '오늘 밤, 별을 만나보세요' : '천체 촬영 도우미';
     // 스플래시 레이아웃이 기본 테스트 뷰포트에서 미세 overflow 나지 않도록 확보.
     await tester.binding.setSurfaceSize(const Size(400, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));

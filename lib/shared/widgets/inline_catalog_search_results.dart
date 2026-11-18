@@ -6,6 +6,7 @@ import '../../core/constants/catalog_type.dart';
 import '../../core/formatters/catalog_object_display_formatter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/pc_design.dart';
 import '../../data/models/catalog_object.dart';
 import '../../services/catalog_search_index.dart';
 import '../../services/catalog_search_service.dart';
@@ -124,10 +125,11 @@ class _InlineCatalogSearchResultsState extends State<InlineCatalogSearchResults>
     }
 
     final maxHeight = MediaQuery.sizeOf(context).height * 0.35;
+    final pc = PcDesign.isActive(context);
 
     return Material(
-      color: AppColors.surface,
-      elevation: 2,
+      color: pc ? PcDesign.card : AppColors.surface,
+      elevation: pc ? 0 : 2,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight.clamp(120, 320)),
         child: ListView.separated(
@@ -150,8 +152,8 @@ class _InlineCatalogSearchResultsState extends State<InlineCatalogSearchResults>
               ),
               subtitle: Text(
                 CatalogObjectDisplayFormatter.listSubtitle(obj),
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: pc ? PcDesign.muted : AppColors.textSecondary,
                   fontSize: 12,
                 ),
                 maxLines: 2,
@@ -171,20 +173,21 @@ class _CatalogSearchBadge extends StatelessWidget {
 
   final CatalogType catalog;
 
-  Color get _color => catalog.accentColor;
-
   @override
   Widget build(BuildContext context) {
+    final color = PcDesign.isActive(context)
+        ? PcDesign.secondary
+        : catalog.accentColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: _color.withAlpha(51),
+        color: color.withAlpha(51),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         catalog.label,
         style: TextStyle(
-          color: _color,
+          color: color,
           fontSize: 9,
           fontWeight: FontWeight.bold,
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/pc_design.dart';
 import '../../services/catalog_favorite_controller.dart';
 
 class CatalogFavoriteButton extends StatelessWidget {
@@ -24,6 +25,7 @@ class CatalogFavoriteButton extends StatelessWidget {
     }
     final favorite = controller.isFavorite(catalogObjectId);
     final pending = controller.isPending(catalogObjectId);
+    final pc = PcDesign.isActive(context);
     return IconButton(
       key: ValueKey('catalog-favorite-$catalogObjectId'),
       tooltip: favorite ? '즐겨찾기 해제' : '즐겨찾기 등록',
@@ -46,7 +48,9 @@ class CatalogFavoriteButton extends StatelessWidget {
             )
           : Icon(
               favorite ? Icons.star_rounded : Icons.star_border_rounded,
-              color: favorite ? (color ?? Colors.amber) : color,
+              color: color ?? (favorite
+                  ? (pc ? PcDesign.secondary : Colors.amber)
+                  : (pc ? PcDesign.muted : null)),
             ),
     );
   }

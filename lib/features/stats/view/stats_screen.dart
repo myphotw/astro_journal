@@ -13,13 +13,17 @@ import 'widgets/top_targets_chart_card.dart';
 import 'widgets/year_achievement_card.dart';
 
 class StatsScreen extends StatelessWidget {
-  const StatsScreen({super.key});
+  const StatsScreen({super.key, this.pcSections = false});
+
+  final bool pcSections;
 
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<StatsViewModel>();
     final dashboard = viewModel.dashboard;
     final chartYear = viewModel.chartYear;
+
+    if (pcSections) return _PcStatsSections(viewModel: viewModel);
 
     return Scaffold(
       appBar: AppBar(title: const Text('촬영 결과 분석')),
@@ -82,4 +86,83 @@ class StatsScreen extends StatelessWidget {
             ),
     );
   }
+}
+
+class _PcStatsSections extends StatelessWidget {
+  const _PcStatsSections({required this.viewModel});
+
+  final StatsViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final dashboard = viewModel.dashboard;
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('촬영 분석'),
+          bottom: const TabBar(tabs: [
+            Tab(text: '촬영 통계'),
+            Tab(text: '월별 / 연도별 성과'),
+            Tab(text: '대상별 촬영 현황'),
+          ]),
+        ),
+        body: viewModel.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : viewModel.errorMessage != null
+                ? Center(child: Text(viewModel.errorMessage!))
+                : dashboard == null
+                    ? const Center(child: Text('통계 데이터를 불러올 수 없습니다.'))
+                    : TabBarView(children: [
+                        _section([
+                          StatsKpiGrid(kpi: dashboard.kpi),
+                          const SizedBox(height: AppTheme.spacingMd),
+                          ObjectTypeDonutCard(breakdown: dashboard.typeBreakdown),
+                          const SizedBox(height: AppTheme.spacingMd),
+                          CatalogCategoryProgressCard(
+                            progress: viewModel.categoryProgress,
+                          ),
+                        ]),
+                        _section([
+                          MonthlyComboChartCard(
+                            monthlyStats: dashboard.monthlyStats,
+                            currentMonth: dashboard.currentMonth,
+                            year: viewModel.chartYear,
+                            onMonthDetail: (month) {
+                              final detail = viewModel.monthlyDetail(
+                                year: viewModel.chartYear, month: month,
+                              );
+                              MonthlyStatsBottomSheet.show(context, detail);
+                            },
+                          ),
+                          const SizedBox(height: AppTheme.spacingMd),
+                          YearAchievementCard(
+                            summary: viewModel.selectedYearAchievement,
+                            availableYears: viewModel.availableAchievementYears,
+                            selectedYear: viewModel.selectedAchievementYear,
+                            onYearChanged: viewModel.selectAchievementYear,
+                          ),
+                        ]),
+                        _section([
+                          TopTargetsChartCard(targets: dashboard.topTargets),
+                        ]),
+                      ]),
+      ),
+    );
+  }
+
+  Widget _section(List<Widget> children) => RefreshIndicator(
+    onRefresh: viewModel.load,
+    child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.spacingLg, AppTheme.spacingSm,
+        AppTheme.spacingLg, AppTheme.spacingLg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    ),
+  );
 }

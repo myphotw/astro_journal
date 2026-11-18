@@ -9,11 +9,14 @@ import '../../../core/formatters/catalog_object_display_formatter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/observation_status.dart';
+import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/recommendation_result.dart';
 import '../../../data/models/scheduler_models.dart';
 import '../../../services/observation_score_service.dart';
-import '../../../shared/widgets/catalog_equipment_chips_row.dart';
 import '../../../shared/widgets/catalog_object_image.dart';
+import '../../../shared/widgets/observatory_ui.dart';
+import '../../../shared/widgets/pc_observatory_dialog.dart';
+import '../../../shared/widgets/pc_scroll_edge_buttons.dart';
 import '../../observation_site/view/observation_site_detail_screen.dart';
 import '../../settings/view/observation_site_edit_screen.dart';
 import '../../settings/view/observation_site_list_screen.dart';
@@ -22,6 +25,8 @@ import '../viewmodel/home_view_model.dart';
 import 'home_screen.dart';
 import 'widgets/astronomy_events_section.dart';
 import 'widgets/home_observation_context_controls.dart';
+import 'widgets/pc_home_colors.dart';
+import 'widgets/pc_recent_photos_panel.dart';
 import 'widgets/shooting_plan_action_button.dart';
 
 class PcHomeScreen extends StatefulWidget {
@@ -107,31 +112,83 @@ class _PcHomeScreenState extends State<PcHomeScreen> {
     }
   }
 
+  Future<void> _showObservationDetail(ObservationCondition condition) =>
+      showPcObservatoryDialog<void>(
+        context: context,
+        title: '오늘 밤 관측 가이드',
+        size: PcPopupSize.large,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: _PcObservationAssessment(condition: condition),
+          ),
+        ),
+      );
+
+  Future<void> _showWeatherDetail(List<TonightObservationSlot> slots) =>
+      showPcObservatoryDialog<void>(
+        context: context,
+        title: '시간대별 기상정보',
+        size: PcPopupSize.extraLarge,
+        scrollable: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) => _PcWeatherTable(
+            slots: slots,
+            maxBodyHeight: (constraints.maxHeight - 36)
+                .clamp(38.0, double.infinity).toDouble(),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final home = context.read<HomeViewModel>();
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: ListenableBuilder(
-        listenable: home,
-        builder: (context, _) {
-          if (home.isLoading && home.observationCondition == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (home.errorMessage != null && home.observationCondition == null) {
-            return _PcHomeFailure(
-              message: home.errorMessage!,
-              onRetry: _refresh,
-            );
-          }
-          return _buildDashboard(home);
-        },
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        colorScheme: theme.colorScheme.copyWith(
+          primary: PcHomeColors.accent,
+          secondary: PcHomeColors.secondaryAccent,
+          surface: PcHomeColors.panel,
+          onSurface: PcHomeColors.text,
+        ),
+        textTheme: theme.textTheme.apply(
+          bodyColor: PcHomeColors.text,
+          displayColor: PcHomeColors.text,
+        ),
+        iconTheme: theme.iconTheme.copyWith(color: PcHomeColors.muted),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: PcHomeColors.secondaryAccent,
+          ),
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: PcHomeColors.background,
+        body: ListenableBuilder(
+          listenable: home,
+          builder: (context, _) {
+            if (home.isLoading && home.observationCondition == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (home.errorMessage != null && home.observationCondition == null) {
+              return _PcHomeFailure(
+                message: home.errorMessage!,
+                onRetry: _refresh,
+              );
+            }
+            return _buildDashboard(home);
+          },
+        ),
       ),
     );
   }
 
   Widget _buildDashboard(HomeViewModel home) {
     final condition = home.observationCondition;
+    final weather = condition?.weather;
+    final weatherSlots = condition?.tonightSlots ?? const <TonightObservationSlot>[];
     final activeSite = home.activeObservationSiteViewModel.active;
     final selectedEquipmentId = activeSite.effectiveEquipmentId;
     String? selectedEquipmentName;
@@ -145,6 +202,8 @@ class _PcHomeScreenState extends State<PcHomeScreen> {
     return PcHomeDashboardView(
       onRefresh: _refresh,
       contextControls: HomeObservationContextControls(
+        stackOnNarrow: true,
+        accentColor: PcHomeColors.accent,
         siteViewModel: home.activeObservationSiteViewModel,
         equipment: home.activeEquipment,
         selectedEquipmentId: selectedEquipmentId,
@@ -170,8 +229,25 @@ class _PcHomeScreenState extends State<PcHomeScreen> {
         isLoading: home.isWeatherLoading,
       ),
       recommendationPanel: _PcRecommendationPanel(home: home),
-      schedulePanel: _PcSchedulePanel(home: home),
-      eventsFooter: const AstronomyEventsSection(),
+      schedulePanel: _PcSchedulePanel(
+        home: home,
+        onDetail: () => unawaited(showPcHomeShootingOrderEditor(context, home)),
+      ),
+      eventsFooter: const AstronomyEventsSection(compactList: true),
+      recentPhotos: const PcRecentPhotosPanel(),
+      siteName: activeSite.displayName,
+      equipmentName: selectedEquipmentName ?? '자동 선택',
+      trackingModeLabel: home.trackingMode == TrackingMode.eq ? 'EQ' : 'Alt-Az',
+      weatherSummary: weather == null
+          ? (home.isWeatherLoading ? '날씨 확인 중' : '날씨 정보 없음')
+          : '${weather.description} · '
+              '${weather.temperature.toStringAsFixed(0)}°C',
+      onObservationDetail: condition == null
+          ? null
+          : () => unawaited(_showObservationDetail(condition)),
+      onWeatherDetail: weatherSlots.isEmpty
+          ? null
+          : () => unawaited(_showWeatherDetail(weatherSlots)),
     );
   }
 }
@@ -180,7 +256,7 @@ class _PcHomeScreenState extends State<PcHomeScreen> {
 ///
 /// Keeping the responsive frame independent from [HomeViewModel] makes its
 /// overflow contract testable without duplicating any astronomy calculation.
-class PcHomeDashboardView extends StatelessWidget {
+class PcHomeDashboardView extends StatefulWidget {
   const PcHomeDashboardView({
     super.key,
     required this.contextControls,
@@ -190,6 +266,13 @@ class PcHomeDashboardView extends StatelessWidget {
     required this.schedulePanel,
     required this.eventsFooter,
     this.onRefresh,
+    this.recentPhotos,
+    this.siteName = '현재 위치',
+    this.equipmentName = '자동 선택',
+    this.trackingModeLabel = 'Alt-Az',
+    this.weatherSummary,
+    this.onObservationDetail,
+    this.onWeatherDetail,
   });
 
   final Widget contextControls;
@@ -199,165 +282,344 @@ class PcHomeDashboardView extends StatelessWidget {
   final Widget schedulePanel;
   final Widget eventsFooter;
   final Future<void> Function()? onRefresh;
+  final Widget? recentPhotos;
+  final String siteName;
+  final String equipmentName;
+  final String trackingModeLabel;
+  final String? weatherSummary;
+  final VoidCallback? onObservationDetail;
+  final VoidCallback? onWeatherDetail;
 
   @override
+  State<PcHomeDashboardView> createState() => _PcHomeDashboardViewState();
+}
+
+class _PcHomeDashboardViewState extends State<PcHomeDashboardView> {
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          key: const Key('pc-home-sticky-header'),
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(
-            AppTheme.spacingLg,
-            AppTheme.spacingMd,
-            AppTheme.spacingLg,
-            AppTheme.spacingMd,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            border: Border(
-              bottom: BorderSide(color: AppColors.ic.withAlpha(35)),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '오늘 밤 촬영 도우미',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  if (onRefresh != null)
-                    IconButton(
-                      key: const Key('pc-home-refresh'),
-                      tooltip: '홈 새로고침',
-                      onPressed: () => unawaited(onRefresh!()),
-                      icon: const Icon(Icons.refresh_outlined),
-                    ),
-                ],
-              ),
-              const SizedBox(height: AppTheme.spacingSm),
-              KeyedSubtree(
-                key: const Key('pc-home-context-controls'),
-                child: contextControls,
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
+    return SingleChildScrollView(
             key: const Key('pc-home-scroll-view'),
-            padding: const EdgeInsets.all(AppTheme.spacingLg),
+            physics: const ClampingScrollPhysics(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _PcHomeResponsiveColumns(
-                  left: Column(
+                _PcHomeHero(siteName: widget.siteName,
+                    weatherSummary: widget.weatherSummary),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingXl, AppTheme.spacingSm,
+                    AppTheme.spacingXl, AppTheme.spacingSm,
+                  ),
+                  child: Column(
                     children: [
-                      KeyedSubtree(
-                        key: const Key('pc-home-astronomy-panel'),
-                        child: astronomyPanel,
+                      Row(
+                        key: const Key('pc-home-observation-context'),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(child: KeyedSubtree(
+                            key: const Key('pc-home-context-controls'),
+                            child: widget.contextControls,
+                          )),
+                          if (widget.onRefresh != null)
+                            IconButton(
+                              key: const Key('pc-home-refresh'),
+                              tooltip: '홈 새로고침',
+                              onPressed: () => unawaited(widget.onRefresh!()),
+                              icon: const Icon(Icons.refresh_outlined),
+                              iconSize: 19,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                        ],
                       ),
-                      const SizedBox(height: AppTheme.spacingMd),
-                      KeyedSubtree(
-                        key: const Key('pc-home-hourly-weather-panel'),
-                        child: hourlyWeatherPanel,
+                      const SizedBox(height: AppTheme.spacingSm),
+                      _PcHomeResponsiveColumns(
+                        astronomyPanel: widget.astronomyPanel,
+                        weatherPanel: widget.hourlyWeatherPanel,
+                        recommendationPanel: widget.recommendationPanel,
+                        schedulePanel: widget.schedulePanel,
+                        onObservationDetail: widget.onObservationDetail,
+                        onWeatherDetail: widget.onWeatherDetail,
+                      ),
+                      const SizedBox(height: AppTheme.spacingSm),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final events = KeyedSubtree(
+                            key: const Key('pc-home-astronomy-events'),
+                            child: ObservatoryPanel(
+                              padding: const EdgeInsets.all(AppTheme.spacingMd),
+                              backgroundColor: PcHomeColors.panel,
+                              borderColor: PcHomeColors.border,
+                              child: widget.eventsFooter,
+                            ),
+                          );
+                          final bottomPanelHeight =
+                              (MediaQuery.sizeOf(context).height * 0.28)
+                                  .clamp(236.0, 264.0)
+                                  .toDouble();
+                          if (widget.recentPhotos == null) {
+                            return SizedBox(height: bottomPanelHeight, child: events);
+                          }
+                          if (constraints.maxWidth < 1100) {
+                            return Column(children: [
+                              SizedBox(
+                                height: bottomPanelHeight,
+                                child: widget.recentPhotos!,
+                              ),
+                              const SizedBox(height: AppTheme.spacingMd),
+                              SizedBox(height: bottomPanelHeight, child: events),
+                            ]);
+                          }
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(flex: 3, child: SizedBox(
+                                height: bottomPanelHeight, child: widget.recentPhotos!,
+                              )),
+                              const SizedBox(width: AppTheme.spacingMd),
+                              Expanded(flex: 2, child: SizedBox(
+                                height: bottomPanelHeight, child: events,
+                              )),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
-                  middle: KeyedSubtree(
-                    key: const Key('pc-home-recommendations-panel'),
-                    child: recommendationPanel,
-                  ),
-                  right: KeyedSubtree(
-                    key: const Key('pc-home-schedule-panel'),
-                    child: schedulePanel,
-                  ),
-                ),
-                const SizedBox(height: AppTheme.spacingLg),
-                Container(
-                  key: const Key('pc-home-astronomy-events'),
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppTheme.spacingMd),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                    border: Border.all(color: AppColors.ic.withAlpha(45)),
-                  ),
-                  child: eventsFooter,
                 ),
               ],
             ),
-          ),
-        ),
-      ],
     );
   }
 }
 
 class _PcHomeResponsiveColumns extends StatelessWidget {
   const _PcHomeResponsiveColumns({
-    required this.left,
-    required this.middle,
-    required this.right,
+    required this.astronomyPanel,
+    required this.weatherPanel,
+    required this.recommendationPanel,
+    required this.schedulePanel,
+    required this.onObservationDetail,
+    required this.onWeatherDetail,
   });
 
-  final Widget left;
-  final Widget middle;
-  final Widget right;
+  final Widget astronomyPanel;
+  final Widget weatherPanel;
+  final Widget recommendationPanel;
+  final Widget schedulePanel;
+  final VoidCallback? onObservationDetail;
+  final VoidCallback? onWeatherDetail;
+
+  Widget _statusPanel() => ObservatoryPanel(
+    padding: const EdgeInsets.all(AppTheme.spacingMd),
+    backgroundColor: PcHomeColors.panel,
+    borderColor: PcHomeColors.border,
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      ObservatorySectionHeader(
+        title: '관측 상태 및 지수',
+        icon: Icons.travel_explore_outlined,
+        iconColor: PcHomeColors.muted,
+        titleColor: PcHomeColors.text,
+        trailing: onObservationDetail == null
+            ? null
+            : TextButton(
+                onPressed: onObservationDetail,
+                child: const Text('자세히 보기 ›'),
+              ),
+      ),
+      const Divider(height: AppTheme.spacingMd, color: PcHomeColors.border),
+      Expanded(child: PcScrollBoundary(child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        child: KeyedSubtree(
+          key: const Key('pc-home-astronomy-panel'),
+          child: astronomyPanel,
+        ),
+      ))),
+    ]),
+  );
+
+  Widget _weatherSummaryPanel() => ObservatoryPanel(
+    padding: const EdgeInsets.all(AppTheme.spacingMd),
+    backgroundColor: PcHomeColors.panel,
+    borderColor: PcHomeColors.border,
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      ObservatorySectionHeader(
+        title: '날씨 정보', icon: Icons.cloud_outlined,
+        iconColor: PcHomeColors.muted,
+        titleColor: PcHomeColors.text,
+        trailing: onWeatherDetail == null
+            ? null
+            : TextButton(
+                onPressed: onWeatherDetail,
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('전체 기상정보 →',
+                    style: TextStyle(fontSize: 11)),
+              ),
+      ),
+      const Divider(height: AppTheme.spacingMd, color: PcHomeColors.border),
+      Expanded(child: PcScrollBoundary(child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        child: KeyedSubtree(
+          key: const Key('pc-home-hourly-weather-panel'),
+          child: weatherPanel,
+        ),
+      ))),
+    ]),
+  );
+
+  Widget _recommendations() => ObservatoryPanel(
+    padding: const EdgeInsets.all(AppTheme.spacingMd),
+    backgroundColor: PcHomeColors.panel,
+    borderColor: PcHomeColors.border,
+    child: KeyedSubtree(
+      key: const Key('pc-home-recommendations-panel'),
+      child: recommendationPanel,
+    ),
+  );
+
+  Widget _schedule() => ObservatoryPanel(
+    padding: const EdgeInsets.all(AppTheme.spacingMd),
+    backgroundColor: PcHomeColors.panel,
+    borderColor: PcHomeColors.border,
+    child: KeyedSubtree(
+      key: const Key('pc-home-schedule-panel'),
+      child: schedulePanel,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 1180) {
-          return Row(
-            key: const Key('pc-home-layout-wide'),
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 5, child: left),
-              const SizedBox(width: AppTheme.spacingMd),
-              Expanded(flex: 4, child: middle),
-              const SizedBox(width: AppTheme.spacingMd),
-              Expanded(flex: 4, child: right),
-            ],
-          );
-        }
-        if (constraints.maxWidth >= 760) {
-          return Column(
-            key: const Key('pc-home-layout-medium'),
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 5, child: left),
-                  const SizedBox(width: AppTheme.spacingMd),
-                  Expanded(flex: 4, child: middle),
-                ],
-              ),
-              const SizedBox(height: AppTheme.spacingMd),
-              right,
-            ],
+        if (constraints.maxWidth >= 1100) {
+          final height = MediaQuery.sizeOf(context).height < 960
+              ? 340.0 : 400.0;
+          return SizedBox(
+            height: height,
+            child: Row(
+              key: const Key('pc-home-layout-wide'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 12, child: Column(children: [
+                  Expanded(flex: 11, child: _statusPanel()),
+                  const SizedBox(height: AppTheme.spacingSm),
+                  Expanded(flex: 9, child: _weatherSummaryPanel()),
+                ])),
+                const SizedBox(width: AppTheme.spacingMd),
+                Expanded(flex: 13, child: _recommendations()),
+                const SizedBox(width: AppTheme.spacingMd),
+                Expanded(flex: 12, child: _schedule()),
+              ],
+            ),
           );
         }
         return Column(
           key: const Key('pc-home-layout-narrow'),
           children: [
-            left,
-            const SizedBox(height: AppTheme.spacingMd),
-            middle,
-            const SizedBox(height: AppTheme.spacingMd),
-            right,
+            SizedBox(height: 230, child: _statusPanel()),
+            const SizedBox(height: AppTheme.spacingSm),
+            SizedBox(height: 205, child: _weatherSummaryPanel()),
+            const SizedBox(height: AppTheme.spacingSm),
+            SizedBox(height: 315, child: _recommendations()),
+            const SizedBox(height: AppTheme.spacingSm),
+            SizedBox(height: 300, child: _schedule()),
           ],
         );
       },
     );
   }
+}
+
+class _PcHomeHero extends StatelessWidget {
+  const _PcHomeHero({required this.siteName, required this.weatherSummary});
+
+  final String siteName;
+  final String? weatherSummary;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SizedBox(
+      key: const Key('pc-home-hero'),
+      width: double.infinity,
+      height: constraints.maxWidth >= 720 &&
+              MediaQuery.sizeOf(context).height < 960
+          ? 180
+          : 200,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/ui/backgrounds/home_hero_milkyway.png',
+            fit: BoxFit.cover,
+            alignment: Alignment.centerLeft,
+            errorBuilder: (_, _, _) =>
+                const ColoredBox(color: AppColors.observatorySidebar),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xF2080E1D), Color(0xB3080E1D), Color(0x33080E1D)],
+                stops: [0, 0.48, 1],
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              constraints.maxWidth < 720 ? 24 : 44,
+              constraints.maxWidth < 720 ? 70 : 28,
+              24,
+              30,
+            ),
+            child: Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset('assets/icon/app_icon.png',
+                    width: constraints.maxWidth < 720 ? 54 : 68,
+                    height: constraints.maxWidth < 720 ? 54 : 68),
+              ),
+              const SizedBox(width: AppTheme.spacingMd),
+              Flexible(child: Text('AstroJournal',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: (constraints.maxWidth < 720
+                    ? Theme.of(context).textTheme.headlineSmall
+                    : Theme.of(context).textTheme.headlineLarge)?.copyWith(
+                  color: PcHomeColors.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              )),
+            ]),
+          ),
+          Positioned(
+            top: 22,
+            right: constraints.maxWidth < 720 ? 16 : 30,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth < 720
+                  ? constraints.maxWidth - 32 : 310),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: AppTheme.spacingSm,
+                runSpacing: AppTheme.spacingXs,
+                children: [
+                  ObservatoryStatusBadge(
+                    label: '관측지 · $siteName',
+                    color: PcHomeColors.secondaryAccent,
+                  ),
+                  ObservatoryStatusBadge(
+                    label: weatherSummary ?? '날씨 정보 없음',
+                    color: PcHomeColors.text,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _PcAstronomyPanel extends StatelessWidget {
@@ -370,77 +632,117 @@ class _PcAstronomyPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final value = condition;
     if (value == null) {
-      return const _PcPanel(
-        icon: Icons.nightlight_outlined,
-        title: '천문정보',
-        child: _PcEmptyMessage('천문정보를 준비하고 있습니다.'),
-      );
+      return const _PcEmptyMessage('관측 조건을 준비하고 있습니다.');
     }
+    final hasForecast = value.hasTonightForecast;
+    final hasStatus = hasForecast ||
+        value.observationStatus == ObservationStatus.unavailable;
+    final statusLabel = hasStatus
+        ? value.observationStatus.headline : '미확인';
+    final statusColor = hasForecast
+        ? ObservationScoreService.scoreColor(value.score)
+        : PcHomeColors.muted;
     final weather = value.weather;
-    return _PcPanel(
-      icon: Icons.nightlight_outlined,
-      title: '천문정보',
-      trailing: _ScoreBadge(score: value.score),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value.commentText,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox.square(
+              dimension: 106,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CircularProgressIndicator(
+                    value: hasForecast
+                        ? value.score.clamp(0, 100).toDouble() / 100
+                        : 0,
+                    strokeWidth: 8,
+                    backgroundColor: PcHomeColors.border,
+                    valueColor: AlwaysStoppedAnimation(statusColor),
+                  ),
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(statusLabel,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                        Text(hasForecast ? '${value.score}점' : '예보 부족',
+                            style: TextStyle(fontSize: 18, color: statusColor,
+                                fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: AppTheme.spacingSm),
-          _PcObservationAssessment(condition: value),
-          const SizedBox(height: AppTheme.spacingMd),
-          Wrap(
-            spacing: AppTheme.spacingSm,
-            runSpacing: AppTheme.spacingSm,
-            children: [
-              _PcInfoValue(label: '관측지', value: value.siteName),
-              _PcInfoValue(
-                label: '달',
-                value:
-                    '${value.moon.phaseEmoji} ${value.moon.phaseName} · ${value.moon.illuminationPercent}%',
-              ),
-              _PcInfoValue(
-                label: '월령',
-                value: '${value.moon.age.toStringAsFixed(1)}일',
-              ),
-              if (bortle != null)
-                _PcInfoValue(label: '광해', value: 'Bortle $bortle'),
-              if (weather != null) ...[
-                _PcInfoValue(
-                  label: '일출',
-                  value: _formatPcTime(weather.sunrise),
-                ),
-                _PcInfoValue(label: '일몰', value: _formatPcTime(weather.sunset)),
-                _PcInfoValue(
-                  label: '천문박명 시작',
-                  value: _formatPcTime(
-                    weather.sunrise.subtract(const Duration(minutes: 80)),
+            const SizedBox(width: AppTheme.spacingLg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PcGuideMetric(
+                    icon: Icons.cloud_outlined,
+                    label: '날씨',
+                    value: weather?.description.isNotEmpty == true
+                        ? weather!.description
+                        : '예보 확인 중',
                   ),
-                ),
-                _PcInfoValue(
-                  label: '천문박명 종료',
-                  value: _formatPcTime(
-                    weather.sunset.add(const Duration(minutes: 80)),
+                  _PcGuideMetric(
+                    icon: Icons.nightlight_outlined,
+                    label: '달빛',
+                    value: '${value.moon.illuminationPercent}% · ${value.moon.phaseName}',
                   ),
-                ),
-              ],
-              if (value.recommendedWindow.isNotEmpty)
-                _PcInfoValue(
-                  label: '추천 관측시간',
-                  value: value.recommendedWindow,
-                  wide: true,
-                ),
-            ],
-          ),
-        ],
-      ),
+                  _PcGuideMetric(
+                    icon: Icons.auto_awesome_outlined,
+                    label: '관측 조건',
+                    value: statusLabel,
+                  ),
+                  if (bortle != null)
+                    _PcGuideMetric(icon: Icons.dark_mode_outlined,
+                        label: '광해', value: 'Bortle $bortle'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppTheme.spacingMd),
+        Text(
+          hasStatus
+              ? value.statusUserMessage ?? value.summaryText
+              : value.weatherError ?? '시간별 예보가 없어 관측지수를 확정할 수 없습니다.',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: PcHomeColors.muted, fontSize: 12),
+        ),
+      ],
     );
   }
+}
+
+class _PcGuideMetric extends StatelessWidget {
+  const _PcGuideMetric({required this.icon, required this.label, required this.value});
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Icon(icon, size: 16, color: PcHomeColors.muted),
+        const SizedBox(width: 7),
+        Text('$label  ', style: const TextStyle(color: PcHomeColors.muted, fontSize: 11)),
+        Expanded(child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+      ],
+    ),
+  );
 }
 
 class _PcHourlyWeatherPanel extends StatelessWidget {
@@ -455,18 +757,47 @@ class _PcHourlyWeatherPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slots = condition?.tonightSlots ?? const <TonightObservationSlot>[];
-    return _PcPanel(
-      icon: Icons.cloud_outlined,
-      title: '시간대별 기상정보',
-      trailing: isLoading
-          ? const SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : null,
-      child: slots.isEmpty
-          ? _PcEmptyMessage(isLoading ? '예보를 불러오고 있습니다.' : '시간대별 예보가 없습니다.')
-          : _PcWeatherTable(slots: slots),
+    if (slots.isEmpty) {
+      return _PcEmptyMessage(isLoading ? '시간별 예보를 불러오고 있습니다.' : '시간별 예보가 없습니다.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(builder: (context, constraints) {
+          final visible = slots.take(constraints.maxWidth < 260 ? 3 : 5).toList();
+          return Column(
+            children: [
+              Row(
+                children: [
+                  for (final slot in visible)
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(_formatPcTime(slot.targetTime),
+                              style: const TextStyle(fontSize: 11, color: PcHomeColors.muted)),
+                          const SizedBox(height: 4),
+                          Text(slot.forecast.icon.endsWith('n') &&
+                                  slot.forecast.icon.startsWith('01')
+                              ? '☾' : slot.forecast.weatherEmoji,
+                              style: const TextStyle(fontSize: 22)),
+                          const SizedBox(height: 3),
+                          Text('${slot.forecast.temperature.round()}°',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          Text('구름 ${slot.forecast.cloudCoverage}%',
+                              style: const TextStyle(fontSize: 10,
+                                  color: PcHomeColors.muted)),
+                          Text('습도 ${slot.forecast.humidity}%',
+                              style: const TextStyle(fontSize: 10,
+                                  color: PcHomeColors.muted)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        }),
+      ],
     );
   }
 }
@@ -483,7 +814,7 @@ class _PcObservationAssessment extends StatelessWidget {
     return Container(
       key: const Key('pc-home-observation-assessment'),
       width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.spacingSm),
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
       decoration: BoxDecoration(
         color: AppColors.background.withAlpha(110),
         borderRadius: BorderRadius.circular(8),
@@ -496,17 +827,17 @@ class _PcObservationAssessment extends StatelessWidget {
             '관측지수 산정 근거',
             style: TextStyle(
               color: AppColors.textSecondary,
-              fontSize: 11,
+              fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           const _PcAssessmentSectionLabel(
             key: Key('pc-home-observation-final-score'),
             label: '최종 관측지수',
           ),
           _PcAssessmentRow(label: '점수', value: '${condition.score}점'),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           const _PcAssessmentSectionLabel(
             key: Key('pc-home-observation-verdict'),
             label: '판정',
@@ -529,7 +860,7 @@ class _PcObservationAssessment extends StatelessWidget {
             _PcAssessmentRow(label: '제약 조건', value: infeasibleReason),
           if (condition.contributions.isNotEmpty ||
               condition.qualityComponents.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             const _PcAssessmentSectionLabel(
               key: Key('pc-home-observation-score-components'),
               label: '점수 구성',
@@ -551,7 +882,7 @@ class _PcObservationAssessment extends StatelessWidget {
                   detail: component.starLabel,
                 ),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           const _PcAssessmentSectionLabel(
             key: Key('pc-home-observation-forecast-values'),
             label: '실제 예보 조건',
@@ -596,12 +927,12 @@ class _PcAssessmentSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         label,
         style: const TextStyle(
           color: AppColors.textSecondary,
-          fontSize: 10,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -623,23 +954,23 @@ class _PcAssessmentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
           SizedBox(
-            width: 82,
+            width: 120,
             child: Text(
               label,
               style: const TextStyle(
                 color: AppColors.textSecondary,
-                fontSize: 11,
+                fontSize: 13,
               ),
             ),
           ),
           if (detail != null) ...[
             Text(
               detail!,
-              style: const TextStyle(color: AppColors.solar, fontSize: 10),
+              style: const TextStyle(color: AppColors.solar, fontSize: 12),
             ),
             const SizedBox(width: 8),
           ],
@@ -649,7 +980,7 @@ class _PcAssessmentRow extends StatelessWidget {
               textAlign: TextAlign.right,
               style: const TextStyle(
                 color: AppColors.textPrimary,
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -661,9 +992,10 @@ class _PcAssessmentRow extends StatelessWidget {
 }
 
 class _PcWeatherTable extends StatefulWidget {
-  const _PcWeatherTable({required this.slots});
+  const _PcWeatherTable({required this.slots, required this.maxBodyHeight});
 
   final List<TonightObservationSlot> slots;
+  final double maxBodyHeight;
 
   @override
   State<_PcWeatherTable> createState() => _PcWeatherTableState();
@@ -682,7 +1014,6 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
   bool _scrollbarsVisible = false;
 
   static const _rowHeight = 38.0;
-  static const _maxBodyHeight = 304.0;
   static const _dragThreshold = 6.0;
   static const _labels = [
     '시간',
@@ -843,10 +1174,22 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
   @override
   Widget build(BuildContext context) {
     final naturalBodyHeight = widget.slots.length * _rowHeight;
-    final bodyHeight = naturalBodyHeight > _maxBodyHeight
-        ? _maxBodyHeight
+    final bodyHeight = naturalBodyHeight > widget.maxBodyHeight
+        ? widget.maxBodyHeight
         : naturalBodyHeight;
-    return Column(
+    return LayoutBuilder(builder: (context, constraints) {
+      final baseWidth = _widths.fold(0.0, (sum, width) => sum + width);
+      final remainingBase = baseWidth - _widths.first;
+      final extra = constraints.hasBoundedWidth &&
+              constraints.maxWidth > baseWidth
+          ? constraints.maxWidth - baseWidth : 0.0;
+      final widths = <double>[
+        _widths.first,
+        for (var index = 1; index < _widths.length; index++)
+          _widths[index] + extra * _widths[index] / remainingBase,
+      ];
+      final remainingWidth = widths.skip(1).fold(0.0, (sum, width) => sum + width);
+      return Column(
       children: [
         SizedBox(
           key: const Key('pc-home-weather-fixed-header'),
@@ -854,6 +1197,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
           child: Row(
             children: [
               _fixedCell(
+                widths: widths,
                 key: const Key('pc-home-weather-frozen-corner'),
                 value: _labels.first,
                 header: true,
@@ -866,6 +1210,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
                     scrollDirection: Axis.horizontal,
                     child: _row(
                       _labels.sublist(1),
+                      widths: widths,
                       widthOffset: 1,
                       header: true,
                     ),
@@ -886,7 +1231,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
               children: [
                 SizedBox(
                   key: const Key('pc-home-weather-frozen-time-column'),
-                  width: _widths.first,
+                  width: widths.first,
                   child: ScrollConfiguration(
                     behavior: ScrollConfiguration.of(
                       context,
@@ -898,6 +1243,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
                       itemCount: widget.slots.length,
                       itemExtent: _rowHeight,
                       itemBuilder: (context, index) => _fixedCell(
+                        widths: widths,
                         value: widget.slots[index].label,
                         alternate: index.isEven,
                       ),
@@ -946,7 +1292,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
                                 controller: _bodyHorizontalController,
                                 scrollDirection: Axis.horizontal,
                                 child: SizedBox(
-                                  width: _remainingColumnsWidth,
+                                  width: remainingWidth,
                                   height: bodyHeight,
                                   child: ListView.builder(
                                     controller: _bodyVerticalController,
@@ -964,6 +1310,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
                                             : Colors.transparent,
                                         child: _row(
                                           values.sublist(1),
+                                          widths: widths,
                                           widthOffset: 1,
                                         ),
                                       );
@@ -984,12 +1331,11 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
         ),
       ],
     );
+    });
   }
 
-  double get _remainingColumnsWidth =>
-      _widths.skip(1).fold(0.0, (sum, width) => sum + width);
-
   Widget _fixedCell({
+    required List<double> widths,
     Key? key,
     required String value,
     bool header = false,
@@ -997,7 +1343,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
   }) {
     return Container(
       key: key,
-      width: _widths.first,
+      width: widths.first,
       height: header ? 36 : _rowHeight,
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -1010,7 +1356,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
         value,
         style: TextStyle(
           color: header ? AppColors.textSecondary : AppColors.textPrimary,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: header ? FontWeight.w600 : FontWeight.normal,
         ),
         maxLines: 1,
@@ -1021,6 +1367,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
 
   Widget _row(
     List<String> values, {
+    required List<double> widths,
     int widthOffset = 0,
     bool header = false,
   }) {
@@ -1028,7 +1375,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
       children: [
         for (var index = 0; index < values.length; index++)
           SizedBox(
-            width: _widths[index + widthOffset],
+            width: widths[index + widthOffset],
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Text(
@@ -1037,7 +1384,7 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
                   color: header
                       ? AppColors.textSecondary
                       : AppColors.textPrimary,
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: header ? FontWeight.w600 : FontWeight.normal,
                 ),
                 maxLines: 1,
@@ -1068,348 +1415,284 @@ class _PcWeatherTableState extends State<_PcWeatherTable> {
   }
 }
 
-class _PcRecommendationPanel extends StatelessWidget {
+class _PcRecommendationPanel extends StatefulWidget {
   const _PcRecommendationPanel({required this.home});
 
   final HomeViewModel home;
 
   @override
+  State<_PcRecommendationPanel> createState() => _PcRecommendationPanelState();
+}
+
+class _PcRecommendationPanelState extends State<_PcRecommendationPanel> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final items = home.recommendedObjects.take(4).toList(growable: false);
-    return _PcPanel(
-      icon: Icons.auto_awesome,
-      title: '오늘 밤 추천 대상',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (home.recommendationState !=
-              RecommendationComputationState.current) ...[
-            HomeRecommendationRefreshNotice(
-              state: home.recommendationState,
-              message: home.recommendationErrorMessage,
-              showingPreviousResults: items.isNotEmpty,
+    final home = widget.home;
+    final items = home.recommendedObjects;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          const Expanded(child: Text('추천 촬영 대상',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+          PcScrollEdgeButtons(controller: _scrollController),
+          TextButton(
+            style: TextButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            const SizedBox(height: AppTheme.spacingSm),
-          ],
-          if (items.isEmpty)
-            _PcEmptyMessage(
-              home.exclusionReasons.isEmpty
-                  ? '추천 가능한 대상이 없습니다.'
-                  : home.exclusionReasons.join('\n'),
-            )
-          else
-            for (var index = 0; index < items.length; index++) ...[
-              _PcRecommendationCard(
-                rank: index + 1,
-                recommendation: items[index],
-                home: home,
-              ),
-              if (index < items.length - 1)
-                const SizedBox(height: AppTheme.spacingSm),
-            ],
+            onPressed: items.isEmpty ? null : () => unawaited(
+              showPcHomeAllRecommendations(context, home.allRecommendedObjects)),
+            child: Text('전체 ${home.allRecommendedObjects.length}개 ›',
+                style: const TextStyle(fontSize: 11)),
+          ),
+        ]),
+        const SizedBox(height: AppTheme.spacingXs),
+        if (home.recommendationState != RecommendationComputationState.current) ...[
+          HomeRecommendationRefreshNotice(
+            state: home.recommendationState,
+            message: home.recommendationErrorMessage,
+            showingPreviousResults: items.isNotEmpty,
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
         ],
-      ),
+        if (items.isEmpty)
+          _PcEmptyMessage(home.exclusionReasons.isEmpty
+              ? '추천 가능한 대상이 없습니다.'
+              : home.exclusionReasons.join('\n'))
+        else Expanded(child: PcScrollBoundary(child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          child: ListView.separated(
+            controller: _scrollController,
+            physics: const ClampingScrollPhysics(),
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 4),
+            itemBuilder: (context, index) => _PcRecommendationCard(
+              recommendation: items[index], home: home,
+            ),
+          ),
+        ))),
+      ],
     );
   }
 }
 
 class _PcRecommendationCard extends StatelessWidget {
   const _PcRecommendationCard({
-    required this.rank,
     required this.recommendation,
     required this.home,
   });
 
-  final int rank;
   final RecommendationResult recommendation;
   final HomeViewModel home;
 
   @override
   Widget build(BuildContext context) {
     final object = recommendation.object;
-    final accent = object.catalog.accentColor;
-    final chips = home.todayEquipmentChipsFor(object.id);
     final window = _recommendationWindow(recommendation);
-    return Container(
-      key: Key('pc-home-recommendation-${object.id}'),
-      padding: const EdgeInsets.all(AppTheme.spacingSm),
-      decoration: BoxDecoration(
-        color: accent.withAlpha(18),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: accent.withAlpha(70)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    final altitude = recommendation.observationWindow?.optimalAltitude;
+    final detail = [
+      if (window != null) '관측 $window',
+      if (altitude != null) '고도 ${altitude.round()}°',
+    ].join(' · ');
+    return SizedBox(height: 54, child: InkWell(
+      onTap: () => unawaited(showPcHomeRecommendationDetail(context, recommendation)),
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      child: Container(
+        key: Key('pc-home-recommendation-${object.id}'),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+        decoration: BoxDecoration(
+          color: PcHomeColors.card,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          border: Border.all(color: PcHomeColors.border),
+        ),
+        child: Row(children: [
           CatalogObjectImage(
             object: object,
             userPhotoPath: home.userPhotoFor(object),
-            width: 62,
-            height: 62,
-            borderRadius: BorderRadius.circular(8),
+            width: 42,
+            height: 42,
+            userPhotoFit: BoxFit.contain,
+            assetFit: BoxFit.contain,
+            borderRadius: BorderRadius.circular(6),
           ),
-          const SizedBox(width: AppTheme.spacingSm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$rank. ${CatalogObjectDisplayFormatter.catalogTitle(object)}',
-                  style: TextStyle(color: accent, fontWeight: FontWeight.w700),
-                ),
-                if (CatalogObjectDisplayFormatter.subtitleText(
-                  object,
-                ).isNotEmpty)
-                  Text(
-                    CatalogObjectDisplayFormatter.subtitleText(object),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  '${'★' * recommendation.starCount} · ${recommendation.score.round()}점 · ${recommendation.reason}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11),
-                ),
-                if (window != null)
-                  Text(
-                    window,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 10,
-                    ),
-                  ),
-                if (!chips.isEmpty) ...[
-                  const SizedBox(height: 4),
-                  CatalogEquipmentChipsRow(chips: chips),
-                ],
-                if (home.canAddToShootingPlan(object.id)) ...[
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ShootingPlanActionButton(
-                      compact: true,
-                      isPlanned: home.isPlanned(object.id),
-                      isScheduled: home.isScheduled(object.id),
-                      onToggle: () => home.toggleTonightPlan(object.id),
-                    ),
-                  ),
-                ],
-              ],
+          const SizedBox(width: 6),
+          Expanded(flex: 5, child: Text(
+            '${CatalogObjectDisplayFormatter.catalogTitle(object)} · ${object.displayType}',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+          )),
+          if (detail.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Expanded(flex: 4, child: Text(detail,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10,
+                  color: PcHomeColors.muted),
+            )),
+          ],
+          const SizedBox(width: 4),
+          const ObservatoryStatusBadge(
+            label: '추천', color: PcHomeColors.secondaryAccent,
+          ),
+          if (home.canAddToShootingPlan(object.id))
+            ShootingPlanActionButton(
+              compact: true,
+              isPlanned: home.isPlanned(object.id),
+              isScheduled: home.isScheduled(object.id),
+              onToggle: () => home.toggleTonightPlan(object.id),
+              backgroundColor: (home.isPlanned(object.id)
+                  ? PcHomeColors.muted : PcHomeColors.accent)
+                  .withValues(alpha: 0.14),
+              foregroundColor: home.isPlanned(object.id)
+                  ? PcHomeColors.muted : PcHomeColors.accent,
             ),
-          ),
-        ],
+        ]),
       ),
-    );
+    ));
   }
 }
 
-class _PcSchedulePanel extends StatelessWidget {
-  const _PcSchedulePanel({required this.home});
+class _PcSchedulePanel extends StatefulWidget {
+  const _PcSchedulePanel({required this.home, required this.onDetail});
 
   final HomeViewModel home;
+  final VoidCallback onDetail;
+
+  @override
+  State<_PcSchedulePanel> createState() => _PcSchedulePanelState();
+}
+
+class _PcSchedulePanelState extends State<_PcSchedulePanel> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return _PcPanel(
-      icon: Icons.timeline_outlined,
-      title: '촬영 스케줄',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          HomeScheduleComputationStatus(state: home.scheduleState),
-          const SizedBox(height: AppTheme.spacingSm),
-          if (home.scheduleItems.isEmpty)
-            _PcEmptyMessage(home.scheduleEmptyMessage ?? '배정된 촬영 스케줄이 없습니다.')
-          else
-            for (var index = 0; index < home.scheduleItems.length; index++) ...[
-              _PcScheduleCard(item: home.scheduleItems[index], home: home),
-              if (index < home.scheduleItems.length - 1)
-                const SizedBox(height: AppTheme.spacingSm),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.timeline_outlined, size: 17,
+              color: PcHomeColors.muted),
+          const SizedBox(width: AppTheme.spacingSm),
+          const Expanded(child: Text('촬영 스케줄',
+              style: TextStyle(fontWeight: FontWeight.w700))),
+          PcScrollEdgeButtons(controller: _scrollController),
+          TextButton(
+            style: TextButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: widget.onDetail,
+            child: const Text('자세히 보기 ›', style: TextStyle(fontSize: 11)),
+          ),
+        ]),
+        if (widget.home.scheduleState != ScheduleComputationState.current) ...[
+          HomeScheduleComputationStatus(state: widget.home.scheduleState),
+          const SizedBox(height: AppTheme.spacingXs),
         ],
-      ),
+        const SizedBox(height: AppTheme.spacingSm),
+        if (widget.home.scheduleItems.isEmpty)
+          _PcEmptyMessage(widget.home.scheduleEmptyMessage ?? '배정된 촬영 스케줄이 없습니다.')
+        else
+          Expanded(child: LayoutBuilder(
+            builder: (context, constraints) {
+              return PcScrollBoundary(child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: ListView.separated(
+                  controller: _scrollController,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: widget.home.scheduleItems.length,
+                  separatorBuilder: (_, _) => const Divider(
+                    height: AppTheme.spacingSm,
+                    color: PcHomeColors.border,
+                  ),
+                  itemBuilder: (context, index) => _PcScheduleCard(
+                    item: widget.home.scheduleItems[index],
+                    home: widget.home,
+                    width: constraints.maxWidth - AppTheme.spacingSm,
+                  ),
+                ),
+              ));
+            },
+          )),
+      ],
     );
   }
 }
 
 class _PcScheduleCard extends StatelessWidget {
-  const _PcScheduleCard({required this.item, required this.home});
+  const _PcScheduleCard({
+    required this.item,
+    required this.home,
+    required this.width,
+  });
 
   final ScheduleItem item;
   final HomeViewModel home;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     final object = item.catalogObject;
-    final accent = object.catalog.accentColor;
-    final flags = <String>[
-      item.status.label,
-      if (item.isManual) '수기 등록',
-      if (item.hasTimeOverride) '시간 고정',
-      if (item.framingWindow != null) '같은 구도',
-    ];
+    final image = CatalogObjectImage(
+      object: object,
+      userPhotoPath: home.userPhotoFor(object),
+      width: 42,
+      height: 42,
+      userPhotoFit: BoxFit.contain,
+      assetFit: BoxFit.contain,
+      borderRadius: BorderRadius.circular(6),
+    );
+    final timeLabel = '${_formatPcTime(item.startTime)}–${_formatPcTime(item.endTime)}';
+    final durationLabel = '${item.shootingDuration.inMinutes}분 · ${item.status.label}';
     return Container(
       key: Key('pc-home-schedule-${object.id}'),
-      padding: const EdgeInsets.all(AppTheme.spacingSm),
+      width: width,
+      height: 54,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
       decoration: BoxDecoration(
-        color: accent.withAlpha(18),
+        color: PcHomeColors.card,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: accent.withAlpha(70)),
+        border: Border.all(color: PcHomeColors.border),
       ),
-      child: Row(
-        children: [
-          CatalogObjectImage(
-            object: object,
-            userPhotoPath: home.userPhotoFor(object),
-            width: 54,
-            height: 54,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          const SizedBox(width: AppTheme.spacingSm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_formatPcTime(item.startTime)} ~ ${_formatPcTime(item.endTime)}',
-                  style: TextStyle(color: accent, fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  CatalogObjectDisplayFormatter.catalogTitle(object),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  '${item.durationLabel} · ${flags.join(' · ')}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PcPanel extends StatelessWidget {
-  const _PcPanel({
-    required this.icon,
-    required this.title,
-    required this.child,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String title;
-  final Widget child;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: AppColors.ic.withAlpha(45)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: AppColors.ic),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-              ?trailing,
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingSm),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _PcInfoValue extends StatelessWidget {
-  const _PcInfoValue({
-    required this.label,
-    required this.value,
-    this.wide = false,
-  });
-
-  final String label;
-  final String value;
-  final bool wide;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: wide ? 250 : 132,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 10,
-            ),
-          ),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScoreBadge extends StatelessWidget {
-  const _ScoreBadge({required this.score});
-
-  final int score;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = ObservationScoreService.scoreColor(score);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        '$score점',
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
+      child: Row(children: [
+        image,
+        const SizedBox(width: 6),
+        Expanded(flex: 5, child: Text(
+          '${CatalogObjectDisplayFormatter.catalogTitle(object)} · ${object.displayType}',
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        )),
+        const SizedBox(width: 6),
+        Expanded(flex: 3, child: Text(durationLabel,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 10,
+              color: PcHomeColors.muted),
+        )),
+        const SizedBox(width: 4),
+        Text(timeLabel, maxLines: 1,
+          style: const TextStyle(color: PcHomeColors.secondaryAccent, fontSize: 10,
+              fontWeight: FontWeight.w700),
         ),
-      ),
+      ]),
     );
   }
 }

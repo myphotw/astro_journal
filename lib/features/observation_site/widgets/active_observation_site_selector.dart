@@ -23,6 +23,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
     this.activeWeather,
     this.isWeatherLoading = false,
     this.currentLocationBortle,
+    this.accentColor,
   });
 
   static const currentLocationValue = '__current_location__';
@@ -40,6 +41,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
   final WeatherData? activeWeather;
   final bool isWeatherLoading;
   final int? currentLocationBortle;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +97,8 @@ class ActiveObservationSiteSelector extends StatelessWidget {
                     (choice) => Align(
                       alignment: Alignment.centerLeft,
                       child: compact
-                          ? _CompactSelectedSite(choice: choice)
+                          ? _CompactSelectedSite(
+                              choice: choice, accentColor: accentColor)
                           : _SelectedSite(choice: choice),
                     ),
                   )
@@ -107,6 +110,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
                       child: _SiteMenuItem(
                         choice: choice,
                         selected: choice.value == selectedValue,
+                        accentColor: accentColor,
                       ),
                     ),
                   )
@@ -200,17 +204,18 @@ class ActiveObservationSiteSelector extends StatelessWidget {
 }
 
 class _CompactSelectedSite extends StatelessWidget {
-  const _CompactSelectedSite({required this.choice});
+  const _CompactSelectedSite({required this.choice, this.accentColor});
 
   final _SiteChoice choice;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      const Icon(
+      Icon(
         Icons.location_on_outlined,
         size: 17,
-        color: AppColors.messier,
+        color: accentColor ?? AppColors.messier,
       ),
       const SizedBox(width: 6),
       Expanded(
@@ -311,10 +316,15 @@ class _SelectedSite extends StatelessWidget {
 }
 
 class _SiteMenuItem extends StatelessWidget {
-  const _SiteMenuItem({required this.choice, required this.selected});
+  const _SiteMenuItem({
+    required this.choice,
+    required this.selected,
+    this.accentColor,
+  });
 
   final _SiteChoice choice;
   final bool selected;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -324,10 +334,10 @@ class _SiteMenuItem extends StatelessWidget {
       SizedBox(
         width: 24,
         child: selected
-            ? const Icon(
+            ? Icon(
                 Icons.check_rounded,
                 size: 17,
-                color: AppColors.messier,
+                color: accentColor ?? AppColors.messier,
               )
             : null,
       ),
@@ -341,7 +351,9 @@ class _SiteMenuItem extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: selected ? AppColors.messier : AppColors.textPrimary,
+                color: selected
+                    ? (accentColor ?? AppColors.messier)
+                    : AppColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),

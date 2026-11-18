@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/catalog_type.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/pc_design.dart';
 import '../../data/models/catalog_object.dart';
 import '../../services/catalog_thumbnail_resolver.dart';
 import 'app_file_image.dart';
@@ -84,7 +85,9 @@ class CatalogObjectImage extends StatelessWidget {
       Center(
         child: Icon(
           Icons.auto_awesome_outlined,
-          color: object.catalog.accentColor,
+          color: PcDesign.isActive(context)
+              ? PcDesign.muted
+              : object.catalog.accentColor,
           size: _fallbackIconSize,
         ),
       );

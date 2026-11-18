@@ -13,6 +13,7 @@ import '../../../core/policies/catalog_deletion_policy.dart';
 import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/pc_design.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/gallery_shooting_record_repository_adapter.dart';
@@ -28,6 +29,7 @@ import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
+import '../../../shared/widgets/pc_card_grid.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../../../services/catalog_metadata_enricher.dart';
 import '../../../services/catalog_capture_projection_service.dart';
@@ -282,6 +284,7 @@ class _CatalogScreenState extends State<CatalogScreen>
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<CatalogViewModel>();
+    final pc = PcDesign.isActive(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -289,13 +292,15 @@ class _CatalogScreenState extends State<CatalogScreen>
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: pc ? PcDesign.text : AppColors.textPrimary,
                   fontSize: 16,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'M27, NGC 6853, Dumbbell, 오리온…',
-                  hintStyle: TextStyle(color: AppColors.textSecondary),
+                  hintStyle: TextStyle(
+                    color: pc ? PcDesign.muted : AppColors.textSecondary,
+                  ),
                   border: InputBorder.none,
                 ),
               )
@@ -336,8 +341,9 @@ class _CatalogScreenState extends State<CatalogScreen>
               icon: const Icon(Icons.wb_sunny_outlined, size: 16),
               label: const Text('계절별'),
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.solar.withValues(alpha: 0.18),
-                foregroundColor: AppColors.solar,
+                backgroundColor: pc
+                    ? PcDesign.raised : AppColors.solar.withValues(alpha: 0.18),
+                foregroundColor: pc ? PcDesign.secondary : AppColors.solar,
                 minimumSize: const Size(0, 34),
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -465,9 +471,7 @@ class _CatalogScreenState extends State<CatalogScreen>
                         )
                       : LayoutBuilder(
                           builder: (context, constraints) {
-                            final columns = _gridCrossAxisCount(
-                              constraints.maxWidth,
-                            );
+                            const padding = EdgeInsets.all(AppTheme.spacingLg);
                             final gridKey = _scrollStorageKey(viewModel);
                             final objects = viewModel.objects;
                             return GridView.builder(
@@ -475,15 +479,22 @@ class _CatalogScreenState extends State<CatalogScreen>
                                 'catalog_grid_$gridKey',
                               ),
                               controller: _scrollController,
-                              padding: const EdgeInsets.all(AppTheme.spacingLg),
+                              padding: padding,
                               addAutomaticKeepAlives: false,
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: columns,
-                                    crossAxisSpacing: AppTheme.spacingSm,
-                                    mainAxisSpacing: AppTheme.spacingSm,
-                                    childAspectRatio: 1.1,
-                                  ),
+                              gridDelegate: pc
+                                  ? PcCardGrid.delegate(
+                                      contentWidth: constraints.maxWidth -
+                                          padding.horizontal,
+                                      childAspectRatio: 1.1,
+                                    )
+                                  : SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: _gridCrossAxisCount(
+                                        constraints.maxWidth,
+                                      ),
+                                      crossAxisSpacing: AppTheme.spacingSm,
+                                      mainAxisSpacing: AppTheme.spacingSm,
+                                      childAspectRatio: 1.1,
+                                    ),
                               itemCount: objects.length,
                               itemBuilder: (context, index) {
                                 final object = objects[index];

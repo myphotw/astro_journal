@@ -4,14 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/navigation/app_navigation_notifier.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/pc_design.dart';
 import '../../features/catalog/view/catalog_screen.dart';
 import '../../features/catalog/viewmodel/catalog_view_model.dart';
 import '../../features/desktop/view/pc_photo_registration_screen.dart';
 import '../../features/gallery/view/gallery_screen.dart';
 import '../../features/gallery/viewmodel/gallery_view_model.dart';
 import '../../features/home/view/pc_home_screen.dart';
+import '../../features/home/view/astronomy_events_screen.dart';
 import '../../features/light_pollution_map/view/light_pollution_map_screen.dart';
 import '../../features/light_pollution_map/viewmodel/light_pollution_map_view_model.dart';
 import '../../features/settings/view/settings_screen.dart';
@@ -19,8 +20,11 @@ import '../../features/sky_map/view/sky_map_screen.dart';
 import '../../features/sky_map/viewmodel/sky_map_view_model.dart';
 import '../../features/stats/view/stats_screen.dart';
 import '../../features/stats/viewmodel/stats_view_model.dart';
+import '../../features/season/view/season_planner_screen.dart';
+import '../../features/season/viewmodel/season_planner_view_model.dart';
+import 'observatory_ui.dart';
 
-/// Windows 전용 상단 내비게이션 Shell.
+/// Windows 전용 사이드바 내비게이션 Shell.
 ///
 /// 메뉴 index 0~5는 기존 [AppNavigationNotifier] 계약을 그대로 사용해
 /// Catalog/성도 내부의 화면 전환 요청도 모바일과 같은 대상으로 연결한다.
@@ -37,6 +41,8 @@ class _PcMainShellState extends State<PcMainShell> {
   static const _screenCount = 8;
 
   AppNavigationNotifier? _navigation;
+  int _lastNavigationIndex = 0;
+  String _selectedSidebarAction = 'home';
   final _navigatorKeys = List<GlobalKey<NavigatorState>>.generate(
     _screenCount,
     (_) => GlobalKey<NavigatorState>(),
@@ -45,15 +51,21 @@ class _PcMainShellState extends State<PcMainShell> {
   late final _pages = <Widget>[
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[0],
-      child: const PcHomeScreen(),
+      child: Theme(
+        data: AppTheme.observatoryDark,
+        child: const PcHomeScreen(),
+      ),
     ),
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[1],
       child: const CatalogScreen(),
     ),
-    _PcTabNavigator(
-      navigatorKey: _navigatorKeys[2],
-      child: const GalleryScreen(),
+    Theme(
+      data: AppTheme.observatoryDark,
+      child: _PcTabNavigator(
+        navigatorKey: _navigatorKeys[2],
+        child: const GalleryScreen(showHomeNavigation: true),
+      ),
     ),
     const SizedBox.shrink(),
     _PcTabNavigator(
@@ -62,7 +74,7 @@ class _PcMainShellState extends State<PcMainShell> {
     ),
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[5],
-      child: const StatsScreen(),
+      child: const StatsScreen(pcSections: true),
     ),
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[6],
@@ -70,7 +82,7 @@ class _PcMainShellState extends State<PcMainShell> {
     ),
     _PcTabNavigator(
       navigatorKey: _navigatorKeys[7],
-      child: const SettingsScreen(),
+      child: const SettingsScreen(pcSections: true),
     ),
   ];
 
@@ -92,6 +104,21 @@ class _PcMainShellState extends State<PcMainShell> {
   void _onNavigationChanged() {
     if (!mounted) return;
     final index = _navigation!.currentIndex.clamp(0, _screenCount - 1);
+    if (index != _lastNavigationIndex) {
+      setState(() {
+        _selectedSidebarAction = switch (index) {
+          1 => 'catalog',
+          2 => 'gallery',
+          3 => 'map',
+          4 => 'sky',
+          5 => 'stats',
+          6 => 'photo',
+          7 => 'settings',
+          _ => 'home',
+        };
+        _lastNavigationIndex = index;
+      });
+    }
     _ensureLoaded(index);
   }
 
@@ -123,121 +150,273 @@ class _PcMainShellState extends State<PcMainShell> {
     }
   }
 
-  void _selectMenu(int index) {
+  void _selectMenu(int index, {required String action}) {
     _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
     _ensureLoaded(index);
+    setState(() {
+      _selectedSidebarAction = action;
+      _lastNavigationIndex = index;
+    });
     _navigation!.navigateTo(index);
+  }
+
+  void _selectSidebarAction(String action) {
+    final index = switch (action) {
+      'catalog' => 1,
+      'gallery' => 2,
+      'map' => 3,
+      'sky' => 4,
+      'stats' || 'stats_monthly' || 'stats_targets' => 5,
+      'photo' => 6,
+      'settings' || 'settings_recommendations' || 'settings_sites' ||
+      'settings_equipment' || 'settings_connection' || 'settings_backup' ||
+      'settings_reset' => 7,
+      _ => 0,
+    };
+    _selectMenu(index, action: action);
+    if (action != 'season' && action != 'month' && action != 'events') return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final nestedContext = _navigatorKeys[0].currentState?.overlay?.context;
+      if (nestedContext == null) return;
+      final route = action == 'events'
+          ? AstronomyEventsScreen.open(nestedContext, showHomeNavigation: true)
+          : SeasonPlannerScreen.open(
+              nestedContext,
+              initialViewMode: action == 'month'
+                  ? SeasonPlannerViewMode.byMonth
+                  : SeasonPlannerViewMode.bySeason,
+              fixedViewMode: true,
+            );
+      unawaited(route.whenComplete(() {
+        if (mounted && _selectedSidebarAction == action) {
+          setState(() => _selectedSidebarAction = 'home');
+        }
+      }));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final navigation = context.read<AppNavigationNotifier>();
-    return Scaffold(
-      body: Column(
-        children: [
-          _PcTopNavigation(
-            listenable: navigation,
-            onSelected: _selectMenu,
+    return Theme(
+      data: AppTheme.pcDark,
+      child: Scaffold(
+        backgroundColor: PcDesign.background,
+        body: LayoutBuilder(
+          builder: (context, _) => Row(
+            children: [
+              SizedBox(
+                width: 190,
+                child: _PcSidebar(
+                  selectedAction: _selectedSidebarAction,
+                  onSelected: _selectSidebarAction,
+                ),
+              ),
+              Expanded(
+                child: ListenableBuilder(
+                  listenable: navigation,
+                  builder: (context, _) {
+                    final index =
+                        navigation.currentIndex.clamp(0, _screenCount - 1);
+                    return IndexedStack(
+                      index: index,
+                      children: [
+                        _pages[0],
+                        _pages[1],
+                        _pages[2],
+                        LightPollutionMapScreen(isActive: index == 3),
+                        _pages[4],
+                        _pages[5],
+                        _pages[_photoRegistrationIndex],
+                        _pages[_settingsIndex],
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: ListenableBuilder(
-              listenable: navigation,
-              builder: (context, _) {
-                final index =
-                    navigation.currentIndex.clamp(0, _screenCount - 1);
-                return IndexedStack(
-                  index: index,
-                  children: [
-                    _pages[0],
-                    _pages[1],
-                    _pages[2],
-                    LightPollutionMapScreen(isActive: index == 3),
-                    _pages[4],
-                    _pages[5],
-                    _pages[_photoRegistrationIndex],
-                    _pages[_settingsIndex],
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _PcTopNavigation extends StatelessWidget {
-  const _PcTopNavigation({required this.listenable, required this.onSelected});
+class _PcSidebar extends StatefulWidget {
+  const _PcSidebar({required this.selectedAction, required this.onSelected});
 
-  final AppNavigationNotifier listenable;
-  final ValueChanged<int> onSelected;
+  final String selectedAction;
+  final ValueChanged<String> onSelected;
 
-  static const _items = <({int index, String label, IconData icon})>[
-    (index: 0, label: '홈', icon: Icons.home_outlined),
-    (index: 6, label: '사진 등록', icon: Icons.add_photo_alternate_outlined),
-    (index: 1, label: '천체 카탈로그', icon: Icons.grid_view_outlined),
-    (index: 2, label: '갤러리', icon: Icons.photo_library_outlined),
-    (index: 3, label: '광해지도', icon: Icons.map_outlined),
-    (index: 4, label: '성도', icon: Icons.explore_outlined),
-    (index: 5, label: '통계', icon: Icons.bar_chart_outlined),
-    (index: 7, label: '설정', icon: Icons.settings_outlined),
-  ];
+  @override
+  State<_PcSidebar> createState() => _PcSidebarState();
+}
+
+class _PcSidebarState extends State<_PcSidebar> {
+  String? _expandedSection;
+
+  @override
+  void didUpdateWidget(covariant _PcSidebar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_sectionOf(oldWidget.selectedAction) !=
+        _sectionOf(widget.selectedAction)) {
+      _expandedSection = null;
+    }
+  }
+
+  String _sectionOf(String action) {
+    if (action == 'home') return 'home';
+    if (action == 'photo') return 'photo';
+    if (action == 'catalog' || action == 'gallery') return 'library';
+    if (action.startsWith('stats')) return 'analysis';
+    if (action.startsWith('settings')) return 'settings';
+    return 'observation';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final selectedSection = _sectionOf(widget.selectedAction);
+    final expanded = _expandedSection ?? selectedSection;
     return Material(
-      color: AppColors.surface,
+      color: PcDesign.background,
       child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: 58,
-          child: ListenableBuilder(
-            listenable: listenable,
-            builder: (context, _) {
-              final selected = listenable.currentIndex;
-              return Row(
+        right: false,
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 22, 12, 22),
+              child: Row(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-                    child: Row(
-                      children: [
-                        Icon(Icons.auto_awesome, color: AppColors.solar, size: 20),
-                        SizedBox(width: AppTheme.spacingSm),
-                        Text('AstroJournal', style: TextStyle(fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                  ),
+                  Icon(Icons.auto_awesome_outlined,
+                      color: PcDesign.secondary, size: 27),
+                  SizedBox(width: 9),
                   Expanded(
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingSm),
-                      itemCount: _items.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: AppTheme.spacingXs),
-                      itemBuilder: (context, itemIndex) {
-                        final item = _items[itemIndex];
-                        final isSelected = selected == item.index;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: TextButton.icon(
-                            onPressed: () => onSelected(item.index),
-                            icon: Icon(item.icon, size: 18),
-                            label: Text(item.label),
-                            style: TextButton.styleFrom(
-                              foregroundColor: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
-                              backgroundColor: isSelected ? AppColors.messier.withValues(alpha: 0.18) : Colors.transparent,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    child: Text('AstroJournal',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: PcDesign.text,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        )),
                   ),
                 ],
-              );
-            },
-          ),
+              ),
+            ),
+            const Divider(height: 1, color: PcDesign.border),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(10, 18, 10, 12),
+                children: [
+                  _section('home', '홈', Icons.home_outlined, 'home', const []),
+                    _section('observation', '관측', Icons.travel_explore_outlined,
+                      'sky', const [
+                    ('sky', '성도'),
+                    ('map', '관측지 / 광해'),
+                    ('season', '계절별 계획'),
+                    ('month', '월별 계획'),
+                    ('events', '천문 이벤트'),
+                  ], expanded: expanded),
+                  _section('library', '천체와 사진', Icons.photo_library_outlined,
+                      'catalog', const [
+                    ('catalog', '천체 카탈로그'),
+                    ('gallery', '내 사진 갤러리'),
+                  ], expanded: expanded),
+                  _section('analysis', '촬영 분석', Icons.bar_chart_outlined,
+                      'stats', const [], expanded: expanded),
+                  _section('settings', '설정', Icons.settings_outlined,
+                      'settings', const [], expanded: expanded),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
+              child: SizedBox(
+                width: double.infinity,
+                child: ObservatoryButton(
+                  label: '사진 등록',
+                  icon: Icons.add_a_photo_outlined,
+                  primary: true,
+                  backgroundColor: PcDesign.accent,
+                  borderColor: PcDesign.accent,
+                  foregroundColor: PcDesign.background,
+                  onPressed: () => widget.onSelected('photo'),
+                ),
+              ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _section(
+    String id,
+    String label,
+    IconData icon,
+    String defaultAction,
+    List<(String, String)> children, {
+    String? expanded,
+  }) {
+    final selected = _sectionOf(widget.selectedAction) == id;
+    final isExpanded = expanded == id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Column(
+        children: [
+          Material(
+            color: selected
+                ? PcDesign.raised
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: ListTile(
+              dense: true,
+              minLeadingWidth: 20,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 11),
+              leading: Icon(icon,
+                  color: selected
+                      ? PcDesign.secondary
+                      : PcDesign.muted),
+              title: Text(label,
+                  style: TextStyle(
+                    color: selected
+                        ? PcDesign.text
+                        : PcDesign.muted,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  )),
+              trailing: children.isEmpty
+                  ? null
+                  : Icon(isExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: PcDesign.muted),
+              onTap: () {
+                setState(() => _expandedSection = id);
+                widget.onSelected(defaultAction);
+              },
+            ),
+          ),
+          if (isExpanded)
+            for (final child in children)
+              Padding(
+                padding: const EdgeInsets.only(left: 19, top: 2),
+                child: ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  contentPadding: const EdgeInsets.only(left: 12, right: 8),
+                  title: Text(child.$2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: widget.selectedAction == child.$1
+                            ? PcDesign.secondary
+                            : PcDesign.muted,
+                      )),
+                  onTap: () => widget.onSelected(child.$1),
+                ),
+              ),
+        ],
       ),
     );
   }

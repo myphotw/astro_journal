@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/pc_design.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../shared/widgets/app_file_image.dart';
@@ -79,7 +80,8 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<CatalogDetailViewModel>();
     final object = viewModel.object;
-    final accentColor = object.catalog.accentColor;
+    final pc = PcDesign.isActive(context);
+    final accentColor = pc ? PcDesign.accent : object.catalog.accentColor;
 
     return Scaffold(
       appBar: AppBar(
@@ -117,7 +119,9 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
               itemBuilder: (context, index) {
                 return _CatalogDetailPage(
                   object: viewModel.objectAt(index),
-                  accentColor: viewModel.objectAt(index).catalog.accentColor,
+                  accentColor: pc
+                      ? PcDesign.accent
+                      : viewModel.objectAt(index).catalog.accentColor,
                   isActive: index == viewModel.currentIndex,
                 );
               },
@@ -340,14 +344,18 @@ class _HeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showName = object.displayCommonName != object.displayName;
+    final pc = PcDesign.isActive(context);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: pc ? PcDesign.card : AppColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: accentColor.withAlpha(80), width: 1),
+        border: Border.all(
+          color: pc ? PcDesign.border : accentColor.withAlpha(80),
+          width: 1,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -367,7 +375,7 @@ class _HeaderCard extends StatelessWidget {
                 Text(
                   object.displayName,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: accentColor,
+                    color: pc ? PcDesign.text : accentColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -376,7 +384,7 @@ class _HeaderCard extends StatelessWidget {
                   Text(
                     object.displayCommonName,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: pc ? PcDesign.muted : AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -386,7 +394,9 @@ class _HeaderCard extends StatelessWidget {
           const SizedBox(width: 12),
           Icon(
             captured ? Icons.check_circle : Icons.circle_outlined,
-            color: captured ? accentColor : AppColors.textSecondary,
+            color: pc
+                ? (captured ? PcDesign.captured : PcDesign.muted)
+                : (captured ? accentColor : AppColors.textSecondary),
             size: 28,
           ),
         ],
@@ -406,7 +416,7 @@ class _DescriptionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: PcDesign.isActive(context) ? PcDesign.card : AppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -446,7 +456,7 @@ class _InfoSection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: PcDesign.isActive(context) ? PcDesign.card : AppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -538,7 +548,7 @@ class _PhotoListSection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: PcDesign.isActive(context) ? PcDesign.card : AppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

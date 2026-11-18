@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/equipment_chip_colors.dart';
+import '../../core/theme/pc_design.dart';
 import '../../data/models/catalog_equipment_chips.dart';
 
 /// 카탈로그 카드·추천 카드 공용 장비 Chip 행.
@@ -49,7 +50,8 @@ class _CompactEquipmentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = EquipmentChipColors.resolve(
+    final pc = PcDesign.isActive(context);
+    final accent = pc ? PcDesign.secondary : EquipmentChipColors.resolve(
       equipmentId: equipmentId,
       label: label,
       isVisual: isVisual,
@@ -71,7 +73,7 @@ class _CompactEquipmentChip extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: fg,
+            color: pc ? PcDesign.secondary : fg,
             fontSize: 9,
             fontWeight: FontWeight.w600,
             height: 1.2,

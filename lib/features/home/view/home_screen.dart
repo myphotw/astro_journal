@@ -20,6 +20,7 @@ import '../../../services/observation_score_service.dart';
 import '../../../shared/widgets/catalog_equipment_chips_row.dart';
 import '../../../shared/widgets/catalog_object_image.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
+import '../../../shared/widgets/pc_observatory_dialog.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
 import '../view/widgets/shooting_plan_action_button.dart';
 import '../../season/view/season_planner_screen.dart';
@@ -32,6 +33,99 @@ import 'widgets/home_observation_context_controls.dart';
 import 'widgets/astronomy_events_section.dart';
 import '../viewmodel/astronomy_events_view_model.dart';
 import '../viewmodel/home_view_model.dart';
+
+/// The PC dashboard reuses the same detail actions as the mobile home.
+Future<void> showHomeObservationDetail(
+  BuildContext context,
+  ObservationCondition condition,
+) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  backgroundColor: AppColors.surface,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  ),
+  builder: (_) => _ObservationDetailSheet(condition: condition),
+);
+
+Future<void> showHomeRecommendationDetail(
+  BuildContext context,
+  RecommendationResult recommendation,
+) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  backgroundColor: AppColors.surface,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  ),
+  builder: (_) => _RecommendDetailSheet(recommended: recommendation),
+);
+
+Future<void> showHomeShootingOrderEditor(
+  BuildContext context,
+  HomeViewModel home,
+) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  backgroundColor: AppColors.surface,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  ),
+  builder: (_) => _ShootingOrderEditSheet(viewModel: home),
+);
+
+Future<void> showHomeAllRecommendations(
+  BuildContext context,
+  List<RecommendationResult> recommendations,
+) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  backgroundColor: AppColors.surface,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  ),
+  builder: (_) => _RecommendedListSheet(
+    items: recommendations,
+    month: DateTime.now().month,
+  ),
+);
+
+Future<void> showPcHomeRecommendationDetail(
+  BuildContext context,
+  RecommendationResult recommendation,
+) => showPcObservatoryDialog<void>(
+  context: context,
+  title: '추천 천체 상세',
+  size: PcPopupSize.medium,
+  scrollable: false,
+  child: _RecommendDetailSheet(recommended: recommendation, pcDialog: true),
+);
+
+Future<void> showPcHomeAllRecommendations(
+  BuildContext context,
+  List<RecommendationResult> recommendations,
+) => showPcObservatoryDialog<void>(
+  context: context,
+  title: '추천 대상 전체 보기',
+  size: PcPopupSize.large,
+  scrollable: false,
+  child: _RecommendedListSheet(
+    items: recommendations,
+    month: DateTime.now().month,
+    pcDialog: true,
+  ),
+);
+
+Future<void> showPcHomeShootingOrderEditor(
+  BuildContext context,
+  HomeViewModel home,
+) => showPcObservatoryDialog<void>(
+  context: context,
+  title: '오늘 밤 촬영 순서 편집',
+  size: PcPopupSize.large,
+  scrollable: false,
+  child: _ShootingOrderEditSheet(viewModel: home, pcDialog: true),
+);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -286,54 +380,19 @@ class _HomeBodyState extends State<_HomeBody> {
   void _showObservationDetail(BuildContext context) {
     final condition = viewModel.observationCondition;
     if (condition == null) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _ObservationDetailSheet(condition: condition),
-    );
+    showHomeObservationDetail(context, condition);
   }
 
   void _showObjectDetail(BuildContext context, RecommendationResult rec) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _RecommendDetailSheet(recommended: rec),
-    );
+    showHomeRecommendationDetail(context, rec);
   }
 
   void _showShootingOrderEditor(BuildContext context, HomeViewModel homeVm) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => _ShootingOrderEditSheet(viewModel: homeVm),
-    );
+    showHomeShootingOrderEditor(context, homeVm);
   }
 
   void _showAllRecommended(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _RecommendedListSheet(
-        items: viewModel.allRecommendedObjects,
-        month: DateTime.now().month,
-      ),
-    );
+    showHomeAllRecommendations(context, viewModel.allRecommendedObjects);
   }
 
   @override
@@ -2492,8 +2551,9 @@ class _TodayEquipmentRecommendationBlock extends StatelessWidget {
 }
 
 class _RecommendDetailSheet extends StatelessWidget {
-  const _RecommendDetailSheet({required this.recommended});
+  const _RecommendDetailSheet({required this.recommended, this.pcDialog = false});
   final RecommendationResult recommended;
+  final bool pcDialog;
 
   @override
   Widget build(BuildContext context) {
@@ -2516,9 +2576,10 @@ class _RecommendDetailSheet extends StatelessWidget {
     );
 
     return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.6,
-      maxChildSize: 0.85,
+      expand: pcDialog,
+      initialChildSize: pcDialog ? 1 : 0.6,
+      minChildSize: pcDialog ? 1 : 0.25,
+      maxChildSize: pcDialog ? 1 : 0.85,
       builder: (_, scrollController) => SingleChildScrollView(
         controller: scrollController,
         padding: const EdgeInsets.fromLTRB(
@@ -2530,17 +2591,19 @@ class _RecommendDetailSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.textSecondary.withAlpha(102),
-                  borderRadius: BorderRadius.circular(2),
+            if (!pcDialog) ...[
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.textSecondary.withAlpha(102),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppTheme.spacingXl),
+              const SizedBox(height: AppTheme.spacingXl),
+            ],
             Row(
               children: [
                 Text(
@@ -2783,10 +2846,15 @@ class _RecommendDetailSheet extends StatelessWidget {
 // ── 전체 추천 목록 시트 ──────────────────────────────────────────────────────
 
 class _RecommendedListSheet extends StatelessWidget {
-  const _RecommendedListSheet({required this.items, required this.month});
+  const _RecommendedListSheet({
+    required this.items,
+    required this.month,
+    this.pcDialog = false,
+  });
 
   final List<RecommendationResult> items;
   final int month;
+  final bool pcDialog;
 
   String _seasonText(int month) {
     if (month >= 3 && month <= 5) return '봄 하늘';
@@ -2796,6 +2864,10 @@ class _RecommendedListSheet extends StatelessWidget {
   }
 
   void _showDetail(BuildContext context, RecommendationResult rec) {
+    if (pcDialog) {
+      showPcHomeRecommendationDetail(context, rec);
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -2810,9 +2882,10 @@ class _RecommendedListSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.95,
+      expand: pcDialog,
+      initialChildSize: pcDialog ? 1 : 0.7,
+      minChildSize: pcDialog ? 1 : 0.25,
+      maxChildSize: pcDialog ? 1 : 0.95,
       builder: (_, scrollController) => Column(
         children: [
           Padding(
@@ -2824,30 +2897,33 @@ class _RecommendedListSheet extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.textSecondary.withAlpha(102),
-                      borderRadius: BorderRadius.circular(2),
+                if (!pcDialog) ...[
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.textSecondary.withAlpha(102),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: AppTheme.spacingLg),
+                  const SizedBox(height: AppTheme.spacingLg),
+                ],
                 Row(
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '오늘의 추천 대상',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
+                        if (!pcDialog)
+                          Text(
+                            '오늘의 추천 대상',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
                         Text(
                           _seasonText(month),
                           style: const TextStyle(
@@ -3686,9 +3762,10 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _ShootingOrderEditSheet extends StatefulWidget {
-  const _ShootingOrderEditSheet({required this.viewModel});
+  const _ShootingOrderEditSheet({required this.viewModel, this.pcDialog = false});
 
   final HomeViewModel viewModel;
+  final bool pcDialog;
 
   @override
   State<_ShootingOrderEditSheet> createState() =>
@@ -3848,10 +3925,10 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
           AppTheme.spacingLg,
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: widget.pcDialog ? MainAxisSize.max : MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
+            if (!widget.pcDialog) Row(
               children: [
                 Expanded(
                   child: Text(
@@ -3867,7 +3944,7 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: AppTheme.spacingXs),
+            if (!widget.pcDialog) const SizedBox(height: AppTheme.spacingXs),
             const Text(
               '드래그하여 순서를 바꾸거나 항목을 삭제할 수 있습니다. '
               '추천 대상은 하루에 한 번 자동으로 갱신됩니다.',
@@ -3876,7 +3953,7 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
             const SizedBox(height: AppTheme.spacingMd),
             Flexible(
               child: ReorderableListView.builder(
-                shrinkWrap: true,
+                shrinkWrap: !widget.pcDialog,
                 itemCount: _items.length,
                 onReorderItem: (oldIndex, newIndex) async {
                   await _applyReorder(oldIndex, newIndex);

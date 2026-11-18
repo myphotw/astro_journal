@@ -7,6 +7,7 @@ import '../../../core/constants/astro_season.dart';
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/pc_design.dart';
 import '../../../core/theme/season_planner_filter_theme.dart';
 import '../../../data/models/season_planner_item.dart';
 import '../../../data/repositories/catalog_repository.dart';
@@ -25,6 +26,7 @@ import '../../../services/season_planner_filter_service.dart';
 import '../../../services/season_planner_service.dart';
 import '../../../services/catalog_capture_projection_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
+import '../../../shared/widgets/pc_card_grid.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../../catalog/view/catalog_detail_screen.dart';
 import '../../catalog/viewmodel/catalog_detail_view_model.dart';
@@ -42,12 +44,15 @@ int _gridCrossAxisCount(double width) {
 
 /// 계절/월별 촬영 대상 전용 화면.
 class SeasonPlannerScreen extends StatelessWidget {
-  const SeasonPlannerScreen({super.key});
+  const SeasonPlannerScreen({super.key, this.fixedViewMode = false});
+
+  final bool fixedViewMode;
 
   static Future<void> open(
     BuildContext context, {
     SeasonPlannerViewMode initialViewMode = SeasonPlannerViewMode.bySeason,
     int? initialMonth,
+    bool fixedViewMode = false,
   }) {
     final catalogRepo = context.read<CatalogRepository>();
     final shootingRepo = context.read<GalleryShootingRecordRepositoryAdapter>();
@@ -63,7 +68,7 @@ class SeasonPlannerScreen extends StatelessWidget {
             initialViewMode: initialViewMode,
             initialMonth: initialMonth,
           )..load(),
-          child: const SeasonPlannerScreen(),
+          child: SeasonPlannerScreen(fixedViewMode: fixedViewMode),
         ),
       ),
     );
@@ -74,7 +79,10 @@ class SeasonPlannerScreen extends StatelessWidget {
     final viewModel = context.watch<SeasonPlannerViewModel>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('계절별 촬영 대상')),
+      appBar: AppBar(title: Text(fixedViewMode &&
+              viewModel.viewMode == SeasonPlannerViewMode.byMonth
+          ? '월별 계획'
+          : '계절별 촬영 대상')),
       body: viewModel.isLoading
           ? const Center(child: CircularProgressIndicator())
           : viewModel.errorMessage != null
@@ -82,7 +90,10 @@ class SeasonPlannerScreen extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _PlannerHeaderPanel(viewModel: viewModel),
+                _PlannerHeaderPanel(
+                  viewModel: viewModel,
+                  fixedViewMode: fixedViewMode,
+                ),
                 Expanded(
                   child: viewModel.items.isEmpty
                       ? const Center(
@@ -100,9 +111,13 @@ class SeasonPlannerScreen extends StatelessWidget {
 }
 
 class _PlannerHeaderPanel extends StatelessWidget {
-  const _PlannerHeaderPanel({required this.viewModel});
+  const _PlannerHeaderPanel({
+    required this.viewModel,
+    required this.fixedViewMode,
+  });
 
   final SeasonPlannerViewModel viewModel;
+  final bool fixedViewMode;
 
   static String _catalogLabel(CatalogType type) {
     switch (type) {
@@ -128,6 +143,7 @@ class _PlannerHeaderPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vm = context.read<SeasonPlannerViewModel>();
+    final pc = PcDesign.isActive(context);
     final selected = viewModel.catalogFilters;
     final periodLabel = viewModel.viewMode == SeasonPlannerViewMode.bySeason
         ? '${viewModel.selectedSeason.label} (${viewModel.selectedSeason.subtitle})'
@@ -141,14 +157,14 @@ class _PlannerHeaderPanel extends StatelessWidget {
         AppTheme.spacingSm,
       ),
       child: Material(
-        color: AppColors.surface,
+        color: pc ? PcDesign.card : AppColors.surface,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         child: Padding(
           padding: const EdgeInsets.all(AppTheme.spacingMd),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              FullWidthSegmentedButton<SeasonPlannerViewMode>(
+              if (!fixedViewMode) FullWidthSegmentedButton<SeasonPlannerViewMode>(
                 segments: const [
                   ButtonSegment(
                     value: SeasonPlannerViewMode.bySeason,
@@ -166,14 +182,17 @@ class _PlannerHeaderPanel extends StatelessWidget {
                   vm.setViewMode(selection.first);
                 },
               ),
-              const SizedBox(height: AppTheme.spacingSm),
+              if (!fixedViewMode) const SizedBox(height: AppTheme.spacingSm),
               if (viewModel.viewMode == SeasonPlannerViewMode.bySeason)
                 _SeasonSelector(viewModel: viewModel)
               else
                 _MonthSelector(viewModel: viewModel),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: AppTheme.spacingSm),
-                child: Divider(height: 1, color: Color(0x33FFFFFF)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingSm),
+                child: Divider(
+                  height: 1,
+                  color: pc ? PcDesign.border : const Color(0x33FFFFFF),
+                ),
               ),
               Row(
                 children: [
@@ -208,6 +227,10 @@ class _PlannerHeaderPanel extends StatelessWidget {
                 itemCount: 1 + SeasonPlannerService.plannerCatalogTypes.length,
                 itemBuilder: (context, index) {
                   if (index == 0) {
+                    final colors = SeasonPlannerFilterTheme.colorsFor(
+                      selected: viewModel.uncapturedOnly,
+                      pc: pc,
+                    );
                     return ExpandedFilterChip(
                       compact: true,
                       label: const Text(
@@ -217,22 +240,17 @@ class _PlannerHeaderPanel extends StatelessWidget {
                       ),
                       selected: viewModel.uncapturedOnly,
                       onSelected: vm.setUncapturedOnly,
-                      backgroundColor: SeasonPlannerFilterTheme.colorsFor(
-                        selected: viewModel.uncapturedOnly,
-                      ).background,
+                      backgroundColor: colors.background,
                       selectedColor: SeasonPlannerFilterTheme.colorsFor(
                         selected: true,
+                        pc: pc,
                       ).background,
                       side: BorderSide(
-                        color: SeasonPlannerFilterTheme.colorsFor(
-                          selected: viewModel.uncapturedOnly,
-                        ).border,
+                        color: colors.border,
                         width: viewModel.uncapturedOnly ? 1.5 : 1,
                       ),
                       labelStyle: TextStyle(
-                        color: SeasonPlannerFilterTheme.colorsFor(
-                          selected: viewModel.uncapturedOnly,
-                        ).label,
+                        color: colors.label,
                         fontSize: 12,
                         fontWeight: viewModel.uncapturedOnly
                             ? FontWeight.w600
@@ -247,6 +265,7 @@ class _PlannerHeaderPanel extends StatelessWidget {
                       selected.isEmpty || selected.contains(catalog);
                   final colors = SeasonPlannerFilterTheme.colorsFor(
                     selected: isChecked,
+                    pc: pc,
                   );
                   return ExpandedFilterChip(
                     compact: true,
@@ -344,7 +363,12 @@ class _MonthSelector extends StatelessWidget {
           ),
           selected: selected,
           avatar: isCurrent
-              ? const Icon(Icons.circle, size: 8, color: AppColors.solar)
+              ? Icon(
+                  Icons.circle,
+                  size: 8,
+                  color: PcDesign.isActive(context)
+                      ? PcDesign.secondary : AppColors.solar,
+                )
               : null,
           onSelected: (_) {
             context.read<SeasonPlannerViewModel>().selectMonth(month);
@@ -433,15 +457,20 @@ class _SeasonObjectGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = _gridCrossAxisCount(constraints.maxWidth);
+        const padding = EdgeInsets.all(AppTheme.spacingLg);
         return GridView.builder(
-          padding: const EdgeInsets.all(AppTheme.spacingLg),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: AppTheme.spacingSm,
-            mainAxisSpacing: AppTheme.spacingSm,
-            childAspectRatio: 1.1,
-          ),
+          padding: padding,
+          gridDelegate: PcDesign.isActive(context)
+              ? PcCardGrid.delegate(
+                  contentWidth: constraints.maxWidth - padding.horizontal,
+                  childAspectRatio: 1.1,
+                )
+              : SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _gridCrossAxisCount(constraints.maxWidth),
+                  crossAxisSpacing: AppTheme.spacingSm,
+                  mainAxisSpacing: AppTheme.spacingSm,
+                  childAspectRatio: 1.1,
+                ),
           itemCount: viewModel.items.length,
           itemBuilder: (context, index) {
             final item = viewModel.items[index];

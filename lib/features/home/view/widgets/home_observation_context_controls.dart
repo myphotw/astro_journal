@@ -27,6 +27,8 @@ class HomeObservationContextControls extends StatelessWidget {
     this.isWeatherLoading = false,
     this.currentLocationBortle,
     this.onSaveCurrentLocation,
+    this.stackOnNarrow = false,
+    this.accentColor,
   });
 
   final ActiveObservationSiteViewModel siteViewModel;
@@ -44,6 +46,8 @@ class HomeObservationContextControls extends StatelessWidget {
   final WeatherData? activeWeather;
   final bool isWeatherLoading;
   final int? currentLocationBortle;
+  final bool stackOnNarrow;
+  final Color? accentColor;
 
   static const double _selectorCardHeight = 58;
 
@@ -63,11 +67,13 @@ class HomeObservationContextControls extends StatelessWidget {
       activeWeather: activeWeather,
       isWeatherLoading: isWeatherLoading,
       currentLocationBortle: currentLocationBortle,
+      accentColor: accentColor,
     );
     final equipmentSelector = _EquipmentSelector(
       equipment: equipment,
       selectedId: selectedEquipmentId,
       onChanged: onEquipmentChanged,
+      accentColor: accentColor,
     );
 
     return LayoutBuilder(
@@ -87,12 +93,31 @@ class HomeObservationContextControls extends StatelessWidget {
                 child: _TrackingModeSelector(
                   selected: trackingMode,
                   onChanged: onTrackingChanged,
+                  accentColor: accentColor,
                 ),
               ),
             ],
           );
         }
 
+        if (stackOnNarrow) {
+          return Column(
+            key: const Key('home-context-compact-layout'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              siteSelector,
+              const SizedBox(height: AppTheme.spacingSm),
+              equipmentSelector,
+              const SizedBox(height: AppTheme.spacingSm),
+              _TrackingModeSelector(
+                selected: trackingMode,
+                onChanged: onTrackingChanged,
+                accentColor: accentColor,
+                inline: true,
+              ),
+            ],
+          );
+        }
         return Column(
           key: const Key('home-context-compact-layout'),
           children: [
@@ -108,6 +133,7 @@ class HomeObservationContextControls extends StatelessWidget {
             _TrackingModeSelector(
               selected: trackingMode,
               onChanged: onTrackingChanged,
+              accentColor: accentColor,
               inline: true,
             ),
           ],
@@ -122,11 +148,13 @@ class _EquipmentSelector extends StatelessWidget {
     required this.equipment,
     required this.selectedId,
     required this.onChanged,
+    this.accentColor,
   });
 
   final List<Equipment> equipment;
   final String? selectedId;
   final ValueChanged<String?> onChanged;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -186,10 +214,10 @@ class _EquipmentSelector extends StatelessWidget {
                             width: 24,
                             child:
                                 (item?.id == (hasSelected ? selectedId : null))
-                                ? const Icon(
+                                ? Icon(
                                     Icons.check_rounded,
                                     size: 17,
-                                    color: AppColors.messier,
+                                    color: accentColor ?? AppColors.messier,
                                   )
                                 : null,
                           ),
@@ -213,11 +241,13 @@ class _TrackingModeSelector extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     this.inline = false,
+    this.accentColor,
   });
 
   final TrackingMode selected;
   final ValueChanged<TrackingMode> onChanged;
   final bool inline;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -255,7 +285,7 @@ class _TrackingModeSelector extends StatelessWidget {
         }),
         backgroundColor: WidgetStateProperty.resolveWith((states) {
           return states.contains(WidgetState.selected)
-              ? AppColors.messier
+              ? (accentColor ?? AppColors.messier)
               : AppColors.background.withValues(alpha: 0.7);
         }),
       ),

@@ -208,6 +208,15 @@ class GalleryViewModel extends ChangeNotifier {
     return records;
   }
 
+  /// Home preview ignores the Gallery screen's temporary search and filters.
+  List<ShootingRecord> get recentPhotoRecords {
+    final records = _allRecords
+        .where((record) => record.photoUri?.isNotEmpty == true)
+        .toList()
+      ..sort((a, b) => b.capturedAt.compareTo(a.capturedAt));
+    return records;
+  }
+
   /// 대상별 보기: 천체당 대표사진 그룹.
   List<TargetGroup> get targetGroups {
     final map = <String, List<ShootingRecord>>{};

@@ -3,6 +3,20 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
+  // PC observatory design tokens. Existing catalog colours remain semantic.
+  static const Color observatoryBackground = Color(0xFF080E1D);
+  static const Color observatorySidebar = Color(0xFF0B1224);
+  static const Color observatorySurface = Color(0xFF111D36);
+  static const Color observatorySurfaceRaised = Color(0xFF162443);
+  static const Color observatoryText = Color(0xFFE8EEFF);
+  static const Color observatoryMuted = Color(0xFF9AAAC8);
+  static const Color observatoryPrimary = Color(0xFF4C7DFF);
+  static const Color observatoryAccent = Color(0xFF36C5E8);
+  static const Color observatorySuccess = Color(0xFF38C98A);
+  static const Color observatoryWarning = Color(0xFFF2A94A);
+  static const Color observatoryDanger = Color(0xFFE36B7B);
+  static const Color observatoryBorder = Color(0xFF26385C);
+
   static const Color background = Color(0xFF080B14);
   static const Color surface = Color(0xFF0D1B3E);
   static const Color messier = Color(0xFF4FC3C8);

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/catalog_type.dart';
+import '../../core/constants/object_type.dart';
 import '../../core/formatters/catalog_object_display_formatter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/pc_design.dart';
 import '../../data/models/catalog_equipment_chips.dart';
 import '../../data/models/catalog_object.dart';
+import '../../features/sky_map/widgets/sky_map_object_symbol.dart';
 import '../../services/catalog_thumbnail_resolver.dart';
 import 'catalog_object_image.dart';
 import 'catalog_equipment_chips_row.dart';
@@ -36,12 +39,18 @@ class CatalogObjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = object.catalog.accentColor;
+    final pc = PcDesign.isActive(context);
+    final color = pc ? PcDesign.secondary : object.catalog.accentColor;
     final thumbnail = CatalogThumbnailResolver.resolve(
       object,
       userPhotoPath: thumbnailPath,
     );
     final hasThumb = thumbnail.hasImage;
+    final shootingColor = pc
+        ? (object.captured ? PcDesign.captured : PcDesign.muted)
+        : object.captured
+            ? (hasThumb ? Colors.white : color)
+            : (hasThumb ? Colors.white54 : AppColors.textSecondary);
 
     return RepaintBoundary(
       child: Card(
@@ -52,13 +61,18 @@ class CatalogObjectCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (hasThumb)
+              if (hasThumb || pc)
                 CatalogObjectImage(
                   object: object,
                   userPhotoPath: thumbnailPath,
                   userPhotoFit: BoxFit.cover,
                   assetFit: BoxFit.contain,
-                  fallbackBuilder: (_) => const SizedBox.shrink(),
+                  backgroundColor: hasThumb
+                      ? AppColors.background
+                      : Colors.transparent,
+                  fallbackBuilder: (_) => pc
+                      ? _PcCatalogPlaceholder(type: object.resolvedObjectType)
+                      : const SizedBox.shrink(),
                 ),
               if (hasThumb)
                 const DecoratedBox(
@@ -97,7 +111,7 @@ class CatalogObjectCard extends StatelessWidget {
                               if (_hasConstellation)
                                 _CatalogBadge(
                                   label: object.displayConstellation,
-                                  color: AppColors.textSecondary,
+                                  color: pc ? PcDesign.muted : AppColors.textSecondary,
                                   onDarkBackground: hasThumb,
                                 ),
                             ],
@@ -113,22 +127,14 @@ class CatalogObjectCard extends StatelessWidget {
                                   object.captured
                                       ? Icons.check_circle
                                       : Icons.circle_outlined,
-                                  color: object.captured
-                                      ? (hasThumb ? Colors.white : color)
-                                      : (hasThumb
-                                          ? Colors.white54
-                                          : AppColors.textSecondary),
+                                  color: shootingColor,
                                   size: 16,
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
                                   object.captured ? '촬영' : '미촬영',
                                   style: TextStyle(
-                                    color: object.captured
-                                        ? (hasThumb ? Colors.white : color)
-                                        : (hasThumb
-                                            ? Colors.white54
-                                            : AppColors.textSecondary),
+                                    color: shootingColor,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -140,7 +146,7 @@ class CatalogObjectCard extends StatelessWidget {
                               const SizedBox(height: 4),
                               _CatalogBadge(
                                 label: footerText!,
-                                color: AppColors.solar,
+                                color: pc ? PcDesign.accent : AppColors.solar,
                                 onDarkBackground: hasThumb,
                               ),
                             ],
@@ -159,7 +165,7 @@ class CatalogObjectCard extends StatelessWidget {
                     Text(
                       CatalogObjectDisplayFormatter.catalogTitle(object),
                       style: TextStyle(
-                        color: hasThumb ? Colors.white : color,
+                        color: pc ? PcDesign.text : (hasThumb ? Colors.white : color),
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         height: 1.1,
@@ -173,7 +179,7 @@ class CatalogObjectCard extends StatelessWidget {
                       Text(
                         CatalogObjectDisplayFormatter.subtitleText(object),
                         style: TextStyle(
-                          color: hasThumb
+                          color: pc ? PcDesign.muted : hasThumb
                               ? Colors.white70
                               : AppColors.textSecondary,
                           fontSize: 12,
@@ -189,6 +195,40 @@ class CatalogObjectCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Reuses the sky map's vector symbols without changing the image resolver.
+class _PcCatalogPlaceholder extends StatelessWidget {
+  const _PcCatalogPlaceholder({required this.type});
+
+  final ObjectType type;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = (constraints.biggest.shortestSide * 0.28)
+            .clamp(0.0, 52.0)
+            .toDouble();
+        final kind = switch (type) {
+          ObjectType.planet || ObjectType.dwarfPlanet =>
+            SkyMapObjectSymbolKind.planet,
+          ObjectType.moon => SkyMapObjectSymbolKind.moon,
+          ObjectType.milkyWay => SkyMapObjectSymbolKind.galaxy,
+          _ => type.skyMapSymbolKind,
+        };
+
+        final widget = switch ((type, kind)) {
+          (ObjectType.supernovaRemnant, _) =>
+            Icon(Icons.blur_on, size: size, color: PcDesign.accent),
+          (_, SkyMapObjectSymbolKind.point) =>
+            Icon(Icons.auto_awesome_outlined, size: size, color: PcDesign.accent),
+          _ => SkyMapObjectSymbol(kind: kind, color: PcDesign.accent, size: size),
+        };
+        return Center(child: widget);
+      },
     );
   }
 }
@@ -218,7 +258,7 @@ class _CatalogBadge extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: onDarkBackground ? Colors.white : color,
+          color: onDarkBackground && !PcDesign.isActive(context) ? Colors.white : color,
           fontSize: 10,
           fontWeight: FontWeight.bold,
         ),

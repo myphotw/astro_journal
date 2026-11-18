@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/astronomy_event.dart';
@@ -11,10 +12,17 @@ import '../viewmodel/astronomy_events_view_model.dart';
 import 'widgets/astronomy_event_card.dart';
 
 class AstronomyEventsScreen extends StatefulWidget {
-  const AstronomyEventsScreen({super.key});
+  const AstronomyEventsScreen({super.key, this.showHomeNavigation = false});
 
-  static Future<void> open(BuildContext context) => Navigator.of(context).push(
-    MaterialPageRoute<void>(builder: (_) => const AstronomyEventsScreen()),
+  final bool showHomeNavigation;
+
+  static Future<void> open(
+    BuildContext context, {
+    bool showHomeNavigation = false,
+  }) => Navigator.of(context).push(
+    MaterialPageRoute<void>(builder: (_) => AstronomyEventsScreen(
+      showHomeNavigation: showHomeNavigation,
+    )),
   );
 
   @override
@@ -37,7 +45,22 @@ class _AstronomyEventsScreenState extends State<AstronomyEventsScreen> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<AstronomyEventsViewModel>();
     return Scaffold(
-      appBar: AppBar(title: const Text('천문 이벤트')),
+      appBar: AppBar(
+        title: const Text('천문 이벤트'),
+        leading: widget.showHomeNavigation
+            ? IconButton(
+                tooltip: '홈으로',
+                icon: const Icon(Icons.home_outlined),
+                onPressed: () {
+                  final navigation = context.read<AppNavigationNotifier>();
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                  navigation.navigateTo(0);
+                },
+              )
+            : null,
+      ),
       body: _AllEventsBody(viewModel: viewModel),
     );
   }

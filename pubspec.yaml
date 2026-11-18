@@ -161,6 +161,7 @@ flutter:
     - assets/database/bortle.db
     - assets/database/catalog_seed.db
     - assets/icon/app_icon.png
+    - assets/ui/backgrounds/home_hero_milkyway.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

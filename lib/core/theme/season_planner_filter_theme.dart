@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import 'app_colors.dart';
+import 'pc_design.dart';
 
 /// 계절별 촬영대상 필터 칩 — 선택 여부가 한눈에 보이도록 통일 색상.
 class SeasonPlannerFilterTheme {
@@ -13,7 +14,14 @@ class SeasonPlannerFilterTheme {
   static const Color unselectedBackground = Color(0xFF1E293B);
   static const Color unselectedBorder = Color(0xFF475569);
 
-  static ChipColors colorsFor({required bool selected}) {
+  static ChipColors colorsFor({required bool selected, bool pc = false}) {
+    if (pc) {
+      return ChipColors(
+        background: PcDesign.filterBackground(selected),
+        border: PcDesign.filterBorder(selected),
+        label: PcDesign.filterLabel(selected),
+      );
+    }
     if (!selected) {
       return const ChipColors(
         background: unselectedBackground,

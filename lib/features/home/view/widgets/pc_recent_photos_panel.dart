@@ -1,0 +1,176 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../../core/navigation/app_navigation_notifier.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_file_image.dart';
+import '../../../../shared/widgets/observatory_ui.dart';
+import '../../../../shared/widgets/pc_scroll_edge_buttons.dart';
+import '../../../gallery/view/gallery_detail_screen.dart';
+import '../../../gallery/viewmodel/gallery_view_model.dart';
+import 'pc_home_colors.dart';
+
+class PcRecentPhotosPanel extends StatefulWidget {
+  const PcRecentPhotosPanel({super.key});
+
+  @override
+  State<PcRecentPhotosPanel> createState() => _PcRecentPhotosPanelState();
+}
+
+class _PcRecentPhotosPanelState extends State<PcRecentPhotosPanel> {
+  GalleryViewModel? _gallery;
+  final ScrollController _photosScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _photosScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final gallery = context.read<GalleryViewModel>();
+    if (identical(_gallery, gallery)) return;
+    _gallery = gallery;
+    if (!gallery.hasLoaded && !gallery.isLoading) {
+      scheduleMicrotask(() => unawaited(gallery.load()));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gallery = context.watch<GalleryViewModel>();
+    final photos = gallery.recentPhotoRecords;
+    return ObservatoryPanel(
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      backgroundColor: PcHomeColors.panel,
+      borderColor: PcHomeColors.border,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ObservatorySectionHeader(
+            title: '최근 촬영한 사진',
+            icon: Icons.photo_camera_outlined,
+            iconColor: PcHomeColors.muted,
+            titleColor: PcHomeColors.text,
+            trailing: TextButton(
+              onPressed: () => context.read<AppNavigationNotifier>().navigateTo(2),
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('전체 갤러리 →'),
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          if (gallery.isLoading && !gallery.hasLoaded)
+            const ObservatoryStateView(message: '사진을 불러오는 중입니다.', loading: true)
+          else if (gallery.errorMessage != null && !gallery.hasLoaded)
+            ObservatoryStateView(
+              message: '사진을 불러오지 못했습니다.',
+              action: ObservatoryButton(
+                label: '다시 시도',
+                onPressed: () => unawaited(gallery.load()),
+                backgroundColor: PcHomeColors.card,
+                borderColor: PcHomeColors.border,
+                foregroundColor: PcHomeColors.text,
+              ),
+            )
+          else if (photos.isEmpty)
+            const ObservatoryStateView(message: '아직 등록된 사진이 없습니다.')
+          else
+            Expanded(child: LayoutBuilder(
+              builder: (context, constraints) {
+                final count = constraints.maxWidth < 500
+                    ? 2
+                    : constraints.maxWidth < 580
+                        ? 3
+                        : 4;
+                final cellWidth = (constraints.maxWidth -
+                    AppTheme.spacingSm * (count - 1)) / count;
+                final thumbnailWidth = cellWidth < 136 ? cellWidth : 136.0;
+                return PcScrollBoundary(
+                  child: Scrollbar(
+                    controller: _photosScrollController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _photosScrollController,
+                      physics: const ClampingScrollPhysics(),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: AppTheme.spacingSm,
+                        runSpacing: AppTheme.spacingSm,
+                        children: [
+                    for (final record in photos.take(4))
+                      SizedBox(
+                        width: thumbnailWidth,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(9),
+                          onTap: () => unawaited(GalleryDetailScreen.open(
+                            context,
+                            records: photos,
+                            record: record,
+                          )),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AspectRatio(
+                                aspectRatio: 1.24,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(9),
+                                  child: AppFileImage(
+                                    path: record.photoUri!,
+                                    fit: BoxFit.cover,
+                                    memCacheWidth: 360,
+                                    memCacheHeight: 292,
+                                    filterQuality: FilterQuality.low,
+                                    errorBuilder: (_, _, _) => const ColoredBox(
+                                      color: PcHomeColors.card,
+                                      child: Icon(Icons.broken_image_outlined,
+                                          color: PcHomeColors.muted),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                gallery.catalogObjectFor(record.celestialObjectId)
+                                        ?.displayName ??
+                                    record.celestialObjectId,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 14,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                _photoDate(record.capturedAt),
+                                style: const TextStyle(fontSize: 12,
+                                    color: PcHomeColors.muted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            )),
+        ],
+      ),
+    );
+  }
+}
+
+String _photoDate(DateTime capturedAt) {
+  final date = capturedAt.toLocal();
+  return '${date.year}.${date.month.toString().padLeft(2, '0')}.'
+      '${date.day.toString().padLeft(2, '0')}';
+}

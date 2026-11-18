@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../services/gallery_incremental_refresh_service.dart';
 import '../../../services/tc_backend_connection_manager.dart';
 
@@ -8,6 +9,7 @@ import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/gallery_object_category.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/pc_design.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../shared/widgets/app_file_image.dart';
@@ -31,7 +33,9 @@ int _gridCrossAxisCount(double width) {
 }
 
 class GalleryScreen extends StatefulWidget {
-  const GalleryScreen({super.key});
+  const GalleryScreen({super.key, this.showHomeNavigation = false});
+
+  final bool showHomeNavigation;
 
   @override
   State<GalleryScreen> createState() => _GalleryScreenState();
@@ -106,8 +110,21 @@ class _GalleryScreenState extends State<GalleryScreen> {
       builder: (context, state, _) {
         final viewModel = context.read<GalleryViewModel>();
 
+        final pc = widget.showHomeNavigation;
         return Scaffold(
+          backgroundColor: pc ? PcDesign.background : null,
           appBar: AppBar(
+            backgroundColor: pc ? PcDesign.background : null,
+            foregroundColor: pc ? PcDesign.muted : null,
+            leading: widget.showHomeNavigation
+                ? IconButton(
+                    tooltip: '홈으로',
+                    icon: const Icon(Icons.home_outlined),
+                    onPressed: () => context
+                        .read<AppNavigationNotifier>()
+                        .navigateTo(0),
+                  )
+                : null,
             title: _isSearching
                 ? TextField(
                     controller: _searchController,
@@ -157,7 +174,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   state.hasActiveFilters
                       ? Icons.filter_alt
                       : Icons.filter_alt_outlined,
-                  color: state.hasActiveFilters ? AppColors.ic : null,
+                  color: state.hasActiveFilters
+                      ? (pc ? PcDesign.accent : AppColors.ic) : null,
                 ),
                 tooltip: '필터',
                 onPressed: () => _showFilterSheet(context, viewModel),
@@ -188,7 +206,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
               IconButton(
                 icon: Icon(
                   state.favoritesOnly ? Icons.star : Icons.star_border,
-                  color: state.favoritesOnly ? Colors.amber : null,
+                  color: state.favoritesOnly
+                      ? (pc ? PcDesign.accent : Colors.amber) : null,
                 ),
                 tooltip: state.favoritesOnly ? '전체 보기' : '즐겨찾기만',
                 onPressed: viewModel.toggleFavoritesOnly,
@@ -220,6 +239,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
                             0,
                           ),
                           child: FullWidthSegmentedButton<GalleryViewMode>(
+                            style: pc ? ButtonStyle(
+                              foregroundColor: WidgetStateProperty.resolveWith(
+                                (states) => states.contains(WidgetState.selected)
+                                    ? PcDesign.text : PcDesign.muted,
+                              ),
+                              backgroundColor: WidgetStateProperty.resolveWith(
+                                (states) => states.contains(WidgetState.selected)
+                                    ? PcDesign.raised : PcDesign.card,
+                              ),
+                              side: const WidgetStatePropertyAll(
+                                BorderSide(color: PcDesign.border),
+                              ),
+                            ) : null,
                             segments: const [
                               ButtonSegment(
                                 value: GalleryViewMode.byObject,
@@ -238,7 +270,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                             },
                           ),
                         ),
-                        _CategoryFilterBar(viewModel: viewModel),
+                        _CategoryFilterBar(viewModel: viewModel, pc: pc),
                         if (state.hasActiveFilters)
                           _ActiveFilterSummary(viewModel: viewModel),
                         if (state.hasActiveFilters && state.filtered.isEmpty)
@@ -264,7 +296,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                             ),
                           )
                         else
-                          Expanded(child: _GalleryBody(viewModel: viewModel)),
+                          Expanded(child: _GalleryBody(viewModel: viewModel, pc: pc)),
                       ],
                     ),
         );
@@ -660,9 +692,10 @@ class _ActiveFilterSummary extends StatelessWidget {
 }
 
 class _CategoryFilterBar extends StatelessWidget {
-  const _CategoryFilterBar({required this.viewModel});
+  const _CategoryFilterBar({required this.viewModel, required this.pc});
 
   final GalleryViewModel viewModel;
+  final bool pc;
 
   @override
   Widget build(BuildContext context) {
@@ -686,8 +719,13 @@ class _CategoryFilterBar extends StatelessWidget {
             style: const TextStyle(fontSize: 10),
           ),
           selected: selected,
+          backgroundColor: pc ? PcDesign.card : null,
+          selectedColor: pc ? PcDesign.raised : null,
+          side: pc ? BorderSide(color: selected
+              ? PcDesign.accent : PcDesign.border) : null,
           onSelected: (_) => viewModel.setCategoryFilter(category),
           labelStyle: TextStyle(
+            color: pc ? (selected ? PcDesign.text : PcDesign.muted) : null,
             fontSize: 12,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
           ),
@@ -698,9 +736,10 @@ class _CategoryFilterBar extends StatelessWidget {
 }
 
 class _GalleryBody extends StatelessWidget {
-  const _GalleryBody({required this.viewModel});
+  const _GalleryBody({required this.viewModel, required this.pc});
 
   final GalleryViewModel viewModel;
+  final bool pc;
 
   @override
   Widget build(BuildContext context) {
@@ -714,7 +753,7 @@ class _GalleryBody extends StatelessWidget {
           ),
         );
       }
-      return _DateGroupedView(viewModel: viewModel);
+      return _DateGroupedView(viewModel: viewModel, pc: pc);
     }
 
     if (viewModel.targetGroups.isEmpty) {
@@ -726,16 +765,17 @@ class _GalleryBody extends StatelessWidget {
         ),
       );
     }
-    return _ObjectGridView(viewModel: viewModel);
+    return _ObjectGridView(viewModel: viewModel, pc: pc);
   }
 }
 
 // ─── 날짜별 리스트 뷰 ───────────────────────────────────────────────────────
 
 class _DateGroupedView extends StatelessWidget {
-  const _DateGroupedView({required this.viewModel});
+  const _DateGroupedView({required this.viewModel, required this.pc});
 
   final GalleryViewModel viewModel;
+  final bool pc;
 
   String _formatDate(DateTime dt) {
     const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
@@ -792,6 +832,7 @@ class _DateGroupedView extends StatelessWidget {
             ...group.records.map(
               (record) => _DateGroupRecordRow(
                 record: record,
+                pc: pc,
                 catalogObject: viewModel.catalogObjectFor(
                   record.celestialObjectId,
                 ),
@@ -817,18 +858,20 @@ class _DateGroupedView extends StatelessWidget {
 class _DateGroupRecordRow extends StatelessWidget {
   const _DateGroupRecordRow({
     required this.record,
+    required this.pc,
     required this.catalogObject,
     required this.onTap,
   });
 
   final ShootingRecord record;
+  final bool pc;
   final CatalogObject? catalogObject;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _catalogColor(catalogObject?.catalog);
+    final color = pc ? PcDesign.text : _catalogColor(catalogObject?.catalog);
     final photoUri = record.galleryThumbnailUri;
 
     return Material(
@@ -907,9 +950,11 @@ class _DateGroupRecordRow extends StatelessWidget {
                 ),
               ),
               if (record.isFavorite)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.star, color: Colors.amber, size: 18),
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(Icons.star,
+                      color: pc ? PcDesign.accent : Colors.amber,
+                      size: 18),
                 ),
               const Icon(
                 Icons.chevron_right,
@@ -976,9 +1021,10 @@ class _ListThumbPlaceholder extends StatelessWidget {
 // ─── 대상별 그리드 뷰 ──────────────────────────────────────────────────────
 
 class _ObjectGridView extends StatelessWidget {
-  const _ObjectGridView({required this.viewModel});
+  const _ObjectGridView({required this.viewModel, required this.pc});
 
   final GalleryViewModel viewModel;
+  final bool pc;
 
   @override
   Widget build(BuildContext context) {
@@ -1013,6 +1059,7 @@ class _ObjectGridView extends StatelessWidget {
             final group = groups[index];
             return _GalleryGroupCard(
               group: group,
+              pc: pc,
               thumbnailCacheSize: thumbnailCacheSize,
               onTap: () {
                 if (group.records.isEmpty) return;
@@ -1034,21 +1081,28 @@ class _ObjectGridView extends StatelessWidget {
 class _GalleryGroupCard extends StatelessWidget {
   const _GalleryGroupCard({
     required this.group,
+    required this.pc,
     required this.thumbnailCacheSize,
     required this.onTap,
   });
 
   final TargetGroup group;
+  final bool pc;
   final int thumbnailCacheSize;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _catalogColor(group.object.catalog);
+    final color = pc ? PcDesign.text : _catalogColor(group.object.catalog);
     final photoUri = group.representativeRecord.galleryThumbnailUri;
 
     return Card(
+      color: pc ? PcDesign.card : null,
+      shape: pc ? RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: const BorderSide(color: PcDesign.border),
+      ) : null,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -1075,13 +1129,15 @@ class _GalleryGroupCard extends StatelessWidget {
                     Positioned(
                       top: 8,
                       right: 8,
-                      child: _CountBadge(count: group.photoCount),
+                      child: _CountBadge(count: group.photoCount, pc: pc),
                     ),
                   if (group.representativeRecord.isFavorite)
-                    const Positioned(
+                    Positioned(
                       top: 8,
                       left: 8,
-                      child: Icon(Icons.star, color: Colors.amber, size: 20),
+                      child: Icon(Icons.star,
+                          color: pc ? PcDesign.accent : Colors.amber,
+                          size: 20),
                     ),
                 ],
               ),
@@ -1104,7 +1160,7 @@ class _GalleryGroupCard extends StatelessWidget {
                   Text(
                     group.object.displayCommonName,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: pc ? PcDesign.muted : AppColors.textSecondary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1112,8 +1168,8 @@ class _GalleryGroupCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${group.photoCount}장',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: pc ? PcDesign.muted : AppColors.textSecondary,
                       fontSize: 11,
                     ),
                   ),
@@ -1128,22 +1184,23 @@ class _GalleryGroupCard extends StatelessWidget {
 }
 
 class _CountBadge extends StatelessWidget {
-  const _CountBadge({required this.count});
+  const _CountBadge({required this.count, required this.pc});
 
   final int count;
+  final bool pc;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.65),
+        color: pc ? PcDesign.secondary : Colors.black.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         '$count',
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: pc ? PcDesign.background : Colors.white,
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),

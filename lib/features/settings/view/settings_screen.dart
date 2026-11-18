@@ -17,7 +17,9 @@ import 'observation_site_list_screen.dart';
 import 'recommendation_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.pcSections = false});
+
+  final bool pcSections;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -32,6 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<SettingsViewModel>();
+
+    if (widget.pcSections) return _buildPcSections(viewModel);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -69,6 +73,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+
+  Widget _buildPcSections(SettingsViewModel viewModel) {
+    return DefaultTabController(
+      length: 6,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('설정'),
+          backgroundColor: AppColors.background,
+          foregroundColor: AppColors.textPrimary,
+          bottom: const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: '추천 필터'),
+              Tab(text: '관측지 관리'),
+              Tab(text: '장비 관리'),
+              Tab(text: '서비스 연결'),
+              Tab(text: '백업 / 가져오기'),
+              Tab(text: '초기화'),
+            ],
+          ),
+        ),
+        body: Column(children: [
+          if (viewModel.isLoading)
+            const LinearProgressIndicator(minHeight: 2),
+          Expanded(child: TabBarView(children: [
+            _pcSection(
+              const _SectionHeader(title: '추천 필터', icon: Icons.stars_outlined),
+              _RecommendationSection(),
+            ),
+            _pcSection(
+              const _SectionHeader(title: '관측지 관리', icon: Icons.location_on_outlined),
+              _ObservationSiteSection(),
+            ),
+            _pcSection(
+              const _SectionHeader(title: '장비 관리', icon: Icons.camera_alt_outlined),
+              _EquipmentSection(),
+            ),
+            _pcSection(
+              const _SectionHeader(title: '서비스 연결', icon: Icons.cloud_outlined),
+              const TcBackendSettingsSection(),
+            ),
+            _pcSection(
+              const _SectionHeader(title: '백업 / 가져오기', icon: Icons.backup_outlined),
+              _BackupSection(),
+            ),
+            _pcSection(
+              const _SectionHeader(title: '초기화', icon: Icons.delete_sweep_outlined),
+              const AstroJournalResetSection(),
+            ),
+          ])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _pcSection(Widget header, Widget body) => ListView(
+    padding: const EdgeInsets.all(16),
+    children: [header, body],
+  );
 }
 
 // ──────────────────────────────────────────────

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/pc_design.dart';
+
 /// 화면 너비에 맞춰 필터 칩을 행 단위로 균등 분할 배치한다.
 class ResponsiveFilterChipGrid extends StatelessWidget {
   const ResponsiveFilterChipGrid({
@@ -124,13 +126,19 @@ class ExpandedFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pc = PcDesign.isActive(context);
+    final effectiveLabelStyle = pc
+        ? (labelStyle ?? const TextStyle()).copyWith(
+            color: labelStyle?.color ?? PcDesign.filterLabel(selected),
+          )
+        : labelStyle;
     return SizedBox(
       width: double.infinity,
       child: FilterChip(
         label: SizedBox(
           width: double.infinity,
           child: DefaultTextStyle.merge(
-            style: labelStyle ?? const TextStyle(),
+            style: effectiveLabelStyle ?? const TextStyle(),
             textAlign: TextAlign.center,
             child: label,
           ),
@@ -139,10 +147,10 @@ class ExpandedFilterChip extends StatelessWidget {
         showCheckmark: showCheckmark,
         visualDensity: visualDensity,
         onSelected: onSelected,
-        labelStyle: labelStyle,
-        backgroundColor: backgroundColor,
-        selectedColor: selectedColor,
-        side: side,
+        labelStyle: effectiveLabelStyle,
+        backgroundColor: backgroundColor ?? (pc ? PcDesign.card : null),
+        selectedColor: selectedColor ?? (pc ? PcDesign.raised : null),
+        side: side ?? (pc ? BorderSide(color: PcDesign.filterBorder(selected)) : null),
         avatar: avatar,
         pressElevation: pressElevation,
         elevation: elevation,
