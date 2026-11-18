@@ -6,6 +6,7 @@ import '../../../core/formatters/catalog_object_display_formatter.dart';
 import '../../../core/services/performance_probe.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/pc_design.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
@@ -20,6 +21,8 @@ import '../../../services/observation_score_service.dart';
 import '../../../shared/widgets/catalog_equipment_chips_row.dart';
 import '../../../shared/widgets/catalog_object_image.dart';
 import '../../../shared/widgets/equipment_recommendation_section.dart';
+import '../../../shared/widgets/mobile_content_layout.dart';
+import '../../../shared/widgets/observatory_ui.dart';
 import '../../../shared/widgets/pc_observatory_dialog.dart';
 import '../../../shared/widgets/sky_map_location_button.dart';
 import '../view/widgets/shooting_plan_action_button.dart';
@@ -41,7 +44,7 @@ Future<void> showHomeObservationDetail(
 ) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
-  backgroundColor: AppColors.surface,
+  backgroundColor: _homeSheetColor(context),
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
   ),
@@ -54,7 +57,7 @@ Future<void> showHomeRecommendationDetail(
 ) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
-  backgroundColor: AppColors.surface,
+  backgroundColor: _homeSheetColor(context),
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
   ),
@@ -67,7 +70,7 @@ Future<void> showHomeShootingOrderEditor(
 ) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
-  backgroundColor: AppColors.surface,
+  backgroundColor: _homeSheetColor(context),
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
   ),
@@ -80,7 +83,7 @@ Future<void> showHomeAllRecommendations(
 ) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
-  backgroundColor: AppColors.surface,
+  backgroundColor: _homeSheetColor(context),
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
   ),
@@ -89,6 +92,9 @@ Future<void> showHomeAllRecommendations(
     month: DateTime.now().month,
   ),
 );
+
+Color _homeSheetColor(BuildContext context) =>
+    PcDesign.isMobileContent(context) ? PcDesign.card : AppColors.surface;
 
 Future<void> showPcHomeRecommendationDetail(
   BuildContext context,
@@ -258,7 +264,9 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => MobileContentTheme(builder: _buildHome);
+
+  Widget _buildHome(BuildContext context) {
     PerformanceProbe.event('widget.home_screen.build');
     return Selector<HomeViewModel, ({bool loading, String? error})>(
       selector: (_, vm) => (loading: vm.isLoading, error: vm.errorMessage),
@@ -445,6 +453,7 @@ class _HomeBodyState extends State<_HomeBody> {
                   onSaveCurrentLocation: _saveCurrentLocation,
                   onEquipmentChanged: viewModel.setEquipment,
                   onTrackingChanged: viewModel.setTrackingMode,
+                  accentColor: PcDesign.accent,
                   activeWeather: condition.weather,
                   isWeatherLoading: viewModel.isWeatherLoading,
                   currentLocationBortle: viewModel.lastSessionContext?.bortle,
@@ -460,41 +469,32 @@ class _HomeBodyState extends State<_HomeBody> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '오늘 밤 추천',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        Text(
-                          _seasonText(now.month),
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 11,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '오늘 밤 추천',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: PcDesign.text,
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
-                        ),
-                      ],
+                          Text(
+                            _seasonText(now.month),
+                            style: const TextStyle(
+                              color: PcDesign.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     if (viewModel.allRecommendedObjects.isNotEmpty)
                       TextButton(
                         onPressed: () => _showAllRecommended(context),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: const Text(
-                          '더보기',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                        child: const Text('더보기'),
                       ),
                   ],
                 ),
@@ -576,20 +576,38 @@ class _HomeBodyState extends State<_HomeBody> {
             ),
             child: _FuturePlanningSection(month: now.month),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(
-              AppTheme.spacingLg,
-              0,
-              AppTheme.spacingLg,
-              AppTheme.spacingLg,
+          if (context.read<AstronomyEventsViewModel?>() != null)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppTheme.spacingLg,
+                0,
+                AppTheme.spacingLg,
+                AppTheme.spacingLg,
+              ),
+              child: _MobileHomePanel(child: AstronomyEventsSection()),
             ),
-            child: AstronomyEventsSection(),
-          ),
         ],
       ),
     );
   }
 }
+
+class _MobileHomePanel extends StatelessWidget {
+  const _MobileHomePanel({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ObservatoryPanel(
+    padding: const EdgeInsets.all(AppTheme.spacingMd),
+    backgroundColor: PcDesign.card,
+    borderColor: PcDesign.border,
+    child: child,
+  );
+}
+
+bool _fitsHomeColumns(BuildContext context, double width) =>
+    width >= 560 * (MediaQuery.textScalerOf(context).scale(14) / 14);
 
 class HomeScheduleComputationStatus extends StatelessWidget {
   const HomeScheduleComputationStatus({super.key, required this.state});
@@ -598,21 +616,22 @@ class HomeScheduleComputationStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     final (icon, label, color) = switch (state) {
       ScheduleComputationState.current => (
         Icons.check_circle_outline,
         '오늘 밤 촬영 스케줄 · 현재 조건 기준',
-        AppColors.ic,
+        mobile ? PcDesign.secondary : AppColors.ic,
       ),
       ScheduleComputationState.recalculating => (
         Icons.sync,
         '오늘 밤 촬영 스케줄 · 촬영 스케줄 계산 중…',
-        AppColors.messier,
+        mobile ? PcDesign.accent : AppColors.messier,
       ),
       ScheduleComputationState.failed => (
         Icons.error_outline,
         '오늘 밤 촬영 스케줄 · 계산 실패',
-        Colors.redAccent,
+        mobile ? Theme.of(context).colorScheme.error : Colors.redAccent,
       ),
     };
     return Semantics(
@@ -652,6 +671,7 @@ class HomeRecommendationRefreshNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final recalculating = state == RecommendationComputationState.recalculating;
+    final mobile = PcDesign.isMobileContent(context);
     return Container(
       key: Key(
         recalculating
@@ -661,11 +681,14 @@ class HomeRecommendationRefreshNotice extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(AppTheme.spacingMd),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: mobile ? PcDesign.card : AppColors.surface,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         border: Border.all(
-          color: (recalculating ? AppColors.messier : Colors.redAccent)
-              .withValues(alpha: 0.35),
+          color:
+              (recalculating
+                      ? (mobile ? PcDesign.accent : AppColors.messier)
+                      : Colors.redAccent)
+                  .withValues(alpha: 0.35),
         ),
       ),
       child: Row(
@@ -686,8 +709,8 @@ class HomeRecommendationRefreshNotice extends StatelessWidget {
               children: [
                 Text(
                   recalculating ? '재계산 중입니다…' : '추천 계산에 실패했습니다.',
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: mobile ? PcDesign.text : AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -699,8 +722,8 @@ class HomeRecommendationRefreshNotice extends StatelessWidget {
                             ? '변경된 조건을 계산하는 동안 기존 추천 결과를 표시하고 있습니다.'
                             : '변경된 조건에 맞는 추천 대상을 계산하고 있습니다.'
                       : message ?? '잠시 후 다시 시도해주세요.',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
+                  style: TextStyle(
+                    color: mobile ? PcDesign.muted : AppColors.textSecondary,
                     fontSize: 11,
                   ),
                 ),
@@ -722,55 +745,45 @@ class _FuturePlanningSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return _MobileHomePanel(
       key: const Key('home-future-planning'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '미리 계획하기',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
-            ),
+          const ObservatorySectionHeader(
+            title: '미리 계획하기',
+            icon: Icons.calendar_month_outlined,
+            titleColor: PcDesign.text,
+            iconColor: PcDesign.muted,
           ),
           const SizedBox(height: 2),
           const Text(
             '월별·계절별로 촬영 대상을 미리 살펴보세요.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            style: TextStyle(color: PcDesign.muted, fontSize: 12),
           ),
           const SizedBox(height: AppTheme.spacingSm),
-          Row(
+          Wrap(
+            spacing: AppTheme.spacingSm,
+            runSpacing: AppTheme.spacingXs,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: const Key('open-month-planner'),
-                  onPressed: () => SeasonPlannerScreen.open(
-                    context,
-                    initialViewMode: SeasonPlannerViewMode.byMonth,
-                    initialMonth: month,
-                  ),
-                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                  label: const Text('월별 촬영 대상'),
+              OutlinedButton.icon(
+                key: const Key('open-month-planner'),
+                onPressed: () => SeasonPlannerScreen.open(
+                  context,
+                  initialViewMode: SeasonPlannerViewMode.byMonth,
+                  initialMonth: month,
                 ),
+                icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                label: const Text('월별 촬영 대상'),
               ),
-              const SizedBox(width: AppTheme.spacingSm),
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: const Key('open-season-planner'),
-                  onPressed: () => SeasonPlannerScreen.open(
-                    context,
-                    initialViewMode: SeasonPlannerViewMode.bySeason,
-                  ),
-                  icon: const Icon(Icons.wb_sunny_outlined, size: 18),
-                  label: const Text('계절별 촬영 대상'),
+              OutlinedButton.icon(
+                key: const Key('open-season-planner'),
+                onPressed: () => SeasonPlannerScreen.open(
+                  context,
+                  initialViewMode: SeasonPlannerViewMode.bySeason,
                 ),
+                icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                label: const Text('계절별 촬영 대상'),
               ),
             ],
           ),
@@ -802,51 +815,31 @@ class _ObservationIndexCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scoreCol = condition.isObservationFeasible
-        ? _scoreColor(condition.score)
-        : const Color(0xFFEF4444);
+        ? PcDesign.secondary
+        : Theme.of(context).colorScheme.error;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: AppTheme.spacingSm,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.surface, const Color(0xFF0A1628)],
-        ),
-        border: Border.all(color: scoreCol.withAlpha(100), width: 1),
-      ),
+    return _MobileHomePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '기상 참고',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
+          ObservatorySectionHeader(
+            title: '기상 참고',
+            icon: Icons.nightlight_outlined,
+            titleColor: PcDesign.text,
+            iconColor: PcDesign.muted,
+            trailing: IconButton(
+              tooltip: '관측 정보 새로고침',
+              onPressed: isWeatherLoading ? null : onRefresh,
+              icon: const Icon(Icons.refresh),
             ),
           ),
           const SizedBox(height: 4),
           Row(
             children: [
-              const Icon(
-                Icons.nightlight_outlined,
-                size: 12,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   '기상 예보는 참고 정보 · 추천 순위 미반영',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: PcDesign.muted, fontSize: 12),
                 ),
               ),
               if (isWeatherLoading)
@@ -864,7 +857,7 @@ class _ObservationIndexCard extends StatelessWidget {
                     child: const Icon(
                       Icons.offline_bolt_outlined,
                       size: 13,
-                      color: AppColors.solar,
+                      color: PcDesign.secondary,
                     ),
                   ),
                 if (condition.weatherError != null && !condition.hasWeather)
@@ -873,43 +866,27 @@ class _ObservationIndexCard extends StatelessWidget {
                     child: const Icon(
                       Icons.cloud_off_outlined,
                       size: 13,
-                      color: AppColors.textSecondary,
+                      color: PcDesign.muted,
                     ),
                   ),
-                GestureDetector(
-                  onTap: onRefresh,
-                  child: const Icon(
-                    Icons.refresh_outlined,
-                    size: 15,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
               ],
             ],
           ),
-          Row(
+          const SizedBox(height: AppTheme.spacingSm),
+          Wrap(
             key: const Key('home-observation-score'),
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppTheme.spacingMd,
+            runSpacing: AppTheme.spacingXs,
             children: [
               if (condition.isObservationFeasible) ...[
                 Text(
-                  '${condition.score}',
+                  '${condition.score} / 100',
                   style: TextStyle(
                     color: scoreCol,
-                    fontSize: 36,
+                    fontSize: 25,
                     fontWeight: FontWeight.bold,
                     height: 1,
-                  ),
-                ),
-                const SizedBox(width: 2),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '/ 100',
-                    style: TextStyle(
-                      color: scoreCol.withAlpha(160),
-                      fontSize: 12,
-                    ),
                   ),
                 ),
               ] else ...[
@@ -923,17 +900,13 @@ class _ObservationIndexCard extends StatelessWidget {
                   ),
                 ),
               ],
-              const Spacer(),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
                     '참고 지수',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 9,
-                    ),
+                    style: TextStyle(color: PcDesign.muted, fontSize: 11),
                   ),
                   if (condition.isObservationFeasible)
                     _StarsRow(count: condition.starCount),
@@ -958,13 +931,11 @@ class _ObservationIndexCard extends StatelessWidget {
             condition.commentText,
             key: const Key('home-observation-status'),
             style: const TextStyle(
-              color: AppColors.textPrimary,
+              color: PcDesign.text,
               fontSize: 12,
               fontWeight: FontWeight.w500,
               height: 1.2,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
           if (condition.observationWindow != null) ...[
             const SizedBox(height: 4),
@@ -974,64 +945,45 @@ class _ObservationIndexCard extends StatelessWidget {
                 children: [
                   const TextSpan(
                     text: '추천 ',
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: PcDesign.muted),
                   ),
                   TextSpan(
                     text: condition.observationWindow!.label,
                     style: TextStyle(
-                      color: _scoreColor(condition.windowAverageScore),
+                      color: PcDesign.secondary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const TextSpan(
                     text: ' · ',
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: PcDesign.muted),
                   ),
                   TextSpan(
                     text: '${condition.windowAverageScore}점',
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: const TextStyle(color: PcDesign.muted),
                   ),
                 ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
           const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: _MetricsRow(condition: condition, bortle: bortle),
-              ),
-              OutlinedButton.icon(
-                onPressed: onDetailTap,
-                icon: const Icon(Icons.expand_more, size: 14),
-                label: const Text('상세'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
-                  side: BorderSide(
-                    color: AppColors.textSecondary.withAlpha(80),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacingSm,
-                    vertical: 2,
-                  ),
-                  textStyle: const TextStyle(fontSize: 11),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
+          _MetricsRow(condition: condition, bortle: bortle),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: onDetailTap,
+              icon: const Icon(Icons.expand_more, size: 14),
+              label: const Text('상세'),
+            ),
           ),
           const SizedBox(height: AppTheme.spacingSm),
-          const Divider(height: 1, color: Color(0x33FFFFFF)),
+          const Divider(height: 1, color: PcDesign.border),
           const SizedBox(height: AppTheme.spacingSm),
           const Text(
             '촬영 조건',
             style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
+              color: PcDesign.muted,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1052,13 +1004,16 @@ class _StarsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = PcDesign.isMobileContent(context)
+        ? PcDesign.secondary
+        : AppColors.solar;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(
         5,
         (i) => Icon(
           i < count ? Icons.star_rounded : Icons.star_outline_rounded,
-          color: AppColors.solar,
+          color: color,
           size: 14,
         ),
       ),
@@ -1127,18 +1082,18 @@ class _MetricChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = PcDesign.isMobileContent(context)
+        ? PcDesign.muted
+        : AppColors.textSecondary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null)
-          Icon(icon, size: 12, color: AppColors.textSecondary)
+          Icon(icon, size: 12, color: color)
         else
           Text(emoji!, style: const TextStyle(fontSize: 11)),
         const SizedBox(width: 3),
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-        ),
+        Text(label, style: TextStyle(color: color, fontSize: 11)),
       ],
     );
   }
@@ -1968,13 +1923,7 @@ class _NoRecommendationWidget extends StatelessWidget {
     const title = '추천 가능한 대상이 없습니다.';
     final detailReasons = reasons;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
+    return _MobileHomePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1983,14 +1932,14 @@ class _NoRecommendationWidget extends StatelessWidget {
               const Icon(
                 Icons.search_off_outlined,
                 size: 16,
-                color: AppColors.textSecondary,
+                color: PcDesign.muted,
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   title,
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
+                    color: PcDesign.text,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -2003,7 +1952,7 @@ class _NoRecommendationWidget extends StatelessWidget {
             const Text(
               '사유',
               style: TextStyle(
-                color: AppColors.textSecondary,
+                color: PcDesign.muted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -2014,10 +1963,7 @@ class _NoRecommendationWidget extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
                   '· $r',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: PcDesign.muted, fontSize: 12),
                 ),
               ),
             ),
@@ -2057,53 +2003,54 @@ class _RecommendedObjectGrid extends StatelessWidget {
       'widget.home_recommendation.build',
       state: 'items=${items.length}',
     );
-    final rows = <Widget>[];
-    for (var i = 0; i < items.length; i += 2) {
-      rows.add(
-        Padding(
-          padding: EdgeInsets.only(
-            bottom: i + 2 < items.length ? AppTheme.spacingXs : 0,
-          ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _RecommendCompactCard(
-                    recommended: items[i],
-                    rank: i + 1,
-                    onTap: () => onTap(items[i]),
-                    isPlanned: isPlanned(items[i].object.id),
-                    isScheduled: isScheduled(items[i].object.id),
-                    equipmentChips: equipmentChipsFor(items[i].object.id),
-                    userPhotoPath: userPhotoFor(items[i].object),
-                    showPlanButton: canAddToPlan(items[i].object.id),
-                    onTogglePlan: () => onTogglePlan(items[i].object.id),
-                  ),
-                ),
-                if (i + 1 < items.length) ...[
-                  const SizedBox(width: AppTheme.spacingXs),
-                  Expanded(
-                    child: _RecommendCompactCard(
-                      recommended: items[i + 1],
-                      rank: i + 2,
-                      onTap: () => onTap(items[i + 1]),
-                      isPlanned: isPlanned(items[i + 1].object.id),
-                      isScheduled: isScheduled(items[i + 1].object.id),
-                      equipmentChips: equipmentChipsFor(items[i + 1].object.id),
-                      userPhotoPath: userPhotoFor(items[i + 1].object),
-                      showPlanButton: canAddToPlan(items[i + 1].object.id),
-                      onTogglePlan: () => onTogglePlan(items[i + 1].object.id),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+    Widget card(int index) {
+      final item = items[index];
+      final id = item.object.id;
+      return _RecommendCompactCard(
+        recommended: item,
+        rank: index + 1,
+        onTap: () => onTap(item),
+        isPlanned: isPlanned(id),
+        isScheduled: isScheduled(id),
+        equipmentChips: equipmentChipsFor(id),
+        userPhotoPath: userPhotoFor(item.object),
+        showPlanButton: canAddToPlan(id),
+        onTogglePlan: () => onTogglePlan(id),
       );
     }
-    return Column(children: rows);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = _fitsHomeColumns(context, constraints.maxWidth);
+        final columns = twoColumns ? 2 : 1;
+        return Column(
+          children: [
+            for (var i = 0; i < items.length; i += columns)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: i + columns < items.length ? AppTheme.spacingSm : 0,
+                ),
+                child: twoColumns
+                    ? IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: card(i)),
+                            const SizedBox(width: AppTheme.spacingSm),
+                            Expanded(
+                              child: i + 1 < items.length
+                                  ? card(i + 1)
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ),
+                      )
+                    : card(i),
+              ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -2130,213 +2077,116 @@ class _RecommendCompactCard extends StatelessWidget {
   final bool showPlanButton;
   final VoidCallback onTogglePlan;
 
-  static const _dot = TextSpan(
-    text: ' · ',
-    style: TextStyle(color: AppColors.textSecondary, fontSize: 9),
-  );
-
   @override
   Widget build(BuildContext context) {
-    final color = recommended.object.catalog.accentColor;
-    final captured = recommended.object.captured;
-    final w = recommended.observationWindow;
+    final object = recommended.object;
+    final window = recommended.observationWindow;
     final assessment = recommended.imagingAssessment;
+    final subtitle = CatalogObjectDisplayFormatter.subtitleText(object);
+    final time =
+        window?.feasibleWindowSummary ??
+        (window?.optimalStartTime != null && window?.optimalEndTime != null
+            ? '${_formatTime(window!.optimalStartTime!)}~${_formatTime(window.optimalEndTime!)}'
+            : window?.recommendStartTime != null &&
+                  window?.observationEndTime != null
+            ? '${_formatTime(window!.recommendStartTime!)}~${_formatTime(window.observationEndTime!)}'
+            : null);
+    final metrics = [
+      ?time,
+      if (window?.feasibleWindowSummary == null && window?.peakAltitude != null)
+        '최고고도 ${window!.peakAltitude!.round()}°',
+      if (window != null) '달거리 ${recommended.moonSeparation.round()}°',
+    ];
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [color.withAlpha(56), color.withAlpha(16)],
-        ),
-        border: Border.all(color: color.withAlpha(90), width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingSm,
-        vertical: 6,
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.only(right: showPlanButton ? 72 : 44),
-            child: GestureDetector(
-              onTap: onTap,
-              behavior: HitTestBehavior.opaque,
-              child: Column(
+          InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(AppTheme.spacingMd),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        '#$rank',
-                        style: TextStyle(
-                          color: color.withAlpha(160),
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          CatalogObjectDisplayFormatter.catalogTitle(
-                            recommended.object,
-                          ),
-                          style: TextStyle(
-                            color: color,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            height: 1.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+                  CatalogObjectImage(
+                    object: object,
+                    userPhotoPath: userPhotoPath,
+                    width: 54,
+                    height: 54,
+                    borderRadius: BorderRadius.circular(8),
+                    backgroundColor: PcDesign.background,
                   ),
-                  if (CatalogObjectDisplayFormatter.subtitleText(
-                    recommended.object,
-                  ).isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      CatalogObjectDisplayFormatter.subtitleText(
-                        recommended.object,
-                      ),
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 10,
-                        height: 1.2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (!equipmentChips.isEmpty) ...[
-                    const SizedBox(height: 3),
-                    CatalogEquipmentChipsRow(chips: equipmentChips),
-                  ],
-                  if (assessment != null) ...[
-                    const SizedBox(height: 3),
-                    RecommendationImagingStatusChips(assessment: assessment),
-                  ],
-                  const SizedBox(height: 2),
-                  if (w != null)
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          if (w.feasibleWindowSummary != null)
-                            TextSpan(
-                              text: w.feasibleWindowSummary!,
-                              style: TextStyle(
-                                color: color.withAlpha(220),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            )
-                          else if (w.optimalStartTime != null &&
-                              w.optimalEndTime != null)
-                            TextSpan(
-                              text:
-                                  '${_formatTime(w.optimalStartTime!)}~${_formatTime(w.optimalEndTime!)}',
-                              style: TextStyle(
-                                color: color.withAlpha(200),
-                                fontSize: 9,
-                              ),
-                            )
-                          else if (w.recommendStartTime != null &&
-                              w.observationEndTime != null)
-                            TextSpan(
-                              text:
-                                  '${_formatTime(w.recommendStartTime!)}~${_formatTime(w.observationEndTime!)}',
-                              style: TextStyle(
-                                color: color.withAlpha(200),
-                                fontSize: 9,
-                              ),
+                  const SizedBox(width: AppTheme.spacingMd),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '#$rank · ${CatalogObjectDisplayFormatter.catalogTitle(object)}',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        if (subtitle.isNotEmpty)
+                          Text(
+                            subtitle,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: PcDesign.muted),
+                          ),
+                        const SizedBox(height: AppTheme.spacingXs),
+                        Wrap(
+                          spacing: AppTheme.spacingSm,
+                          runSpacing: AppTheme.spacingXs,
+                          children: [
+                            ObservatoryStatusBadge(
+                              label: object.captured ? '촬영' : '미촬영',
+                              color: object.captured
+                                  ? PcDesign.captured
+                                  : PcDesign.muted,
                             ),
-                          if (w.feasibleWindowSummary == null &&
-                              w.peakAltitude != null) ...[
-                            _dot,
-                            TextSpan(
-                              text: '최고고도 ${w.peakAltitude!.round()}°',
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 9,
+                            if (assessment != null)
+                              RecommendationImagingStatusChips(
+                                assessment: assessment,
                               ),
-                            ),
                           ],
-                          _dot,
-                          TextSpan(
-                            text: '달거리 ${recommended.moonSeparation.round()}°',
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 9,
-                            ),
+                        ),
+                        if (!equipmentChips.isEmpty) ...[
+                          const SizedBox(height: AppTheme.spacingXs),
+                          CatalogEquipmentChipsRow(chips: equipmentChips),
+                        ],
+                        if (metrics.isNotEmpty) ...[
+                          const SizedBox(height: AppTheme.spacingXs),
+                          Text(
+                            metrics.join(' · '),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: PcDesign.secondary),
                           ),
                         ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      ],
                     ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: Opacity(
-              opacity: 0.72,
-              child: CatalogObjectImage(
-                object: recommended.object,
-                userPhotoPath: userPhotoPath,
-                width: 38,
-                height: 38,
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      captured
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked,
-                      size: 10,
-                      color: captured ? color : AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      captured ? '촬영' : '미촬영',
-                      style: TextStyle(
-                        color: captured ? color : AppColors.textSecondary,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                if (showPlanButton) ...[
-                  const SizedBox(height: 3),
-                  ShootingPlanActionButton(
-                    isPlanned: isPlanned,
-                    isScheduled: isScheduled,
-                    onToggle: onTogglePlan,
-                    compact: true,
                   ),
                 ],
-              ],
+              ),
             ),
           ),
+          if (showPlanButton)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppTheme.spacingMd,
+                0,
+                AppTheme.spacingMd,
+                AppTheme.spacingSm,
+              ),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: ShootingPlanActionButton(
+                  isPlanned: isPlanned,
+                  isScheduled: isScheduled,
+                  onToggle: onTogglePlan,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -2350,6 +2200,7 @@ class RecommendationImagingStatusChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     return Wrap(
       spacing: 4,
       runSpacing: 3,
@@ -2359,14 +2210,14 @@ class RecommendationImagingStatusChips extends StatelessWidget {
           key: Key('recommendation-filter-${assessment.filterMode.name}'),
           label: '필터 ${assessment.filterMode.label}',
           color: assessment.filterMode == FilterMode.on
-              ? AppColors.solar
-              : AppColors.textSecondary,
+              ? (mobile ? PcDesign.secondary : AppColors.solar)
+              : (mobile ? PcDesign.muted : AppColors.textSecondary),
         ),
         if (assessment.mosaicMode == MosaicMode.on)
-          const _RecommendationStatusChip(
+          _RecommendationStatusChip(
             key: Key('recommendation-mosaic-on'),
             label: '모자이크',
-            color: AppColors.ic,
+            color: mobile ? PcDesign.secondary : AppColors.ic,
           ),
         _RecommendationQualitySummary(
           key: const Key('recommendation-quality'),
@@ -2551,7 +2402,10 @@ class _TodayEquipmentRecommendationBlock extends StatelessWidget {
 }
 
 class _RecommendDetailSheet extends StatelessWidget {
-  const _RecommendDetailSheet({required this.recommended, this.pcDialog = false});
+  const _RecommendDetailSheet({
+    required this.recommended,
+    this.pcDialog = false,
+  });
   final RecommendationResult recommended;
   final bool pcDialog;
 
@@ -3226,27 +3080,22 @@ class _ScheduleEmptyWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: AppColors.ic.withAlpha(60)),
-      ),
-      child: Row(
+    return _MobileHomePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.timeline, color: AppColors.ic, size: 16),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          const ObservatorySectionHeader(
+            title: '오늘 밤 촬영 스케줄',
+            icon: Icons.timeline,
+            titleColor: PcDesign.text,
+            iconColor: PcDesign.muted,
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          Text(
+            message,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PcDesign.muted),
           ),
           if (onManualAdd != null)
             TextButton.icon(
@@ -3283,31 +3132,26 @@ class _ObservationSessionTimeline extends StatelessWidget {
       'widget.home_scheduler.build',
       state: 'items=${items.length}',
     );
-    final visibleItems = items;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: AppColors.ic.withAlpha(60)),
-      ),
+    return _MobileHomePanel(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          const ObservatorySectionHeader(
+            title: '오늘 밤 촬영 스케줄',
+            icon: Icons.timeline,
+            titleColor: PcDesign.text,
+            iconColor: PcDesign.muted,
+          ),
+          Wrap(
+            spacing: AppTheme.spacingSm,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Icon(Icons.timeline, color: AppColors.ic, size: 16),
-              const SizedBox(width: 6),
               Text(
-                '오늘 밤 촬영 스케줄',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
+                '${items.length}개',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: PcDesign.muted),
               ),
-              const Spacer(),
               TextButton.icon(
                 onPressed: onManualAdd,
                 icon: const Icon(Icons.add, size: 16),
@@ -3315,50 +3159,37 @@ class _ObservationSessionTimeline extends StatelessWidget {
               ),
               IconButton(
                 tooltip: '촬영 순서 편집',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 onPressed: onEdit,
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  size: 18,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${visibleItems.length}개',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 11,
-                ),
+                icon: const Icon(Icons.edit_outlined),
               ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingSm),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < visibleItems.length; i++) ...[
-                  _SessionTableCell(
-                    item: visibleItems[i],
-                    userPhotoPath: userPhotoFor(visibleItems[i].catalogObject),
-                    onTap: () => onTap(visibleItems[i].result),
-                  ),
-                  if (i < visibleItems.length - 1)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 28, left: 2, right: 2),
-                      child: Icon(
-                        Icons.arrow_forward,
-                        size: 14,
-                        color: AppColors.textSecondary,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final twoColumns = _fitsHomeColumns(
+                context,
+                constraints.maxWidth,
+              );
+              final width = twoColumns
+                  ? (constraints.maxWidth - AppTheme.spacingSm) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: AppTheme.spacingSm,
+                runSpacing: AppTheme.spacingSm,
+                children: [
+                  for (final item in items)
+                    SizedBox(
+                      width: width,
+                      child: _SessionTableCell(
+                        item: item,
+                        userPhotoPath: userPhotoFor(item.catalogObject),
+                        onTap: () => onTap(item.result),
                       ),
                     ),
                 ],
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -3379,118 +3210,96 @@ class _SessionTableCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = item.catalogObject.catalog.accentColor;
     final filterMode =
         item.result.imagingAssessment?.filterMode ??
         item.target.imagingAssessment?.filterMode;
+    final name = CatalogObjectDisplayFormatter.catalogTitle(item.catalogObject);
+    final subtitle = CatalogObjectDisplayFormatter.subtitleText(
+      item.catalogObject,
+    );
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 118,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.spacingSm,
-          vertical: AppTheme.spacingXs,
-        ),
-        decoration: BoxDecoration(
-          color: color.withAlpha(24),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withAlpha(70)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${_formatTime(item.startTime)} ~ ${_formatTime(item.endTime)}',
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
+    return Material(
+      color: PcDesign.raised,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: const BorderSide(color: PcDesign.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppTheme.spacingSm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CatalogObjectImage(
+                object: item.catalogObject,
+                userPhotoPath: userPhotoPath,
+                width: 42,
+                height: 42,
+                borderRadius: BorderRadius.circular(6),
+                backgroundColor: PcDesign.background,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            CatalogObjectImage(
-              object: item.catalogObject,
-              userPhotoPath: userPhotoPath,
-              width: 42,
-              height: 42,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              CatalogObjectDisplayFormatter.catalogTitle(item.catalogObject),
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (CatalogObjectDisplayFormatter.subtitleText(
-              item.catalogObject,
-            ).isNotEmpty)
-              Text(
-                CatalogObjectDisplayFormatter.subtitleText(item.catalogObject),
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 10,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            const SizedBox(height: 4),
-            Text(
-              item.durationLabel,
-              style: TextStyle(color: color.withAlpha(180), fontSize: 9),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (item.hasTimeOverride)
-              Text(
-                item.isManual ? '수기 등록 · 사용자 시간' : '사용자 시간',
-                style: const TextStyle(
-                  color: AppColors.solar,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            Text(
-              '★' * item.starCount,
-              style: TextStyle(color: color.withAlpha(200), fontSize: 9),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.status.label,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
+              const SizedBox(width: AppTheme.spacingMd),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: Theme.of(context).textTheme.titleSmall),
+                    if (subtitle.isNotEmpty)
+                      Text(
+                        subtitle,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: PcDesign.muted),
+                      ),
+                    const SizedBox(height: AppTheme.spacingXs),
+                    Text(
+                      '${_formatTime(item.startTime)} ~ ${_formatTime(item.endTime)} · ${item.durationLabel}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PcDesign.secondary,
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (filterMode != null) ...[
-                  const SizedBox(width: 4),
-                  _RecommendationStatusChip(
-                    key: Key(
-                      'schedule-filter-${item.catalogObject.id}-${filterMode.name}',
+                    if (item.hasTimeOverride)
+                      Text(
+                        item.isManual ? '수기 등록 · 사용자 시간' : '사용자 시간',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PcDesign.secondary,
+                        ),
+                      ),
+                    const SizedBox(height: AppTheme.spacingXs),
+                    Wrap(
+                      spacing: AppTheme.spacingSm,
+                      runSpacing: AppTheme.spacingXs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          item.status.label,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: PcDesign.muted),
+                        ),
+                        Text(
+                          '★' * item.starCount,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: PcDesign.secondary),
+                        ),
+                        if (filterMode != null)
+                          _RecommendationStatusChip(
+                            key: Key(
+                              'schedule-filter-${item.catalogObject.id}-${filterMode.name}',
+                            ),
+                            label: '필터 ${filterMode.label}',
+                            color: filterMode == FilterMode.on
+                                ? PcDesign.secondary
+                                : PcDesign.muted,
+                          ),
+                      ],
                     ),
-                    label: '필터 ${filterMode.label}',
-                    color: filterMode == FilterMode.on
-                        ? AppColors.solar
-                        : AppColors.textSecondary,
-                  ),
-                ],
-              ],
-            ),
-          ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -3762,7 +3571,10 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _ShootingOrderEditSheet extends StatefulWidget {
-  const _ShootingOrderEditSheet({required this.viewModel, this.pcDialog = false});
+  const _ShootingOrderEditSheet({
+    required this.viewModel,
+    this.pcDialog = false,
+  });
 
   final HomeViewModel viewModel;
   final bool pcDialog;
@@ -3928,22 +3740,23 @@ class _ShootingOrderEditSheetState extends State<_ShootingOrderEditSheet> {
           mainAxisSize: widget.pcDialog ? MainAxisSize.max : MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!widget.pcDialog) Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '오늘 밤 촬영 순서 편집',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+            if (!widget.pcDialog)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '오늘 밤 촬영 순서 편집',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
             if (!widget.pcDialog) const SizedBox(height: AppTheme.spacingXs),
             const Text(
               '드래그하여 순서를 바꾸거나 항목을 삭제할 수 있습니다. '

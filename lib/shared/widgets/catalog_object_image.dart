@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/catalog_type.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/pc_design.dart';
 import '../../data/models/catalog_object.dart';
 import '../../services/catalog_thumbnail_resolver.dart';
 import 'app_file_image.dart';
-
-typedef CatalogImageFallbackBuilder = Widget Function(BuildContext context);
+import 'catalog_object_symbol.dart';
 
 /// Shared presentation for a user's capture, bundled catalog thumbnail, or
 /// the existing placeholder. This widget does not persist either image path.
@@ -22,7 +19,7 @@ class CatalogObjectImage extends StatelessWidget {
     this.userPhotoFit = BoxFit.cover,
     this.assetFit = BoxFit.contain,
     this.backgroundColor = AppColors.background,
-    this.fallbackBuilder,
+    this.fillCard = false,
   });
 
   final CatalogObject object;
@@ -33,7 +30,7 @@ class CatalogObjectImage extends StatelessWidget {
   final BoxFit userPhotoFit;
   final BoxFit assetFit;
   final Color backgroundColor;
-  final CatalogImageFallbackBuilder? fallbackBuilder;
+  final bool fillCard;
 
   @override
   Widget build(BuildContext context) {
@@ -49,10 +46,10 @@ class CatalogObjectImage extends StatelessWidget {
         fit: userPhotoFit,
         filterQuality: FilterQuality.low,
         gaplessPlayback: true,
-        errorBuilder: (_, _, _) => _assetOrFallback(context),
+        errorBuilder: (_, _, _) => _assetOrFallback(),
       ),
-      CatalogThumbnailSource.asset => _assetImage(context, selection.path!),
-      CatalogThumbnailSource.fallback => _fallback(context),
+      CatalogThumbnailSource.asset => _assetImage(selection.path!),
+      CatalogThumbnailSource.fallback => _fallback(),
     };
 
     return ClipRRect(
@@ -65,32 +62,39 @@ class CatalogObjectImage extends StatelessWidget {
     );
   }
 
-  Widget _assetOrFallback(BuildContext context) {
+  Widget _assetOrFallback() {
     final asset = CatalogThumbnailResolver.thumbnailAssetFor(object);
-    return asset == null ? _fallback(context) : _assetImage(context, asset);
+    return asset == null ? _fallback() : _assetImage(asset);
   }
 
-  Widget _assetImage(BuildContext context, String path) => Image.asset(
+  Widget _assetImage(String path) => Image.asset(
     path,
     width: width,
     height: height,
     fit: assetFit,
     filterQuality: FilterQuality.low,
     gaplessPlayback: true,
-    errorBuilder: (_, _, _) => _fallback(context),
+    errorBuilder: (_, _, _) => _fallback(),
   );
 
-  Widget _fallback(BuildContext context) =>
-      fallbackBuilder?.call(context) ??
-      Center(
-        child: Icon(
-          Icons.auto_awesome_outlined,
-          color: PcDesign.isActive(context)
-              ? PcDesign.muted
-              : object.catalog.accentColor,
-          size: _fallbackIconSize,
-        ),
+  Widget _fallback() {
+    final kind = CatalogSymbolKind.forObject(object);
+    if (!fillCard) {
+      return Center(
+        child: CatalogObjectSymbol(kind: kind, size: _fallbackIconSize),
       );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = (constraints.biggest.shortestSide * .28)
+            .clamp(0.0, 52.0)
+            .toDouble();
+        return Center(
+          child: CatalogObjectSymbol(kind: kind, size: size),
+        );
+      },
+    );
+  }
 
   double get _fallbackIconSize {
     final resolvedWidth = width;

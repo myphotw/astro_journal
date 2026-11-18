@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Windows gallery palette, shared by the PC shell and its themed screens.
-/// Presence of this extension opts shared widgets into PC-only styling.
+/// The Windows palette, also used by selected mobile content screens.
+/// The mobile marker keeps shared styling separate from desktop layout.
 class PcDesign extends ThemeExtension<PcDesign> {
-  const PcDesign();
+  const PcDesign({this.mobileContent = false});
+
+  final bool mobileContent;
 
   static const background = Color(0xFF101722);
   static const card = Color(0xFF192433);
@@ -16,6 +18,12 @@ class PcDesign extends ThemeExtension<PcDesign> {
   static const captured = Color(0xFF91BDB6);
 
   static bool isActive(BuildContext context) =>
+      Theme.of(context).extension<PcDesign>()?.mobileContent == false;
+
+  static bool isMobileContent(BuildContext context) =>
+      Theme.of(context).extension<PcDesign>()?.mobileContent == true;
+
+  static bool isStyled(BuildContext context) =>
       Theme.of(context).extension<PcDesign>() != null;
 
   static Color filterBackground(bool selected) => selected ? raised : card;

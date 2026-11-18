@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/performance_probe.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/pc_design.dart';
 import '../../../data/models/observation_site.dart';
 import '../../../data/models/imaging_suitability_assessment.dart';
 import '../../../data/models/weather_data.dart';
@@ -49,6 +50,7 @@ class ActiveObservationSiteSelector extends StatelessWidget {
       animation: viewModel,
       builder: (context, _) {
         PerformanceProbe.event('widget.observation_site_selector.build');
+        final mobile = PcDesign.isMobileContent(context);
         final active = viewModel.active;
         final selectedValue = active.selectedSiteId ?? currentLocationValue;
         final choices = <_SiteChoice>[
@@ -76,10 +78,14 @@ class ActiveObservationSiteSelector extends StatelessWidget {
           height: selectorHeight ?? (compact ? 44 : null),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: AppColors.background.withValues(alpha: 0.7),
+            color: mobile
+                ? PcDesign.raised
+                : AppColors.background.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: AppColors.textSecondary.withValues(alpha: 0.22),
+              color: mobile
+                  ? PcDesign.border
+                  : AppColors.textSecondary.withValues(alpha: 0.22),
             ),
           ),
           child: DropdownButtonHideUnderline(
@@ -87,10 +93,10 @@ class ActiveObservationSiteSelector extends StatelessWidget {
               key: const Key('active-observation-site-selector'),
               value: selectedValue,
               isExpanded: true,
-              itemHeight: 76,
+              itemHeight: mobile ? null : 76,
               menuMaxHeight: 420,
               borderRadius: BorderRadius.circular(12),
-              dropdownColor: AppColors.surface,
+              dropdownColor: mobile ? PcDesign.card : AppColors.surface,
               icon: const Icon(Icons.keyboard_arrow_down_rounded),
               selectedItemBuilder: (context) => choices
                   .map(
@@ -98,7 +104,9 @@ class ActiveObservationSiteSelector extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: compact
                           ? _CompactSelectedSite(
-                              choice: choice, accentColor: accentColor)
+                              choice: choice,
+                              accentColor: accentColor,
+                            )
                           : _SelectedSite(choice: choice),
                     ),
                   )
@@ -139,10 +147,10 @@ class ActiveObservationSiteSelector extends StatelessWidget {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     '관측지',
                     style: TextStyle(
-                      color: AppColors.textSecondary,
+                      color: mobile ? PcDesign.muted : AppColors.textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -298,8 +306,10 @@ class _SelectedSite extends StatelessWidget {
         choice.name,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: AppColors.textPrimary,
+        style: TextStyle(
+          color: PcDesign.isMobileContent(context)
+              ? PcDesign.text
+              : AppColors.textPrimary,
           fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
@@ -309,7 +319,12 @@ class _SelectedSite extends StatelessWidget {
         '${choice.location} · ${choice.bortleText} · ${choice.weatherText}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+        style: TextStyle(
+          color: PcDesign.isMobileContent(context)
+              ? PcDesign.muted
+              : AppColors.textSecondary,
+          fontSize: 10,
+        ),
       ),
     ],
   );

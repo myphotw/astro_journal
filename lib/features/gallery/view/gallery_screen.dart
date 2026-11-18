@@ -15,18 +15,21 @@ import '../../../data/models/shooting_record.dart';
 import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/double_tap_date_picker.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
+import '../../../shared/widgets/mobile_content_layout.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../viewmodel/gallery_view_model.dart';
 import 'gallery_detail_screen.dart';
 
-Color _catalogColor(CatalogType? type) => type?.accentColor ?? AppColors.messier;
+Color _catalogColor(CatalogType? type) =>
+    type?.accentColor ?? AppColors.messier;
 
 int _gridCrossAxisCount(double width) {
   const minTileWidth = 152.0;
   final contentWidth = width - AppTheme.spacingLg * 2;
-  final count = ((contentWidth + AppTheme.spacingSm) /
-          (minTileWidth + AppTheme.spacingSm))
-      .floor();
+  final count =
+      ((contentWidth + AppTheme.spacingSm) /
+              (minTileWidth + AppTheme.spacingSm))
+          .floor();
   if (count < 1) return 1;
   if (count > 8) return 8;
   return count;
@@ -77,25 +80,32 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) setState(() => _isRefreshing = false);
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => widget.showHomeNavigation
+      ? _buildContent(context)
+      : MobileContentTheme(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
     return Selector<
-        GalleryViewModel,
-        ({
-          bool loading,
-          String? error,
-          List<ShootingRecord> filtered,
-          GalleryViewMode viewMode,
-          GallerySortOrder sortOrder,
-          String searchQuery,
-          GalleryObjectCategory categoryFilter,
-          bool hasActiveFilters,
-          bool favoritesOnly,
-        })>(
+      GalleryViewModel,
+      ({
+        bool loading,
+        String? error,
+        List<ShootingRecord> filtered,
+        GalleryViewMode viewMode,
+        GallerySortOrder sortOrder,
+        String searchQuery,
+        GalleryObjectCategory categoryFilter,
+        bool hasActiveFilters,
+        bool favoritesOnly,
+      })
+    >(
       selector: (_, vm) => (
         loading: vm.isLoading,
         error: vm.errorMessage,
@@ -110,40 +120,46 @@ class _GalleryScreenState extends State<GalleryScreen> {
       builder: (context, state, _) {
         final viewModel = context.read<GalleryViewModel>();
 
+        final mobile = PcDesign.isMobileContent(context);
         final pc = widget.showHomeNavigation;
+        final styled = pc || mobile;
+        final searchField = _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: TextStyle(
+                  color: mobile ? PcDesign.text : AppColors.textPrimary,
+                  fontSize: 16,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'M27, NGC 6853, Dumbbell, 오리온…',
+                  hintStyle: TextStyle(
+                    color: mobile ? PcDesign.muted : AppColors.textSecondary,
+                  ),
+                  prefixIcon: mobile ? const Icon(Icons.search) : null,
+                  border: mobile ? null : InputBorder.none,
+                ),
+                onChanged: (value) {
+                  viewModel.setSearchQuery(value);
+                  setState(() {});
+                },
+              )
+            : null;
         return Scaffold(
           backgroundColor: pc ? PcDesign.background : null,
           appBar: AppBar(
             backgroundColor: pc ? PcDesign.background : null,
             foregroundColor: pc ? PcDesign.muted : null,
+            titleSpacing: mobile ? AppTheme.spacingSm : null,
             leading: widget.showHomeNavigation
                 ? IconButton(
                     tooltip: '홈으로',
                     icon: const Icon(Icons.home_outlined),
-                    onPressed: () => context
-                        .read<AppNavigationNotifier>()
-                        .navigateTo(0),
+                    onPressed: () =>
+                        context.read<AppNavigationNotifier>().navigateTo(0),
                   )
                 : null,
-            title: _isSearching
-                ? TextField(
-                    controller: _searchController,
-                    autofocus: true,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: 'M27, NGC 6853, Dumbbell, 오리온…',
-                      hintStyle: TextStyle(color: AppColors.textSecondary),
-                      border: InputBorder.none,
-                    ),
-                    onChanged: (value) {
-                      viewModel.setSearchQuery(value);
-                      setState(() {});
-                    },
-                  )
-                : const Text('갤러리'),
+            title: (!mobile ? searchField : null) ?? const Text('갤러리'),
             actions: [
               IconButton(
                 icon: _isRefreshing
@@ -175,7 +191,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       ? Icons.filter_alt
                       : Icons.filter_alt_outlined,
                   color: state.hasActiveFilters
-                      ? (pc ? PcDesign.accent : AppColors.ic) : null,
+                      ? (styled ? PcDesign.accent : AppColors.ic)
+                      : null,
                 ),
                 tooltip: '필터',
                 onPressed: () => _showFilterSheet(context, viewModel),
@@ -207,7 +224,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 icon: Icon(
                   state.favoritesOnly ? Icons.star : Icons.star_border,
                   color: state.favoritesOnly
-                      ? (pc ? PcDesign.accent : Colors.amber) : null,
+                      ? (styled ? PcDesign.accent : Colors.amber)
+                      : null,
                 ),
                 tooltip: state.favoritesOnly ? '전체 보기' : '즐겨찾기만',
                 onPressed: viewModel.toggleFavoritesOnly,
@@ -217,90 +235,139 @@ class _GalleryScreenState extends State<GalleryScreen> {
           body: state.loading
               ? const Center(child: CircularProgressIndicator())
               : state.error != null
-                  ? Center(child: Text(state.error!))
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_isSearching)
-                          InlineCatalogSearchResults(
-                            query: _searchController.text,
-                            allObjects: viewModel.allCatalogObjects,
-                            onObjectSelected: (object) {
-                              _searchController.text = object.displayName;
-                              viewModel.setSearchQuery(object.displayName);
-                              setState(() => _isSearching = false);
-                            },
-                          ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            AppTheme.spacingLg,
-                            AppTheme.spacingSm,
-                            AppTheme.spacingLg,
-                            0,
-                          ),
-                          child: FullWidthSegmentedButton<GalleryViewMode>(
-                            style: pc ? ButtonStyle(
-                              foregroundColor: WidgetStateProperty.resolveWith(
-                                (states) => states.contains(WidgetState.selected)
-                                    ? PcDesign.text : PcDesign.muted,
-                              ),
-                              backgroundColor: WidgetStateProperty.resolveWith(
-                                (states) => states.contains(WidgetState.selected)
-                                    ? PcDesign.raised : PcDesign.card,
-                              ),
-                              side: const WidgetStatePropertyAll(
-                                BorderSide(color: PcDesign.border),
-                              ),
-                            ) : null,
-                            segments: const [
-                              ButtonSegment(
-                                value: GalleryViewMode.byObject,
-                                label: Text('천체별'),
-                                icon: Icon(Icons.grid_view_outlined, size: 16),
-                              ),
-                              ButtonSegment(
-                                value: GalleryViewMode.byDate,
-                                label: Text('날짜별'),
-                                icon: Icon(Icons.view_list_outlined, size: 16),
-                              ),
-                            ],
-                            selected: {state.viewMode},
-                            onSelectionChanged: (selection) {
-                              viewModel.setViewMode(selection.first);
-                            },
-                          ),
-                        ),
-                        _CategoryFilterBar(viewModel: viewModel, pc: pc),
-                        if (state.hasActiveFilters)
-                          _ActiveFilterSummary(viewModel: viewModel),
-                        if (state.hasActiveFilters && state.filtered.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(AppTheme.spacingLg),
-                            child: Column(
-                              children: [
-                                const Text(
-                                  '검색 결과가 없습니다.',
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    viewModel.clearFilters();
-                                    setState(() => _isSearching = false);
-                                  },
-                                  child: const Text('필터 초기화'),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          Expanded(child: _GalleryBody(viewModel: viewModel, pc: pc)),
-                      ],
-                    ),
+              ? Center(child: Text(state.error!))
+              : _buildResults(
+                  viewModel,
+                  pc: pc,
+                  mobile: mobile,
+                  searchField: mobile ? searchField : null,
+                  viewMode: state.viewMode,
+                  hasActiveFilters: state.hasActiveFilters,
+                  noResults: state.filtered.isEmpty,
+                ),
         );
       },
+    );
+  }
+
+  Widget _buildResults(
+    GalleryViewModel viewModel, {
+    required bool pc,
+    required bool mobile,
+    required Widget? searchField,
+    required GalleryViewMode viewMode,
+    required bool hasActiveFilters,
+    required bool noResults,
+  }) {
+    final header = <Widget>[
+      if (searchField != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.spacingLg,
+            AppTheme.spacingSm,
+            AppTheme.spacingLg,
+            0,
+          ),
+          child: searchField,
+        ),
+      if (_isSearching)
+        InlineCatalogSearchResults(
+          query: _searchController.text,
+          allObjects: viewModel.allCatalogObjects,
+          onObjectSelected: (object) {
+            _searchController.text = object.displayName;
+            viewModel.setSearchQuery(object.displayName);
+            setState(() => _isSearching = false);
+          },
+        ),
+      if (!mobile || !_isSearching) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.spacingLg,
+            AppTheme.spacingSm,
+            AppTheme.spacingLg,
+            0,
+          ),
+          child: FullWidthSegmentedButton<GalleryViewMode>(
+            style: pc
+                ? ButtonStyle(
+                    foregroundColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? PcDesign.text
+                          : PcDesign.muted,
+                    ),
+                    backgroundColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? PcDesign.raised
+                          : PcDesign.card,
+                    ),
+                    side: const WidgetStatePropertyAll(
+                      BorderSide(color: PcDesign.border),
+                    ),
+                  )
+                : null,
+            segments: const [
+              ButtonSegment(
+                value: GalleryViewMode.byObject,
+                label: Text('천체별'),
+                icon: Icon(Icons.grid_view_outlined, size: 16),
+              ),
+              ButtonSegment(
+                value: GalleryViewMode.byDate,
+                label: Text('날짜별'),
+                icon: Icon(Icons.view_list_outlined, size: 16),
+              ),
+            ],
+            selected: {viewMode},
+            onSelectionChanged: (selection) {
+              viewModel.setViewMode(selection.first);
+            },
+          ),
+        ),
+        _CategoryFilterBar(viewModel: viewModel, pc: pc || mobile),
+        if (hasActiveFilters) _ActiveFilterSummary(viewModel: viewModel),
+      ],
+    ];
+    final emptyAfterFiltering = hasActiveFilters && noResults;
+    final result = emptyAfterFiltering
+        ? Padding(
+            padding: const EdgeInsets.all(AppTheme.spacingLg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '검색 결과가 없습니다.',
+                  style: TextStyle(
+                    color: mobile ? PcDesign.muted : AppColors.textSecondary,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    _searchController.clear();
+                    viewModel.clearFilters();
+                    setState(() => _isSearching = false);
+                  },
+                  child: const Text('필터 초기화'),
+                ),
+              ],
+            ),
+          )
+        : _GalleryBody(viewModel: viewModel, pc: pc || mobile);
+    if (mobile) {
+      return MobileContentLayout(
+        header: header,
+        searching: _isSearching,
+        body: emptyAfterFiltering
+            ? SingleChildScrollView(primary: false, child: result)
+            : result,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...header,
+        if (emptyAfterFiltering) result else Expanded(child: result),
+      ],
     );
   }
 
@@ -308,12 +375,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
     BuildContext context,
     GalleryViewModel viewModel,
   ) async {
+    final mobile = PcDesign.isMobileContent(context);
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      isScrollControlled: false,
+      isScrollControlled: mobile,
+      useSafeArea: mobile,
       builder: (context) {
-        return _GalleryCompositeFilterSheet(viewModel: viewModel);
+        final sheet = _GalleryCompositeFilterSheet(viewModel: viewModel);
+        return mobile
+            ? SafeArea(
+                child: SingleChildScrollView(primary: false, child: sheet),
+              )
+            : sheet;
       },
     );
   }
@@ -347,9 +421,7 @@ class _GalleryCompositeFilterSheetState
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _pickDate({
-    required bool isStart,
-  }) async {
+  Future<void> _pickDate({required bool isStart}) async {
     final picked = await showDoubleTapDatePicker(
       context,
       initialDate: isStart
@@ -383,9 +455,9 @@ class _GalleryCompositeFilterSheetState
         children: [
           Text(
             '복합 필터',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: AppTheme.spacingSm),
           _GalleryFilterDateRow(
@@ -453,9 +525,12 @@ class _GalleryLocationFieldState extends State<_GalleryLocationField> {
   @override
   Widget build(BuildContext context) {
     final label = widget.selected ?? '전체';
+    final mobile = PcDesign.isMobileContent(context);
+    final muted = mobile ? PcDesign.muted : AppColors.textSecondary;
+    final foreground = mobile ? PcDesign.text : AppColors.textPrimary;
 
     return Material(
-      color: AppColors.surface,
+      color: mobile ? PcDesign.raised : AppColors.surface,
       borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -475,13 +550,13 @@ class _GalleryLocationFieldState extends State<_GalleryLocationField> {
                     height: 40,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: AppColors.textSecondary.withValues(alpha: 0.12),
+                      color: muted.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.place_outlined,
                       size: 22,
-                      color: AppColors.textPrimary,
+                      color: foreground,
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingMd),
@@ -489,20 +564,17 @@ class _GalleryLocationFieldState extends State<_GalleryLocationField> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           '장소',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
+                          style: TextStyle(fontSize: 12, color: muted),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           label,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
+                            color: foreground,
                           ),
                           softWrap: true,
                           maxLines: 3,
@@ -511,10 +583,8 @@ class _GalleryLocationFieldState extends State<_GalleryLocationField> {
                     ),
                   ),
                   Icon(
-                    _expanded
-                        ? Icons.expand_less
-                        : Icons.expand_more,
-                    color: AppColors.textSecondary,
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    color: muted,
                   ),
                 ],
               ),
@@ -539,11 +609,12 @@ class _GalleryLocationFieldState extends State<_GalleryLocationField> {
   }
 
   Widget _locationTile(String? value, String label) {
-    final selected = widget.selected == value ||
-        (value == null && widget.selected == null);
+    final mobile = PcDesign.isMobileContent(context);
+    final selected =
+        widget.selected == value || (value == null && widget.selected == null);
     return ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
+      dense: !mobile,
+      visualDensity: mobile ? VisualDensity.standard : VisualDensity.compact,
       selected: selected,
       title: Text(
         label,
@@ -574,8 +645,11 @@ class _GalleryFilterDateRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
+    final muted = mobile ? PcDesign.muted : AppColors.textSecondary;
+    final foreground = mobile ? PcDesign.text : AppColors.textPrimary;
     return Material(
-      color: AppColors.surface,
+      color: mobile ? PcDesign.raised : AppColors.surface,
       borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       child: InkWell(
         onTap: onTap,
@@ -592,44 +666,30 @@ class _GalleryFilterDateRow extends StatelessWidget {
                 height: 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppColors.textSecondary.withValues(alpha: 0.12),
+                  color: muted.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
-                  _calendarIcon,
-                  size: 22,
-                  color: AppColors.textPrimary,
-                ),
+                child: Icon(_calendarIcon, size: 22, color: foreground),
               ),
               const SizedBox(width: AppTheme.spacingMd),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+                    Text(label, style: TextStyle(fontSize: 12, color: muted)),
                     const SizedBox(height: 2),
                     Text(
                       valueText,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: foreground,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                size: 22,
-                color: AppColors.textSecondary,
-              ),
+              Icon(Icons.chevron_right, size: 22, color: muted),
             ],
           ),
         ),
@@ -678,6 +738,16 @@ class _ActiveFilterSummary extends StatelessWidget {
 
     if (chips.isEmpty) return const SizedBox.shrink();
 
+    if (PcDesign.isMobileContent(context)) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+        child: Wrap(
+          spacing: AppTheme.spacingSm,
+          runSpacing: AppTheme.spacingXs,
+          children: chips,
+        ),
+      );
+    }
     return SizedBox(
       height: 44,
       child: ListView.separated(
@@ -699,8 +769,11 @@ class _CategoryFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     return ResponsiveFilterChipGrid(
-      singleRow: true,
+      singleRow: !mobile,
+      minColumnWidth: mobile ? 70 : null,
+      maxColumns: mobile ? 4 : null,
       padding: const EdgeInsets.fromLTRB(
         AppTheme.spacingMd,
         AppTheme.spacingSm,
@@ -716,13 +789,14 @@ class _CategoryFilterBar extends StatelessWidget {
           label: Text(
             category.label,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 10),
+            style: TextStyle(fontSize: mobile ? 12 : 10),
           ),
           selected: selected,
           backgroundColor: pc ? PcDesign.card : null,
           selectedColor: pc ? PcDesign.raised : null,
-          side: pc ? BorderSide(color: selected
-              ? PcDesign.accent : PcDesign.border) : null,
+          side: pc
+              ? BorderSide(color: selected ? PcDesign.accent : PcDesign.border)
+              : null,
           onSelected: (_) => viewModel.setCategoryFilter(category),
           labelStyle: TextStyle(
             color: pc ? (selected ? PcDesign.text : PcDesign.muted) : null,
@@ -743,13 +817,16 @@ class _GalleryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final muted = PcDesign.isMobileContent(context)
+        ? PcDesign.muted
+        : AppColors.textSecondary;
     if (viewModel.viewMode == GalleryViewMode.byDate) {
       if (viewModel.filteredRecords.isEmpty) {
-        return const Center(
+        return Center(
           child: Text(
             '표시할 촬영 기록이 없습니다.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: muted),
           ),
         );
       }
@@ -757,11 +834,11 @@ class _GalleryBody extends StatelessWidget {
     }
 
     if (viewModel.targetGroups.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '표시할 촬영 기록이 없습니다.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: muted),
         ),
       );
     }
@@ -786,6 +863,9 @@ class _DateGroupedView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final groups = viewModel.recordsGroupedByDate;
+    final muted = PcDesign.isMobileContent(context)
+        ? PcDesign.muted
+        : AppColors.textSecondary;
 
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: AppTheme.spacingMd),
@@ -804,16 +884,12 @@ class _DateGroupedView extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.calendar_today_outlined,
-                    size: 14,
-                    color: AppColors.textSecondary,
-                  ),
+                  Icon(Icons.calendar_today_outlined, size: 14, color: muted),
                   const SizedBox(width: 6),
                   Text(
                     _formatDate(group.date),
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: muted,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -821,10 +897,7 @@ class _DateGroupedView extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     '${group.records.length}개',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: muted, fontSize: 12),
                   ),
                 ],
               ),
@@ -873,9 +946,20 @@ class _DateGroupRecordRow extends StatelessWidget {
     final theme = Theme.of(context);
     final color = pc ? PcDesign.text : _catalogColor(catalogObject?.catalog);
     final photoUri = record.galleryThumbnailUri;
+    final mobile = PcDesign.isMobileContent(context);
+    final muted = mobile ? PcDesign.muted : AppColors.textSecondary;
 
-    return Material(
-      color: Colors.transparent,
+    final row = Material(
+      color: mobile ? PcDesign.card : Colors.transparent,
+      shape: mobile
+          ? const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(
+                Radius.circular(AppTheme.cardRadius),
+              ),
+              side: BorderSide(color: PcDesign.border),
+            )
+          : null,
+      clipBehavior: mobile ? Clip.antiAlias : Clip.none,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -923,7 +1007,7 @@ class _DateGroupRecordRow extends StatelessWidget {
                       Text(
                         catalogObject!.displayCommonName,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
+                          color: muted,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -934,10 +1018,7 @@ class _DateGroupRecordRow extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         record.location!,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 11,
-                        ),
+                        style: TextStyle(color: muted, fontSize: 11),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -952,20 +1033,29 @@ class _DateGroupRecordRow extends StatelessWidget {
               if (record.isFavorite)
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
-                  child: Icon(Icons.star,
-                      color: pc ? PcDesign.accent : Colors.amber,
-                      size: 18),
+                  child: Icon(
+                    Icons.star,
+                    color: pc ? PcDesign.accent : Colors.amber,
+                    size: 18,
+                  ),
                 ),
-              const Icon(
-                Icons.chevron_right,
-                color: AppColors.textSecondary,
-                size: 20,
-              ),
+              Icon(Icons.chevron_right, color: muted, size: 20),
             ],
           ),
         ),
       ),
     );
+    return mobile
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.spacingLg,
+              0,
+              AppTheme.spacingLg,
+              AppTheme.spacingXs,
+            ),
+            child: row,
+          )
+        : row;
   }
 }
 
@@ -979,7 +1069,10 @@ class _AnalysisStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFailed = status == AnalysisStatus.failed;
-    final color = isFailed ? Colors.redAccent : AppColors.textSecondary;
+    final mobile = PcDesign.isMobileContent(context);
+    final color = isFailed
+        ? (mobile ? Theme.of(context).colorScheme.error : Colors.redAccent)
+        : (mobile ? PcDesign.muted : AppColors.textSecondary);
     final icon = isFailed ? Icons.error_outline : Icons.hourglass_top;
 
     return Row(
@@ -1005,12 +1098,13 @@ class _ListThumbPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     return Container(
-      color: AppColors.background,
-      child: const Center(
+      color: mobile ? PcDesign.background : AppColors.background,
+      child: Center(
         child: Icon(
           Icons.photo_outlined,
-          color: AppColors.textSecondary,
+          color: mobile ? PcDesign.muted : AppColors.textSecondary,
           size: 24,
         ),
       ),
@@ -1033,9 +1127,21 @@ class _ObjectGridView extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = _gridCrossAxisCount(constraints.maxWidth);
+        final contentWidth = constraints.maxWidth - AppTheme.spacingLg * 2;
+        final mobileDelegate = PcDesign.isMobileContent(context)
+            ? MobileContentGrid.delegate(
+                context,
+                contentWidth: contentWidth,
+                childAspectRatio: 0.85,
+                minimumCardHeight: 174,
+              )
+            : null;
+        final columns =
+            mobileDelegate?.crossAxisCount ??
+            _gridCrossAxisCount(constraints.maxWidth);
         final spacing = columns >= 6 ? 6.0 : AppTheme.spacingSm;
-        final tileWidth = (constraints.maxWidth -
+        final tileWidth =
+            (constraints.maxWidth -
                 AppTheme.spacingLg * 2 -
                 spacing * (columns - 1)) /
             columns;
@@ -1044,16 +1150,18 @@ class _ObjectGridView extends StatelessWidget {
         final thumbnailCacheSize = requestedCacheSize < 256
             ? 256
             : requestedCacheSize > 480
-                ? 480
-                : requestedCacheSize;
+            ? 480
+            : requestedCacheSize;
         return GridView.builder(
           padding: const EdgeInsets.all(AppTheme.spacingLg),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: spacing,
-            mainAxisSpacing: spacing,
-            childAspectRatio: 0.85,
-          ),
+          gridDelegate:
+              mobileDelegate ??
+              SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: spacing,
+                mainAxisSpacing: spacing,
+                childAspectRatio: 0.85,
+              ),
           itemCount: groups.length,
           itemBuilder: (context, index) {
             final group = groups[index];
@@ -1099,10 +1207,12 @@ class _GalleryGroupCard extends StatelessWidget {
 
     return Card(
       color: pc ? PcDesign.card : null,
-      shape: pc ? RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        side: const BorderSide(color: PcDesign.border),
-      ) : null,
+      shape: pc
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+              side: const BorderSide(color: PcDesign.border),
+            )
+          : null,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -1135,9 +1245,11 @@ class _GalleryGroupCard extends StatelessWidget {
                     Positioned(
                       top: 8,
                       left: 8,
-                      child: Icon(Icons.star,
-                          color: pc ? PcDesign.accent : Colors.amber,
-                          size: 20),
+                      child: Icon(
+                        Icons.star,
+                        color: pc ? PcDesign.accent : Colors.amber,
+                        size: 20,
+                      ),
                     ),
                 ],
               ),
@@ -1214,12 +1326,13 @@ class _PhotoPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     return Container(
-      color: AppColors.background,
-      child: const Center(
+      color: mobile ? PcDesign.background : AppColors.background,
+      child: Center(
         child: Icon(
           Icons.nights_stay_outlined,
-          color: AppColors.textSecondary,
+          color: mobile ? PcDesign.muted : AppColors.textSecondary,
           size: 32,
         ),
       ),

@@ -50,7 +50,7 @@ class _CompactEquipmentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pc = PcDesign.isActive(context);
+    final pc = PcDesign.isStyled(context);
     final accent = pc ? PcDesign.secondary : EquipmentChipColors.resolve(
       equipmentId: equipmentId,
       label: label,

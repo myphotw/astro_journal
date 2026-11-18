@@ -46,11 +46,19 @@ class AppTheme {
     );
   }
 
-  /// Windows design layer; mobile continues to use [dark] in this phase.
+  /// Base observatory styling for Windows.
   static final ThemeData observatoryDark = _buildObservatoryDark();
 
   /// Preserves existing Windows geometry and overrides colors only.
   static final ThemeData pcDark = _buildPcDark();
+
+  /// Used only inside the mobile catalog, gallery and planner routes.
+  /// Share PC paint and typography, but keep a separate layout signal.
+  static final ThemeData mobileContentDark = pcDark.copyWith(
+    extensions: const [PcDesign(mobileContent: true)],
+    visualDensity: VisualDensity.standard,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
+  );
 
   static ThemeData _buildPcDark() {
     final base = observatoryDark;
@@ -134,13 +142,17 @@ class AppTheme {
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.disabled)) return null;
-            return PcDesign.filterBackground(states.contains(WidgetState.selected));
+            return PcDesign.filterBackground(
+              states.contains(WidgetState.selected),
+            );
           }),
           foregroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.disabled)) return null;
             return PcDesign.filterLabel(states.contains(WidgetState.selected));
           }),
-          side: const WidgetStatePropertyAll(BorderSide(color: PcDesign.border)),
+          side: const WidgetStatePropertyAll(
+            BorderSide(color: PcDesign.border),
+          ),
         ),
       ),
     );
@@ -185,9 +197,7 @@ class AppTheme {
       inputDecorationTheme: InputDecorationThemeData(
         filled: true,
         fillColor: AppColors.observatorySurfaceRaised,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }

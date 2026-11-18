@@ -29,6 +29,7 @@ import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
+import '../../../shared/widgets/mobile_content_layout.dart';
 import '../../../shared/widgets/pc_card_grid.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../../../services/catalog_metadata_enricher.dart';
@@ -42,12 +43,6 @@ import '../viewmodel/catalog_detail_view_model.dart';
 import '../viewmodel/catalog_view_model.dart'
     show CatalogViewModel, ShootingFilter;
 import 'catalog_detail_screen.dart';
-
-int _gridCrossAxisCount(double width) {
-  if (width >= 840) return 4;
-  if (width >= 600) return 3;
-  return 2;
-}
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -282,29 +277,31 @@ class _CatalogScreenState extends State<CatalogScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MobileContentTheme(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
     final viewModel = context.watch<CatalogViewModel>();
     final pc = PcDesign.isActive(context);
+    final mobile = PcDesign.isMobileContent(context);
+
+    final searchField = _isSearching
+        ? TextField(
+            controller: _searchController,
+            autofocus: true,
+            style: const TextStyle(color: PcDesign.text, fontSize: 16),
+            decoration: InputDecoration(
+              hintText: 'M27, NGC 6853, Dumbbell, 오리온…',
+              hintStyle: const TextStyle(color: PcDesign.muted),
+              prefixIcon: mobile ? const Icon(Icons.search) : null,
+              border: mobile ? null : InputBorder.none,
+            ),
+          )
+        : null;
 
     return Scaffold(
       appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                style: TextStyle(
-                  color: pc ? PcDesign.text : AppColors.textPrimary,
-                  fontSize: 16,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'M27, NGC 6853, Dumbbell, 오리온…',
-                  hintStyle: TextStyle(
-                    color: pc ? PcDesign.muted : AppColors.textSecondary,
-                  ),
-                  border: InputBorder.none,
-                ),
-              )
-            : const Text('카탈로그'),
+        title: (!mobile ? searchField : null) ?? const Text('카탈로그'),
         actions: [
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
@@ -334,27 +331,35 @@ class _CatalogScreenState extends State<CatalogScreen>
                 )
                 .toList(),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: AppTheme.spacingXs),
-            child: FilledButton.tonalIcon(
+          if (mobile)
+            IconButton(
+              tooltip: '계절별 계획',
+              icon: const Icon(Icons.wb_sunny_outlined),
               onPressed: () => SeasonPlannerScreen.open(context),
-              icon: const Icon(Icons.wb_sunny_outlined, size: 16),
-              label: const Text('계절별'),
-              style: FilledButton.styleFrom(
-                backgroundColor: pc
-                    ? PcDesign.raised : AppColors.solar.withValues(alpha: 0.18),
-                foregroundColor: pc ? PcDesign.secondary : AppColors.solar,
-                minimumSize: const Size(0, 34),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-                textStyle: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: AppTheme.spacingXs),
+              child: FilledButton.tonalIcon(
+                onPressed: () => SeasonPlannerScreen.open(context),
+                icon: const Icon(Icons.wb_sunny_outlined, size: 16),
+                label: const Text('계절별'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: pc
+                      ? PcDesign.raised
+                      : AppColors.solar.withValues(alpha: 0.18),
+                  foregroundColor: pc ? PcDesign.secondary : AppColors.solar,
+                  minimumSize: const Size(0, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
-          ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline),
             tooltip: '새 카탈로그 항목 추가',
@@ -372,156 +377,179 @@ class _CatalogScreenState extends State<CatalogScreen>
           ? const Center(child: CircularProgressIndicator())
           : viewModel.errorMessage != null && viewModel.allObjects.isEmpty
           ? Center(child: Text(viewModel.errorMessage!))
-          : Column(
-              children: [
-                if (_isSearching)
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _searchController,
-                    // 검색 결과 위젯의 context는 선택 즉시 트리에서
-                    // 제거되므로(_isSearching=false), 네비게이션에는
-                    // State의 context(this.context)를 사용해야 한다.
-                    builder: (_, value, _) {
-                      return InlineCatalogSearchResults(
-                        query: value.text,
-                        allObjects: viewModel.allObjects,
-                        searchIndex: viewModel.searchIndex,
-                        onObjectSelected: (object) {
-                          final resolved = viewModel.resolveForNavigation(
-                            object,
-                          );
-                          final navigation = viewModel
-                              .navigationTargetsForSearch(object);
-                          setState(() {
-                            _isSearching = false;
-                            _searchController.clear();
-                          });
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!context.mounted) return;
-                            _openCatalogDetail(
-                              context,
-                              object: resolved,
-                              navigationObjects: navigation,
-                            );
-                          });
-                        },
+          : _buildResults(
+              context,
+              viewModel,
+              mobile ? searchField : null,
+              pc: pc,
+              mobile: mobile,
+            ),
+    );
+  }
+
+  Widget _buildResults(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    Widget? searchField, {
+    required bool pc,
+    required bool mobile,
+  }) {
+    final header = <Widget>[
+      if (searchField != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.spacingLg,
+            AppTheme.spacingSm,
+            AppTheme.spacingLg,
+            0,
+          ),
+          child: searchField,
+        ),
+      if (_isSearching)
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _searchController,
+          // 검색 결과 위젯의 context는 선택 즉시 트리에서
+          // 제거되므로(_isSearching=false), 네비게이션에는
+          // State의 context(this.context)를 사용해야 한다.
+          builder: (_, value, _) {
+            return InlineCatalogSearchResults(
+              query: value.text,
+              allObjects: viewModel.allObjects,
+              searchIndex: viewModel.searchIndex,
+              userPhotoFor: viewModel.userPhotoFor,
+              onObjectSelected: (object) {
+                final resolved = viewModel.resolveForNavigation(object);
+                final navigation = viewModel.navigationTargetsForSearch(object);
+                setState(() {
+                  _isSearching = false;
+                  _searchController.clear();
+                });
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!context.mounted) return;
+                  _openCatalogDetail(
+                    context,
+                    object: resolved,
+                    navigationObjects: navigation,
+                  );
+                });
+              },
+            );
+          },
+        ),
+      if (!mobile || !_isSearching) ...[
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.spacingLg,
+            vertical: AppTheme.spacingSm,
+          ),
+          child: FullWidthSegmentedButton<ShootingFilter>(
+            segments: const [
+              ButtonSegment(value: ShootingFilter.all, label: Text('전체')),
+              ButtonSegment(
+                value: ShootingFilter.captured,
+                label: Text('촬영 완료'),
+              ),
+              ButtonSegment(
+                value: ShootingFilter.notCaptured,
+                label: Text('미촬영'),
+              ),
+            ],
+            selected: {viewModel.shootingFilter},
+            onSelectionChanged: (selection) {
+              _onShootingFilterChanged(context, selection.first);
+            },
+          ),
+        ),
+        ResponsiveFilterChipGrid(
+          singleRow: !mobile,
+          minColumnWidth: mobile ? 68 : null,
+          maxColumns: mobile ? 4 : null,
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+          itemCount: CatalogKindFilter.values.length,
+          itemBuilder: (context, index) {
+            final filter = CatalogKindFilter.values[index];
+            final selected = viewModel.kindFilter == filter;
+            return ExpandedFilterChip(
+              compact: true,
+              label: Text(
+                filter.label,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: mobile ? 12 : 10),
+              ),
+              selected: selected,
+              onSelected: (_) => _onKindFilterChanged(context, filter),
+              labelStyle: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: AppTheme.spacingSm),
+      ],
+    ];
+    final grid = viewModel.objects.isEmpty
+        ? Center(
+            child: Text(
+              '표시할 천체가 없습니다.',
+              style: TextStyle(
+                color: mobile ? PcDesign.muted : AppColors.textSecondary,
+              ),
+            ),
+          )
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              const padding = EdgeInsets.all(AppTheme.spacingLg);
+              final gridKey = _scrollStorageKey(viewModel);
+              final objects = viewModel.objects;
+              return GridView.builder(
+                key: PageStorageKey<String>('catalog_grid_$gridKey'),
+                controller: _scrollController,
+                padding: padding,
+                addAutomaticKeepAlives: false,
+                gridDelegate: pc
+                    ? PcCardGrid.delegate(
+                        contentWidth: constraints.maxWidth - padding.horizontal,
+                        childAspectRatio: 1.1,
+                      )
+                    : MobileContentGrid.delegate(
+                        context,
+                        contentWidth: constraints.maxWidth - padding.horizontal,
+                        childAspectRatio: 1.1,
+                        minimumCardHeight: 176,
+                      ),
+                itemCount: objects.length,
+                itemBuilder: (context, index) {
+                  final object = objects[index];
+                  final thumbnail = viewModel.userPhotoFor(object);
+                  return CatalogObjectCard(
+                    object: object,
+                    thumbnailPath: thumbnail,
+                    equipmentChips: viewModel.equipmentChipsFor(object.id),
+                    onTap: () {
+                      _openCatalogDetail(
+                        context,
+                        object: object,
+                        navigationObjects: objects,
                       );
                     },
-                  ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacingLg,
-                    vertical: AppTheme.spacingSm,
-                  ),
-                  child: FullWidthSegmentedButton<ShootingFilter>(
-                    segments: const [
-                      ButtonSegment(
-                        value: ShootingFilter.all,
-                        label: Text('전체'),
-                      ),
-                      ButtonSegment(
-                        value: ShootingFilter.captured,
-                        label: Text('촬영 완료'),
-                      ),
-                      ButtonSegment(
-                        value: ShootingFilter.notCaptured,
-                        label: Text('미촬영'),
-                      ),
-                    ],
-                    selected: {viewModel.shootingFilter},
-                    onSelectionChanged: (selection) {
-                      _onShootingFilterChanged(context, selection.first);
-                    },
-                  ),
-                ),
-                ResponsiveFilterChipGrid(
-                  singleRow: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacingLg,
-                  ),
-                  itemCount: CatalogKindFilter.values.length,
-                  itemBuilder: (context, index) {
-                    final filter = CatalogKindFilter.values[index];
-                    final selected = viewModel.kindFilter == filter;
-                    return ExpandedFilterChip(
-                      compact: true,
-                      label: Text(
-                        filter.label,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      selected: selected,
-                      onSelected: (_) => _onKindFilterChanged(context, filter),
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: AppTheme.spacingSm),
-                Expanded(
-                  child: viewModel.objects.isEmpty
-                      ? const Center(
-                          child: Text(
-                            '표시할 천체가 없습니다.',
-                            style: TextStyle(color: AppColors.textSecondary),
-                          ),
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            const padding = EdgeInsets.all(AppTheme.spacingLg);
-                            final gridKey = _scrollStorageKey(viewModel);
-                            final objects = viewModel.objects;
-                            return GridView.builder(
-                              key: PageStorageKey<String>(
-                                'catalog_grid_$gridKey',
-                              ),
-                              controller: _scrollController,
-                              padding: padding,
-                              addAutomaticKeepAlives: false,
-                              gridDelegate: pc
-                                  ? PcCardGrid.delegate(
-                                      contentWidth: constraints.maxWidth -
-                                          padding.horizontal,
-                                      childAspectRatio: 1.1,
-                                    )
-                                  : SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: _gridCrossAxisCount(
-                                        constraints.maxWidth,
-                                      ),
-                                      crossAxisSpacing: AppTheme.spacingSm,
-                                      mainAxisSpacing: AppTheme.spacingSm,
-                                      childAspectRatio: 1.1,
-                                    ),
-                              itemCount: objects.length,
-                              itemBuilder: (context, index) {
-                                final object = objects[index];
-                                final thumbnail = viewModel.userPhotoFor(
-                                  object,
-                                );
-                                return CatalogObjectCard(
-                                  object: object,
-                                  thumbnailPath: thumbnail,
-                                  equipmentChips: viewModel.equipmentChipsFor(
-                                    object.id,
-                                  ),
-                                  onTap: () {
-                                    _openCatalogDetail(
-                                      context,
-                                      object: object,
-                                      navigationObjects: objects,
-                                    );
-                                  },
-                                );
-                              },
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
+                  );
+                },
+              );
+            },
+          );
+    if (mobile) {
+      return MobileContentLayout(
+        header: header,
+        body: grid,
+        searching: _isSearching,
+      );
+    }
+    return Column(
+      children: [
+        ...header,
+        Expanded(child: grid),
+      ],
     );
   }
 }

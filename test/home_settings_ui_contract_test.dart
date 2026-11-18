@@ -60,10 +60,10 @@ void main() {
     expect(home, isNot(contains('successRate')));
   });
 
-  test('recommendations keep the existing two-column text card structure', () {
-    expect(home, contains('for (var i = 0; i < items.length; i += 2)'));
+  test('recommendations keep the shared image path and responsive columns', () {
+    expect(home, contains('final columns = twoColumns ? 2 : 1'));
     expect(home, contains('class _RecommendCompactCard'));
-    expect(home, contains('gradient: LinearGradient'));
+    expect(home, contains('userPhotoPath: userPhotoPath'));
   });
 
   test('future planning exposes monthly and seasonal entries', () {

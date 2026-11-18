@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/pc_design.dart';
 
 /// 추천 대상 카드·목록의 촬영 계획 추가/제거 버튼.
 class ShootingPlanActionButton extends StatelessWidget {
@@ -40,6 +41,19 @@ class ShootingPlanActionButton extends StatelessWidget {
       fg = AppColors.solar;
     }
 
+    if (PcDesign.isMobileContent(context)) {
+      return OutlinedButton(
+        onPressed: onToggle,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: isPlanned ? PcDesign.card : PcDesign.raised,
+          foregroundColor: isScheduled ? PcDesign.muted : PcDesign.text,
+          side: BorderSide(
+            color: isPlanned ? PcDesign.border : PcDesign.accent,
+          ),
+        ),
+        child: Text(label, textAlign: TextAlign.center),
+      );
+    }
     return Material(
       color: backgroundColor ?? bg,
       borderRadius: BorderRadius.circular(compact ? 6 : 8),

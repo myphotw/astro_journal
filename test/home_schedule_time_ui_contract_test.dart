@@ -84,7 +84,7 @@ void main() {
       isNot(contains("'추천 \${'★' * recommended.starCount}'")),
     );
     expect(home, contains("'촬영 궁합'"));
-    expect(home, contains('child: IntrinsicHeight('));
+    expect(home, contains('IntrinsicHeight('));
     expect(home, contains('crossAxisAlignment: CrossAxisAlignment.stretch'));
   });
 
@@ -129,18 +129,10 @@ void main() {
       ),
     );
 
-    await pumpState(
-      isPlanned: false,
-      isScheduled: false,
-      onToggle: () {},
-    );
+    await pumpState(isPlanned: false, isScheduled: false, onToggle: () {});
     expect(find.text('촬영 계획 추가'), findsOneWidget);
 
-    await pumpState(
-      isPlanned: true,
-      isScheduled: true,
-      onToggle: () {},
-    );
+    await pumpState(isPlanned: true, isScheduled: true, onToggle: () {});
     expect(find.text('계획 등록됨'), findsOneWidget);
 
     var toggles = 0;

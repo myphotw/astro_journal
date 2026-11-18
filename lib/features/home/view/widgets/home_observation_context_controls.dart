@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/pc_design.dart';
 import '../../../../core/services/performance_probe.dart';
 import '../../../../data/models/equipment.dart';
 import '../../../../data/models/imaging_suitability_assessment.dart';
@@ -54,11 +55,16 @@ class HomeObservationContextControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     PerformanceProbe.event('widget.observation_context_controls.build');
+    final mobile = PcDesign.isMobileContent(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(13) / 13;
+    final selectorHeight = mobile && textScale > 1
+        ? _selectorCardHeight * textScale
+        : _selectorCardHeight;
     final siteSelector = ActiveObservationSiteSelector(
       viewModel: siteViewModel,
       equipmentName: selectedEquipmentName,
       embedded: true,
-      selectorHeight: _selectorCardHeight,
+      selectorHeight: selectorHeight,
       onSelectCurrentLocation: onSelectCurrentLocation,
       onSelectSite: onSelectSite,
       onOpenDetail: onOpenSiteDetail,
@@ -74,12 +80,14 @@ class HomeObservationContextControls extends StatelessWidget {
       selectedId: selectedEquipmentId,
       onChanged: onEquipmentChanged,
       accentColor: accentColor,
+      height: selectorHeight,
     );
 
     return LayoutBuilder(
       key: const Key('home-observation-context-controls'),
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 700) {
+        if (constraints.maxWidth >=
+            700 * (mobile && textScale > 1 ? textScale : 1)) {
           return Row(
             key: const Key('home-context-wide-layout'),
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,7 +108,8 @@ class HomeObservationContextControls extends StatelessWidget {
           );
         }
 
-        if (stackOnNarrow) {
+        if (stackOnNarrow ||
+            (mobile && constraints.maxWidth < 500 * textScale)) {
           return Column(
             key: const Key('home-context-compact-layout'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -113,7 +122,7 @@ class HomeObservationContextControls extends StatelessWidget {
                 selected: trackingMode,
                 onChanged: onTrackingChanged,
                 accentColor: accentColor,
-                inline: true,
+                inline: !mobile,
               ),
             ],
           );
@@ -148,6 +157,7 @@ class _EquipmentSelector extends StatelessWidget {
     required this.equipment,
     required this.selectedId,
     required this.onChanged,
+    required this.height,
     this.accentColor,
   });
 
@@ -155,19 +165,21 @@ class _EquipmentSelector extends StatelessWidget {
   final String? selectedId;
   final ValueChanged<String?> onChanged;
   final Color? accentColor;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     PerformanceProbe.event('widget.equipment_selector.build');
     final hasSelected = equipment.any((item) => item.id == selectedId);
     final choices = <Equipment?>[null, ...equipment];
+    final mobile = PcDesign.isMobileContent(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '장비',
           style: TextStyle(
-            color: AppColors.textSecondary,
+            color: mobile ? PcDesign.muted : AppColors.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -176,13 +188,17 @@ class _EquipmentSelector extends StatelessWidget {
         Container(
           key: const Key('home-equipment-card'),
           width: double.infinity,
-          height: HomeObservationContextControls._selectorCardHeight,
+          height: height,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: AppColors.background.withValues(alpha: 0.7),
+            color: mobile
+                ? PcDesign.raised
+                : AppColors.background.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: AppColors.textSecondary.withValues(alpha: 0.22),
+              color: mobile
+                  ? PcDesign.border
+                  : AppColors.textSecondary.withValues(alpha: 0.22),
             ),
           ),
           child: DropdownButtonHideUnderline(
@@ -190,16 +206,16 @@ class _EquipmentSelector extends StatelessWidget {
               key: const Key('home-equipment-selector'),
               value: hasSelected ? selectedId : null,
               isExpanded: true,
-              itemHeight: 64,
+              itemHeight: mobile ? null : 64,
               menuMaxHeight: 380,
               borderRadius: BorderRadius.circular(12),
-              dropdownColor: AppColors.surface,
+              dropdownColor: mobile ? PcDesign.card : AppColors.surface,
               icon: const Icon(Icons.keyboard_arrow_down_rounded),
               selectedItemBuilder: (context) => choices
                   .map(
                     (item) => Align(
                       alignment: Alignment.centerLeft,
-                      child: _EquipmentText(item: item, selected: true),
+                      child: _EquipmentText(item: item),
                     ),
                   )
                   .toList(),
@@ -252,10 +268,11 @@ class _TrackingModeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     PerformanceProbe.event('widget.tracking_selector.build');
-    const label = Text(
+    final mobile = PcDesign.isMobileContent(context);
+    final label = Text(
       '추적 방식',
       style: TextStyle(
-        color: AppColors.textSecondary,
+        color: mobile ? PcDesign.muted : AppColors.textSecondary,
         fontSize: 12,
         fontWeight: FontWeight.w600,
       ),
@@ -275,20 +292,22 @@ class _TrackingModeSelector extends StatelessWidget {
       showSelectedIcon: false,
       expandedInsets: EdgeInsets.zero,
       onSelectionChanged: (selection) => onChanged(selection.first),
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          return states.contains(WidgetState.selected)
-              ? AppColors.background
-              : AppColors.textPrimary;
-        }),
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          return states.contains(WidgetState.selected)
-              ? (accentColor ?? AppColors.messier)
-              : AppColors.background.withValues(alpha: 0.7);
-        }),
-      ),
+      style: mobile
+          ? null
+          : ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: WidgetStateProperty.resolveWith((states) {
+                return states.contains(WidgetState.selected)
+                    ? AppColors.background
+                    : AppColors.textPrimary;
+              }),
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                return states.contains(WidgetState.selected)
+                    ? (accentColor ?? AppColors.messier)
+                    : AppColors.background.withValues(alpha: 0.7);
+              }),
+            ),
     );
 
     if (inline) {
@@ -315,14 +334,14 @@ class _TrackingModeSelector extends StatelessWidget {
 }
 
 class _EquipmentText extends StatelessWidget {
-  const _EquipmentText({required this.item, this.selected = false});
+  const _EquipmentText({required this.item});
 
   final Equipment? item;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final equipment = item;
+    final mobile = PcDesign.isMobileContent(context);
     final title = equipment?.name ?? '자동 선택';
     final detail = equipment == null
         ? '등록 장비 중 적합한 장비 사용'
@@ -336,7 +355,7 @@ class _EquipmentText extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: selected ? AppColors.textPrimary : AppColors.textPrimary,
+            color: mobile ? PcDesign.text : AppColors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
@@ -346,7 +365,10 @@ class _EquipmentText extends StatelessWidget {
           detail,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+          style: TextStyle(
+            color: mobile ? PcDesign.muted : AppColors.textSecondary,
+            fontSize: 10,
+          ),
         ),
       ],
     );

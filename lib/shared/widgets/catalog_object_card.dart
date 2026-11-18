@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/catalog_type.dart';
-import '../../core/constants/object_type.dart';
 import '../../core/formatters/catalog_object_display_formatter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/pc_design.dart';
 import '../../data/models/catalog_equipment_chips.dart';
 import '../../data/models/catalog_object.dart';
-import '../../features/sky_map/widgets/sky_map_object_symbol.dart';
 import '../../services/catalog_thumbnail_resolver.dart';
 import 'catalog_object_image.dart';
 import 'catalog_equipment_chips_row.dart';
@@ -39,7 +37,8 @@ class CatalogObjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pc = PcDesign.isActive(context);
+    final pc = PcDesign.isStyled(context);
+    final mobile = PcDesign.isMobileContent(context);
     final color = pc ? PcDesign.secondary : object.catalog.accentColor;
     final thumbnail = CatalogThumbnailResolver.resolve(
       object,
@@ -49,8 +48,8 @@ class CatalogObjectCard extends StatelessWidget {
     final shootingColor = pc
         ? (object.captured ? PcDesign.captured : PcDesign.muted)
         : object.captured
-            ? (hasThumb ? Colors.white : color)
-            : (hasThumb ? Colors.white54 : AppColors.textSecondary);
+        ? (hasThumb ? Colors.white : color)
+        : (hasThumb ? Colors.white54 : AppColors.textSecondary);
 
     return RepaintBoundary(
       child: Card(
@@ -61,19 +60,16 @@ class CatalogObjectCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (hasThumb || pc)
-                CatalogObjectImage(
-                  object: object,
-                  userPhotoPath: thumbnailPath,
-                  userPhotoFit: BoxFit.cover,
-                  assetFit: BoxFit.contain,
-                  backgroundColor: hasThumb
-                      ? AppColors.background
-                      : Colors.transparent,
-                  fallbackBuilder: (_) => pc
-                      ? _PcCatalogPlaceholder(type: object.resolvedObjectType)
-                      : const SizedBox.shrink(),
-                ),
+              CatalogObjectImage(
+                object: object,
+                userPhotoPath: thumbnailPath,
+                userPhotoFit: BoxFit.cover,
+                assetFit: BoxFit.contain,
+                backgroundColor: hasThumb
+                    ? (mobile ? PcDesign.background : AppColors.background)
+                    : Colors.transparent,
+                fillCard: true,
+              ),
               if (hasThumb)
                 const DecoratedBox(
                   decoration: BoxDecoration(
@@ -111,7 +107,9 @@ class CatalogObjectCard extends StatelessWidget {
                               if (_hasConstellation)
                                 _CatalogBadge(
                                   label: object.displayConstellation,
-                                  color: pc ? PcDesign.muted : AppColors.textSecondary,
+                                  color: pc
+                                      ? PcDesign.muted
+                                      : AppColors.textSecondary,
                                   onDarkBackground: hasThumb,
                                 ),
                             ],
@@ -156,30 +154,38 @@ class CatalogObjectCard extends StatelessWidget {
                     ),
                     if (!equipmentChips.isEmpty) ...[
                       const SizedBox(height: 4),
-                      CatalogEquipmentChipsRow(
-                        chips: equipmentChips,
-                        onDarkBackground: hasThumb,
-                      ),
+                      if (mobile)
+                        _MobileEquipmentSummary(chips: equipmentChips)
+                      else
+                        CatalogEquipmentChipsRow(
+                          chips: equipmentChips,
+                          onDarkBackground: hasThumb,
+                        ),
                     ],
                     const Spacer(),
                     Text(
                       CatalogObjectDisplayFormatter.catalogTitle(object),
                       style: TextStyle(
-                        color: pc ? PcDesign.text : (hasThumb ? Colors.white : color),
-                        fontSize: 20,
+                        color: pc
+                            ? PcDesign.text
+                            : (hasThumb ? Colors.white : color),
+                        fontSize: mobile ? 16 : 20,
                         fontWeight: FontWeight.bold,
                         height: 1.1,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (CatalogObjectDisplayFormatter.subtitleText(object)
-                        .isNotEmpty) ...[
+                    if (CatalogObjectDisplayFormatter.subtitleText(
+                      object,
+                    ).isNotEmpty) ...[
                       const SizedBox(height: AppTheme.spacingXs),
                       Text(
                         CatalogObjectDisplayFormatter.subtitleText(object),
                         style: TextStyle(
-                          color: pc ? PcDesign.muted : hasThumb
+                          color: pc
+                              ? PcDesign.muted
+                              : hasThumb
                               ? Colors.white70
                               : AppColors.textSecondary,
                           fontSize: 12,
@@ -199,36 +205,25 @@ class CatalogObjectCard extends StatelessWidget {
   }
 }
 
-/// Reuses the sky map's vector symbols without changing the image resolver.
-class _PcCatalogPlaceholder extends StatelessWidget {
-  const _PcCatalogPlaceholder({required this.type});
+/// Keep the list readable at two columns without letting an arbitrary number
+/// of equipment names push the target and its type off the card.
+class _MobileEquipmentSummary extends StatelessWidget {
+  const _MobileEquipmentSummary({required this.chips});
 
-  final ObjectType type;
+  final CatalogEquipmentChips chips;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = (constraints.biggest.shortestSide * 0.28)
-            .clamp(0.0, 52.0)
-            .toDouble();
-        final kind = switch (type) {
-          ObjectType.planet || ObjectType.dwarfPlanet =>
-            SkyMapObjectSymbolKind.planet,
-          ObjectType.moon => SkyMapObjectSymbolKind.moon,
-          ObjectType.milkyWay => SkyMapObjectSymbolKind.galaxy,
-          _ => type.skyMapSymbolKind,
-        };
-
-        final widget = switch ((type, kind)) {
-          (ObjectType.supernovaRemnant, _) =>
-            Icon(Icons.blur_on, size: size, color: PcDesign.accent),
-          (_, SkyMapObjectSymbolKind.point) =>
-            Icon(Icons.auto_awesome_outlined, size: size, color: PcDesign.accent),
-          _ => SkyMapObjectSymbol(kind: kind, color: PcDesign.accent, size: size),
-        };
-        return Center(child: widget);
-      },
+    final label = chips.items.map((item) => item.label).join(' · ');
+    return Text(
+      label,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: PcDesign.secondary,
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }
@@ -252,13 +247,17 @@ class _CatalogBadge extends StatelessWidget {
         vertical: AppTheme.spacingXs,
       ),
       decoration: BoxDecoration(
-        color: onDarkBackground ? Colors.black.withAlpha(120) : color.withAlpha(40),
+        color: onDarkBackground
+            ? Colors.black.withAlpha(120)
+            : color.withAlpha(40),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: onDarkBackground && !PcDesign.isActive(context) ? Colors.white : color,
+          color: onDarkBackground && !PcDesign.isStyled(context)
+              ? Colors.white
+              : color,
           fontSize: 10,
           fontWeight: FontWeight.bold,
         ),

@@ -13,6 +13,7 @@ class ResponsiveFilterChipGrid extends StatelessWidget {
     this.runSpacing = 6,
     this.maxColumns,
     this.singleRow = false,
+    this.minColumnWidth,
   });
 
   final int itemCount;
@@ -22,6 +23,7 @@ class ResponsiveFilterChipGrid extends StatelessWidget {
   final double runSpacing;
   final int? maxColumns;
   final bool singleRow;
+  final double? minColumnWidth;
 
   static int columnsForWidth(
     double width,
@@ -31,7 +33,8 @@ class ResponsiveFilterChipGrid extends StatelessWidget {
   }) {
     if (itemCount <= 1) return 1;
     if (singleRow) return itemCount;
-    final cap = maxColumns ??
+    final cap =
+        maxColumns ??
         switch (width) {
           >= 840 => 6,
           >= 600 => 4,
@@ -47,10 +50,23 @@ class ResponsiveFilterChipGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final targetWidth = minColumnWidth;
+        final mobileColumns = targetWidth == null
+            ? null
+            : ((constraints.maxWidth -
+                          padding
+                              .resolve(Directionality.of(context))
+                              .horizontal +
+                          spacing) /
+                      (MediaQuery.textScalerOf(context).scale(targetWidth) +
+                          spacing))
+                  .floor()
+                  .clamp(1, maxColumns ?? itemCount)
+                  .toInt();
         final cols = columnsForWidth(
           constraints.maxWidth,
           itemCount,
-          maxColumns: maxColumns,
+          maxColumns: mobileColumns ?? maxColumns,
           singleRow: singleRow,
         );
         final rowCount = (itemCount + cols - 1) ~/ cols;
@@ -126,8 +142,9 @@ class ExpandedFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pc = PcDesign.isActive(context);
-    final effectiveLabelStyle = pc
+    final styled = PcDesign.isStyled(context);
+    final mobile = PcDesign.isMobileContent(context);
+    final effectiveLabelStyle = styled
         ? (labelStyle ?? const TextStyle()).copyWith(
             color: labelStyle?.color ?? PcDesign.filterLabel(selected),
           )
@@ -145,16 +162,22 @@ class ExpandedFilterChip extends StatelessWidget {
         ),
         selected: selected,
         showCheckmark: showCheckmark,
-        visualDensity: visualDensity,
+        visualDensity: mobile ? VisualDensity.standard : visualDensity,
         onSelected: onSelected,
         labelStyle: effectiveLabelStyle,
-        backgroundColor: backgroundColor ?? (pc ? PcDesign.card : null),
-        selectedColor: selectedColor ?? (pc ? PcDesign.raised : null),
-        side: side ?? (pc ? BorderSide(color: PcDesign.filterBorder(selected)) : null),
+        backgroundColor: backgroundColor ?? (styled ? PcDesign.card : null),
+        selectedColor: selectedColor ?? (styled ? PcDesign.raised : null),
+        side:
+            side ??
+            (styled
+                ? BorderSide(color: PcDesign.filterBorder(selected))
+                : null),
         avatar: avatar,
         pressElevation: pressElevation,
         elevation: elevation,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        materialTapTargetSize: mobile
+            ? MaterialTapTargetSize.padded
+            : MaterialTapTargetSize.shrinkWrap,
         padding: EdgeInsets.symmetric(
           horizontal: compact ? 2 : 4,
           vertical: compact ? 2 : 0,
@@ -194,12 +217,19 @@ class FullWidthSegmentedButton<T extends Object> extends StatelessWidget {
         selected: selected,
         onSelectionChanged: onSelectionChanged,
         showSelectedIcon: showSelectedIcon,
-        style: (style ?? const ButtonStyle()).merge(
-          const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ),
+        style: PcDesign.isMobileContent(context)
+            ? (style ?? const ButtonStyle()).merge(
+                const ButtonStyle(
+                  visualDensity: VisualDensity.standard,
+                  tapTargetSize: MaterialTapTargetSize.padded,
+                ),
+              )
+            : (style ?? const ButtonStyle()).merge(
+                const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
       ),
     );
   }

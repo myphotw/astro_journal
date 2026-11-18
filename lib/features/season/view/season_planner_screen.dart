@@ -26,6 +26,7 @@ import '../../../services/season_planner_filter_service.dart';
 import '../../../services/season_planner_service.dart';
 import '../../../services/catalog_capture_projection_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
+import '../../../shared/widgets/mobile_content_layout.dart';
 import '../../../shared/widgets/pc_card_grid.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../../catalog/view/catalog_detail_screen.dart';
@@ -35,12 +36,6 @@ import '../../gallery/viewmodel/gallery_view_model.dart';
 import '../../home/viewmodel/home_view_model.dart';
 import '../../stats/viewmodel/stats_view_model.dart';
 import '../viewmodel/season_planner_view_model.dart';
-
-int _gridCrossAxisCount(double width) {
-  if (width >= 840) return 4;
-  if (width >= 600) return 3;
-  return 2;
-}
 
 /// 계절/월별 촬영 대상 전용 화면.
 class SeasonPlannerScreen extends StatelessWidget {
@@ -75,35 +70,47 @@ class SeasonPlannerScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MobileContentTheme(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
     final viewModel = context.watch<SeasonPlannerViewModel>();
+    final mobile = PcDesign.isMobileContent(context);
+    final header = _PlannerHeaderPanel(
+      viewModel: viewModel,
+      fixedViewMode: fixedViewMode,
+    );
+    final grid = viewModel.items.isEmpty
+        ? Center(
+            child: Text(
+              '조건에 맞는 촬영 대상이 없습니다.',
+              style: TextStyle(
+                color: mobile ? PcDesign.muted : AppColors.textSecondary,
+              ),
+            ),
+          )
+        : _SeasonObjectGrid(viewModel: viewModel);
 
     return Scaffold(
-      appBar: AppBar(title: Text(fixedViewMode &&
-              viewModel.viewMode == SeasonPlannerViewMode.byMonth
-          ? '월별 계획'
-          : '계절별 촬영 대상')),
+      appBar: AppBar(
+        title: Text(
+          (fixedViewMode || mobile) &&
+                  viewModel.viewMode == SeasonPlannerViewMode.byMonth
+              ? '월별 계획'
+              : '계절별 촬영 대상',
+        ),
+      ),
       body: viewModel.isLoading
           ? const Center(child: CircularProgressIndicator())
           : viewModel.errorMessage != null
           ? Center(child: Text(viewModel.errorMessage!))
+          : mobile
+          ? MobileContentLayout(header: [header], body: grid)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _PlannerHeaderPanel(
-                  viewModel: viewModel,
-                  fixedViewMode: fixedViewMode,
-                ),
-                Expanded(
-                  child: viewModel.items.isEmpty
-                      ? const Center(
-                          child: Text(
-                            '조건에 맞는 촬영 대상이 없습니다.',
-                            style: TextStyle(color: AppColors.textSecondary),
-                          ),
-                        )
-                      : _SeasonObjectGrid(viewModel: viewModel),
-                ),
+                header,
+                Expanded(child: grid),
               ],
             ),
     );
@@ -143,7 +150,9 @@ class _PlannerHeaderPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vm = context.read<SeasonPlannerViewModel>();
-    final pc = PcDesign.isActive(context);
+    final pc = PcDesign.isStyled(context);
+    final mobile = PcDesign.isMobileContent(context);
+    final muted = mobile ? PcDesign.muted : AppColors.textSecondary;
     final selected = viewModel.catalogFilters;
     final periodLabel = viewModel.viewMode == SeasonPlannerViewMode.bySeason
         ? '${viewModel.selectedSeason.label} (${viewModel.selectedSeason.subtitle})'
@@ -158,37 +167,50 @@ class _PlannerHeaderPanel extends StatelessWidget {
       ),
       child: Material(
         color: pc ? PcDesign.card : AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        borderRadius: mobile
+            ? null
+            : BorderRadius.circular(AppTheme.cardRadius),
+        shape: mobile
+            ? const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(
+                  Radius.circular(AppTheme.cardRadius),
+                ),
+                side: BorderSide(color: PcDesign.border),
+              )
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(AppTheme.spacingMd),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!fixedViewMode) FullWidthSegmentedButton<SeasonPlannerViewMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: SeasonPlannerViewMode.bySeason,
-                    label: Text('계절별'),
-                    icon: Icon(Icons.wb_sunny_outlined, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: SeasonPlannerViewMode.byMonth,
-                    label: Text('월별'),
-                    icon: Icon(Icons.calendar_month_outlined, size: 16),
-                  ),
-                ],
-                selected: {viewModel.viewMode},
-                onSelectionChanged: (selection) {
-                  vm.setViewMode(selection.first);
-                },
-              ),
+              if (!fixedViewMode)
+                FullWidthSegmentedButton<SeasonPlannerViewMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: SeasonPlannerViewMode.bySeason,
+                      label: Text('계절별'),
+                      icon: Icon(Icons.wb_sunny_outlined, size: 16),
+                    ),
+                    ButtonSegment(
+                      value: SeasonPlannerViewMode.byMonth,
+                      label: Text('월별'),
+                      icon: Icon(Icons.calendar_month_outlined, size: 16),
+                    ),
+                  ],
+                  selected: {viewModel.viewMode},
+                  onSelectionChanged: (selection) {
+                    vm.setViewMode(selection.first);
+                  },
+                ),
               if (!fixedViewMode) const SizedBox(height: AppTheme.spacingSm),
               if (viewModel.viewMode == SeasonPlannerViewMode.bySeason)
                 _SeasonSelector(viewModel: viewModel)
               else
                 _MonthSelector(viewModel: viewModel),
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingSm),
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppTheme.spacingSm,
+                ),
                 child: Divider(
                   height: 1,
                   color: pc ? PcDesign.border : const Color(0x33FFFFFF),
@@ -196,10 +218,10 @@ class _PlannerHeaderPanel extends StatelessWidget {
               ),
               Row(
                 children: [
-                  const Text(
+                  Text(
                     '필터',
                     style: TextStyle(
-                      color: AppColors.textSecondary,
+                      color: muted,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
@@ -208,12 +230,16 @@ class _PlannerHeaderPanel extends StatelessWidget {
                   if (viewModel.hasCatalogFilter)
                     TextButton(
                       onPressed: vm.clearCatalogFilters,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      ),
+                      style: mobile
+                          ? null
+                          : TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
                       child: const Text(
                         '카탈로그 초기화',
                         style: TextStyle(fontSize: 11),
@@ -223,7 +249,9 @@ class _PlannerHeaderPanel extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               ResponsiveFilterChipGrid(
-                singleRow: true,
+                singleRow: !mobile,
+                minColumnWidth: mobile ? 73 : null,
+                maxColumns: mobile ? 4 : null,
                 itemCount: 1 + SeasonPlannerService.plannerCatalogTypes.length,
                 itemBuilder: (context, index) {
                   if (index == 0) {
@@ -233,10 +261,10 @@ class _PlannerHeaderPanel extends StatelessWidget {
                     );
                     return ExpandedFilterChip(
                       compact: true,
-                      label: const Text(
+                      label: Text(
                         '미촬영만',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 10),
+                        style: TextStyle(fontSize: mobile ? 12 : 10),
                       ),
                       selected: viewModel.uncapturedOnly,
                       onSelected: vm.setUncapturedOnly,
@@ -272,7 +300,7 @@ class _PlannerHeaderPanel extends StatelessWidget {
                     label: Text(
                       _catalogLabel(catalog),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 10),
+                      style: TextStyle(fontSize: mobile ? 12 : 10),
                     ),
                     selected: isChecked,
                     onSelected: (_) => vm.toggleCatalogFilter(catalog),
@@ -294,10 +322,7 @@ class _PlannerHeaderPanel extends StatelessWidget {
               Text(
                 '$periodLabel · 추천 ${viewModel.items.length}개'
                 '${viewModel.uncapturedOnly ? '' : ' · 미촬영 ${viewModel.uncapturedCount}개'}',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 11,
-                ),
+                style: TextStyle(color: muted, fontSize: mobile ? 12 : 11),
               ),
             ],
           ),
@@ -314,8 +339,11 @@ class _SeasonSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     return ResponsiveFilterChipGrid(
-      singleRow: true,
+      singleRow: !mobile,
+      minColumnWidth: mobile ? 104 : null,
+      maxColumns: mobile ? 4 : null,
       itemCount: AstroSeason.values.length,
       itemBuilder: (context, index) {
         final season = AstroSeason.values[index];
@@ -325,7 +353,7 @@ class _SeasonSelector extends StatelessWidget {
           label: Text(
             '${season.label} ${season.subtitle}',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 10),
+            style: TextStyle(fontSize: mobile ? 12 : 10),
           ),
           selected: selected,
           onSelected: (_) {
@@ -347,8 +375,11 @@ class _MonthSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     return ResponsiveFilterChipGrid(
-      singleRow: true,
+      singleRow: !mobile,
+      minColumnWidth: mobile ? 54 : null,
+      maxColumns: mobile ? 6 : null,
       itemCount: 12,
       itemBuilder: (context, index) {
         final month = index + 1;
@@ -359,15 +390,16 @@ class _MonthSelector extends StatelessWidget {
           label: Text(
             SeasonPlannerService.monthLabels[index],
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 9),
+            style: TextStyle(fontSize: mobile ? 12 : 9),
           ),
           selected: selected,
           avatar: isCurrent
               ? Icon(
                   Icons.circle,
                   size: 8,
-                  color: PcDesign.isActive(context)
-                      ? PcDesign.secondary : AppColors.solar,
+                  color: PcDesign.isStyled(context)
+                      ? PcDesign.secondary
+                      : AppColors.solar,
                 )
               : null,
           onSelected: (_) {
@@ -465,11 +497,11 @@ class _SeasonObjectGrid extends StatelessWidget {
                   contentWidth: constraints.maxWidth - padding.horizontal,
                   childAspectRatio: 1.1,
                 )
-              : SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: _gridCrossAxisCount(constraints.maxWidth),
-                  crossAxisSpacing: AppTheme.spacingSm,
-                  mainAxisSpacing: AppTheme.spacingSm,
+              : MobileContentGrid.delegate(
+                  context,
+                  contentWidth: constraints.maxWidth - padding.horizontal,
                   childAspectRatio: 1.1,
+                  minimumCardHeight: 176,
                 ),
           itemCount: viewModel.items.length,
           itemBuilder: (context, index) {

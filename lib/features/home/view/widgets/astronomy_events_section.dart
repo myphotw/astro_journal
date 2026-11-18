@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/pc_design.dart';
 import '../../../../shared/widgets/pc_scroll_edge_buttons.dart';
 import '../../presentation/astronomy_event_presenter.dart';
 import '../../viewmodel/astronomy_events_view_model.dart';
@@ -47,6 +48,7 @@ class _AstronomyEventsSectionState extends State<AstronomyEventsSection> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<AstronomyEventsViewModel?>();
     if (viewModel == null) return const SizedBox.shrink();
+    final mobile = PcDesign.isMobileContent(context);
 
     return Column(
       key: const Key('home-astronomy-events-section'),
@@ -57,11 +59,18 @@ class _AstronomyEventsSectionState extends State<AstronomyEventsSection> {
             Expanded(
               child: Text(
                 '다가오는 천문 이벤트',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: widget.compactList
-                      ? PcHomeColors.text : AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
+                style:
+                    (mobile
+                            ? Theme.of(context).textTheme.titleMedium
+                            : Theme.of(context).textTheme.titleSmall)
+                        ?.copyWith(
+                          color: widget.compactList
+                              ? PcHomeColors.text
+                              : mobile
+                              ? PcDesign.text
+                              : AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
               ),
             ),
             if (widget.compactList)
@@ -69,29 +78,34 @@ class _AstronomyEventsSectionState extends State<AstronomyEventsSection> {
             TextButton(
               key: const Key('open-all-astronomy-events'),
               onPressed: () => AstronomyEventsScreen.open(
-                context, showHomeNavigation: widget.compactList,
+                context,
+                showHomeNavigation: widget.compactList,
               ),
-              style: TextButton.styleFrom(
-                minimumSize: Size.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+              style: mobile
+                  ? null
+                  : TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
               child: const Text('전체보기 >', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
         SizedBox(height: widget.compactList ? 4 : AppTheme.spacingSm),
         if (widget.compactList)
-          Expanded(child: _HomeEventsBody(
-            viewModel: viewModel,
-            compactList: true,
-            scrollController: _eventScrollController,
-          ))
+          Expanded(
+            child: _HomeEventsBody(
+              viewModel: viewModel,
+              compactList: true,
+              scrollController: _eventScrollController,
+            ),
+          )
         else
-          _HomeEventsBody(
-            viewModel: viewModel,
-            compactList: false,
-          ),
+          _HomeEventsBody(viewModel: viewModel, compactList: false),
       ],
     );
   }
@@ -141,7 +155,9 @@ class _HomeEventsBody extends StatelessWidget {
     final nowUtc = now.toUtc();
     final events = compactList
         ? (viewModel.events.where((event) {
-            final instant = AstronomyEventPresenter.primaryInstant(event)?.toUtc();
+            final instant = AstronomyEventPresenter.primaryInstant(
+              event,
+            )?.toUtc();
             final end = event.endAt?.toUtc() ?? instant;
             return instant != null &&
                 end != null &&
@@ -160,19 +176,21 @@ class _HomeEventsBody extends StatelessWidget {
           message: '표시 기간에 예정된 천문 이벤트가 없습니다.',
         );
       }
-      return PcScrollBoundary(child: Scrollbar(
+      return PcScrollBoundary(
+        child: Scrollbar(
           controller: scrollController,
           thumbVisibility: true,
           child: ListView.separated(
-          controller: scrollController,
-          physics: const ClampingScrollPhysics(),
-          itemCount: events.length,
-          separatorBuilder: (_, _) =>
-              const Divider(height: 1, color: PcHomeColors.border),
-          itemBuilder: (context, index) => InkWell(
+            controller: scrollController,
+            physics: const ClampingScrollPhysics(),
+            itemCount: events.length,
+            separatorBuilder: (_, _) =>
+                const Divider(height: 1, color: PcHomeColors.border),
+            itemBuilder: (context, index) => InkWell(
               key: Key('astronomy-event-${events[index].id}'),
               onTap: () => AstronomyEventsScreen.open(
-                context, showHomeNavigation: compactList,
+                context,
+                showHomeNavigation: compactList,
               ),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
               child: ConstrainedBox(
@@ -180,65 +198,81 @@ class _HomeEventsBody extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: PcHomeColors.card,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: PcHomeColors.border),
-                      ),
-                      child: Icon(
-                        AstronomyEventPresenter.categoryIcon(events[index].type),
-                        color: PcHomeColors.muted,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: AppTheme.spacingMd),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(events[index].title, maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12,
-                                  fontWeight: FontWeight.w700)),
-                          Text(
-                            events[index].tags.isEmpty
-                                ? AstronomyEventPresenter.categoryLabel(events[index].type)
-                                : events[index].tags.take(2).join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 10,
-                                color: PcHomeColors.muted),
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: PcHomeColors.card,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: PcHomeColors.border),
+                        ),
+                        child: Icon(
+                          AstronomyEventPresenter.categoryIcon(
+                            events[index].type,
                           ),
-                        ],
+                          color: PcHomeColors.muted,
+                          size: 20,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AppTheme.spacingSm),
-                    SizedBox(
-                      width: 92,
-                      child: Text(
-                        AstronomyEventPresenter.dateLabel(events[index], now),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(fontSize: 10,
-                            color: PcHomeColors.muted),
+                      const SizedBox(width: AppTheme.spacingMd),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              events[index].title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              events[index].tags.isEmpty
+                                  ? AstronomyEventPresenter.categoryLabel(
+                                      events[index].type,
+                                    )
+                                  : events[index].tags.take(2).join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: PcHomeColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: AppTheme.spacingSm),
+                      SizedBox(
+                        width: 92,
+                        child: Text(
+                          AstronomyEventPresenter.dateLabel(events[index], now),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: PcHomeColors.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ));
+        ),
+      );
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        const preferredCardWidth = 230.0;
+        final preferredCardWidth = PcDesign.isMobileContent(context)
+            ? 230 * (MediaQuery.textScalerOf(context).scale(14) / 14)
+            : 230.0;
         final columns = math.max(
           1,
           (constraints.maxWidth / preferredCardWidth).floor(),
@@ -275,11 +309,12 @@ class _SectionMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = PcDesign.isMobileContent(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppTheme.spacingMd),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: mobile ? PcDesign.raised : AppColors.surface,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
@@ -287,8 +322,8 @@ class _SectionMessage extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: mobile ? PcDesign.muted : AppColors.textSecondary,
                 fontSize: 12,
               ),
             ),
