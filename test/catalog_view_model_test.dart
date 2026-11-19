@@ -1,7 +1,7 @@
 import 'package:astro_journal/core/constants/catalog_kind_filter.dart';
 import 'package:astro_journal/core/constants/catalog_sort_order.dart';
 import 'package:astro_journal/core/constants/catalog_type.dart';
-import 'package:astro_journal/core/constants/famous_celestial_objects.dart';
+import 'package:astro_journal/core/constants/catalog_display_scope.dart';
 import 'package:astro_journal/core/constants/object_type.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
@@ -13,8 +13,11 @@ import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/features/catalog/viewmodel/catalog_detail_view_model.dart';
 import 'package:astro_journal/features/catalog/viewmodel/catalog_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
+import 'package:astro_journal/services/catalog_favorite_controller.dart';
 import 'package:astro_journal/services/equipment/equipment_recommendation_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/fake_catalog_favorites.dart';
 
 class _FakeCatalogRepository implements CatalogRepository {
   _FakeCatalogRepository(this.objects);
@@ -224,20 +227,30 @@ void main() {
   });
 
   test('famous IDs are exact and combine with catalog and kind filters', () async {
-    final vm = CatalogViewModel(
-      _FakeCatalogRepository([
+    final repository = _FakeCatalogRepository([
         obj(id: 'M42', type: '발광성운'),
         obj(id: 'M31', type: '은하'),
         obj(id: 'NGC2237', type: '발광성운', catalog: CatalogType.ngc),
         obj(id: 'NGC40', type: '행성상성운', catalog: CatalogType.ngc),
         obj(id: 'm42', type: '발광성운'),
-      ]),
+      ]);
+    final remote = FakeCatalogFavoritesRemote(['M42', 'M31', 'NGC2237']);
+    final favorites = CatalogFavoriteController(
+      remoteApi: remote,
+      cache: FakeCatalogFavoritesCache(),
+      catalogRepository: repository,
+    );
+    final vm = CatalogViewModel(
+      repository,
       _FakeShootingRecordRepository(),
       _FakeEquipmentRepository(),
       const EquipmentRecommendationService(),
+      catalogFavorites: favorites,
     );
+    addTearDown(favorites.dispose);
     addTearDown(vm.dispose);
     await vm.load();
+    await favorites.initialize();
 
     expect(vm.displayScope, CatalogDisplayScope.famous);
     expect(vm.objects.map((o) => o.id), unorderedEquals([
@@ -250,6 +263,10 @@ void main() {
     expect(vm.objects.map((o) => o.id), unorderedEquals(['NGC40', 'NGC2237']));
     vm.selectDisplayScope(CatalogDisplayScope.famous);
     expect(vm.objects.map((o) => o.id), ['NGC2237']);
+    await favorites.toggle('NGC2237');
+    expect(vm.objects, isEmpty);
+    await favorites.toggle('NGC40');
+    expect(vm.objects.map((o) => o.id), ['NGC40']);
   });
 
   test('scoped search preserves approved alias hits and omits unapproved IDs', () {
@@ -268,11 +285,12 @@ void main() {
     addTearDown(CatalogSearchService.invalidateIndex);
     final service = CatalogSearchService();
 
-    expect(service.search('NGC1976', objects, allowedPrimaryIds: famousCelestialObjectIds)
+    const managedIds = {'M42'};
+    expect(service.search('NGC1976', objects, allowedPrimaryIds: managedIds)
         .map((o) => o.id), ['M42']);
-    expect(service.search('Test cloud', objects, allowedPrimaryIds: famousCelestialObjectIds)
+    expect(service.search('Test cloud', objects, allowedPrimaryIds: managedIds)
         .map((o) => o.id), ['M42']);
-    expect(service.search('NGC40', objects, allowedPrimaryIds: famousCelestialObjectIds),
+    expect(service.search('NGC40', objects, allowedPrimaryIds: managedIds),
         isEmpty);
     expect(service.search('NGC40', objects).map((o) => o.id), ['NGC40']);
   });

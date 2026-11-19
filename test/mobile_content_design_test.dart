@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import 'package:astro_journal/core/constants/catalog_kind_filter.dart';
 import 'package:astro_journal/core/constants/catalog_sort_order.dart';
 import 'package:astro_journal/core/constants/catalog_type.dart';
-import 'package:astro_journal/core/constants/famous_celestial_objects.dart';
+import 'package:astro_journal/core/constants/catalog_display_scope.dart';
 import 'package:astro_journal/core/constants/gallery_object_category.dart';
 import 'package:astro_journal/core/navigation/app_navigation_notifier.dart';
 import 'package:astro_journal/core/theme/app_theme.dart';
@@ -20,6 +22,7 @@ import 'package:astro_journal/features/gallery/viewmodel/gallery_view_model.dart
 import 'package:astro_journal/features/season/view/season_planner_screen.dart';
 import 'package:astro_journal/features/season/viewmodel/season_planner_view_model.dart';
 import 'package:astro_journal/services/catalog_search_service.dart';
+import 'package:astro_journal/services/catalog_favorite_controller.dart';
 import 'package:astro_journal/services/equipment/equipment_recommendation_service.dart';
 import 'package:astro_journal/services/season_planner_filter_service.dart';
 import 'package:astro_journal/shared/widgets/catalog_object_card.dart';
@@ -28,6 +31,8 @@ import 'package:astro_journal/shared/widgets/mobile_content_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+
+import 'support/fake_catalog_favorites.dart';
 
 const _target = CatalogObject(
   id: 'NGC9999',
@@ -95,12 +100,23 @@ class _Planner extends SeasonPlannerViewModel {
   ];
 }
 
-CatalogViewModel _catalogVm() => CatalogViewModel(
-  _Catalog(),
-  _Records(),
-  _Equipment(),
-  const EquipmentRecommendationService(),
-);
+CatalogViewModel _catalogVm() {
+  final repo = _Catalog();
+  final favorites = CatalogFavoriteController(
+    remoteApi: FakeCatalogFavoritesRemote(['M31']),
+    cache: FakeCatalogFavoritesCache(['M31']),
+    catalogRepository: repo,
+  );
+  addTearDown(favorites.dispose);
+  unawaited(favorites.restoreCache());
+  return CatalogViewModel(
+    repo,
+    _Records(),
+    _Equipment(),
+    const EquipmentRecommendationService(),
+    catalogFavorites: favorites,
+  );
+}
 
 void _viewport(WidgetTester tester, double width, double height) {
   tester.view.devicePixelRatio = 1;

@@ -1,13 +1,16 @@
 import 'package:astro_journal/core/constants/astro_season.dart';
 import 'package:astro_journal/core/constants/catalog_type.dart';
-import 'package:astro_journal/core/constants/famous_celestial_objects.dart';
+import 'package:astro_journal/core/constants/catalog_display_scope.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/shooting_record.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/shooting_record_repository.dart';
 import 'package:astro_journal/features/season/viewmodel/season_planner_view_model.dart';
 import 'package:astro_journal/services/season_planner_filter_service.dart';
+import 'package:astro_journal/services/catalog_favorite_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/fake_catalog_favorites.dart';
 
 class _CatalogRepository implements CatalogRepository {
   @override
@@ -18,6 +21,10 @@ class _CatalogRepository implements CatalogRepository {
     _target('M13', '17h', CatalogType.messier),
     _target('solar_1', '05h', CatalogType.solar),
   ];
+
+  @override
+  Future<CatalogObject?> getById(String id) async =>
+      (await getAll()).where((object) => object.id == id).firstOrNull;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -76,17 +83,30 @@ void main() {
   });
 
   test('monthly and seasonal scopes start famous and stay independent', () async {
+    final repository = _CatalogRepository();
+    final favorites = CatalogFavoriteController(
+      remoteApi: FakeCatalogFavoritesRemote(['M42', 'M31', 'M13', 'solar_1']),
+      cache: FakeCatalogFavoritesCache(),
+      catalogRepository: repository,
+    );
     final vm = SeasonPlannerViewModel(
-      _CatalogRepository(),
+      repository,
       _ShootingRecordRepository(),
       _FilterService(),
       initialViewMode: SeasonPlannerViewMode.byMonth,
       initialMonth: 12,
+      catalogFavorites: favorites,
     );
+    addTearDown(favorites.dispose);
     addTearDown(vm.dispose);
     Iterable<String> itemIds() => vm.items.map((item) => item.object.id);
     await vm.load();
+    await favorites.initialize();
     expect(vm.displayScope, CatalogDisplayScope.famous);
+    expect(itemIds(), ['M42']);
+    await favorites.toggle('M42');
+    expect(itemIds(), isEmpty);
+    await favorites.toggle('M42');
     expect(itemIds(), ['M42']);
 
     vm.selectDisplayScope(CatalogDisplayScope.all);

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/famous_celestial_objects.dart';
+import '../../core/constants/catalog_display_scope.dart';
 import 'responsive_filter_chips.dart';
 
 class CatalogDisplayScopeSelector extends StatelessWidget {

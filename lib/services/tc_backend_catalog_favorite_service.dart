@@ -63,7 +63,7 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
     if (decoded is! List) {
       throw const CatalogFavoriteRemoteException(
         type: CatalogFavoriteRemoteErrorType.malformedResponse,
-        message: '즐겨찾기 목록 응답 형식이 올바르지 않습니다.',
+        message: '유명천체 목록 응답 형식이 올바르지 않습니다.',
       );
     }
     try {
@@ -76,7 +76,7 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
     } on FormatException {
       throw const CatalogFavoriteRemoteException(
         type: CatalogFavoriteRemoteErrorType.malformedResponse,
-        message: '즐겨찾기 목록 항목을 해석할 수 없습니다.',
+        message: '유명천체 목록 항목을 해석할 수 없습니다.',
       );
     }
   }
@@ -104,7 +104,7 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
     if (!settings.enabled || baseUrl == null) {
       throw const CatalogFavoriteRemoteException(
         type: CatalogFavoriteRemoteErrorType.notConfigured,
-        message: '즐겨찾기를 변경하려면 NAS 서버 연결이 필요합니다.',
+        message: '유명천체를 변경하려면 NAS 서버 연결이 필요합니다.',
       );
     }
     return Uri.parse('$baseUrl$endpoint');
@@ -119,8 +119,10 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
       final request = http.Request(method, uri)
         ..headers.addAll(await _authHeaders.build(json: body != null));
       if (body != null) request.body = jsonEncode(body);
-      final streamed = await _client.send(request).timeout(timeout);
-      final response = await http.Response.fromStream(streamed);
+      final response = await _client
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw _httpError(response);
       }
@@ -130,7 +132,7 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
     } on TimeoutException {
       throw const CatalogFavoriteRemoteException(
         type: CatalogFavoriteRemoteErrorType.timeout,
-        message: 'NAS 서버의 즐겨찾기 응답 시간이 초과되었습니다.',
+        message: 'NAS 서버의 유명천체 응답 시간이 초과되었습니다.',
       );
     } on SocketException {
       throw const CatalogFavoriteRemoteException(
@@ -145,7 +147,7 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
     } on FormatException {
       throw const CatalogFavoriteRemoteException(
         type: CatalogFavoriteRemoteErrorType.malformedResponse,
-        message: '즐겨찾기 서버 응답을 해석할 수 없습니다.',
+        message: '유명천체 서버 응답을 해석할 수 없습니다.',
       );
     }
   }
@@ -154,7 +156,7 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
     if (body.trim().isEmpty) {
       throw const CatalogFavoriteRemoteException(
         type: CatalogFavoriteRemoteErrorType.malformedResponse,
-        message: '즐겨찾기 서버 응답이 비어 있습니다.',
+        message: '유명천체 서버 응답이 비어 있습니다.',
       );
     }
     try {
@@ -162,7 +164,7 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
     } on FormatException {
       throw const CatalogFavoriteRemoteException(
         type: CatalogFavoriteRemoteErrorType.malformedResponse,
-        message: '즐겨찾기 서버 응답이 올바른 JSON이 아닙니다.',
+        message: '유명천체 서버 응답이 올바른 JSON이 아닙니다.',
       );
     }
   }
@@ -183,8 +185,8 @@ class TcBackendCatalogFavoriteService implements CatalogFavoriteRemoteApi {
       type: type,
       message: switch (type) {
         CatalogFavoriteRemoteErrorType.unauthorized => 'NAS 서버 인증에 실패했습니다.',
-        CatalogFavoriteRemoteErrorType.server => 'NAS 서버에서 즐겨찾기를 처리하지 못했습니다.',
-        _ => '즐겨찾기 요청이 거부되었습니다. (HTTP ${response.statusCode})',
+        CatalogFavoriteRemoteErrorType.server => 'NAS 서버에서 유명천체를 처리하지 못했습니다.',
+        _ => '유명천체 요청이 거부되었습니다. (HTTP ${response.statusCode})',
       },
       statusCode: response.statusCode,
     );

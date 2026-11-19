@@ -2,20 +2,19 @@ import 'dart:async';
 
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
-import 'package:astro_journal/data/models/catalog_favorite.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
 import 'package:astro_journal/data/models/equipment.dart';
 import 'package:astro_journal/data/models/sky_map_render_object.dart';
-import 'package:astro_journal/data/datasources/catalog_favorite_cache_data_source.dart';
 import 'package:astro_journal/data/repositories/catalog_repository.dart';
 import 'package:astro_journal/data/repositories/equipment_repository.dart';
 import 'package:astro_journal/features/sky_map/viewmodel/sky_map_view_model.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_filter_sheet.dart';
 import 'package:astro_journal/features/sky_map/widgets/sky_map_object_detail_sheet.dart';
 import 'package:astro_journal/services/catalog_favorite_controller.dart';
-import 'package:astro_journal/services/tc_backend_catalog_favorite_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/fake_catalog_favorites.dart';
 
 void main() {
   late SkyMapViewModel viewModel;
@@ -179,7 +178,7 @@ void main() {
   });
 
   testWidgets(
-    'famous mode bypasses normal filters without reading user favorites',
+    'famous mode updates from shared server membership without changing normal filters',
     (tester) async {
       final repository = _CatalogRepository(const [
         ..._solarObjects,
@@ -188,8 +187,8 @@ void main() {
         _unapproved,
       ]);
       final favorites = CatalogFavoriteController(
-        remoteApi: _FavoriteRemote(const ['NGC40']),
-        cache: _FavoriteCache(),
+        remoteApi: FakeCatalogFavoritesRemote(['NGC2237', 'solar_6']),
+        cache: FakeCatalogFavoritesCache(),
         catalogRepository: repository,
       );
       final favoriteViewModel = SkyMapViewModel(
@@ -197,6 +196,7 @@ void main() {
         _EquipmentRepository(),
         null,
         () => DateTime.utc(2026, 1, 1),
+        favorites,
       );
       await favorites.initialize();
       await favoriteViewModel.load();
@@ -220,6 +220,10 @@ void main() {
       );
       expect(favoriteViewModel.searchResults('NGC 2237').map((r) => r.id), contains('NGC2237'));
       expect(favoriteViewModel.searchResults('NGC 40').map((r) => r.id), isNot(contains('NGC40')));
+      await favorites.toggle('NGC2237');
+      await favorites.toggle('NGC40');
+      expect(favoriteViewModel.visibleObjects.map((o) => o.catalogId), isNot(contains('NGC2237')));
+      expect(favoriteViewModel.visibleObjects.map((o) => o.catalogId), contains('NGC40'));
 
       final jupiter = favoriteViewModel.solarSystemPositionFor('solar_6')!;
       favoriteViewModel.focusOnSkyPosition(
@@ -249,7 +253,7 @@ void main() {
         favoriteViewModel.visibleObjects.map((object) => object.catalogId),
         isNot(contains('NGC2237')),
       );
-      expect(favorites.favoriteIds, {'NGC40'});
+      expect(favorites.favoriteIds, {'NGC40', 'solar_6'});
       favoriteViewModel.dispose();
       favorites.dispose();
       await tester.pump();
@@ -518,37 +522,4 @@ class _EquipmentRepository implements EquipmentRepository {
   Future<void> save(Equipment equipment) async {}
   @override
   Future<void> delete(String id) async {}
-}
-
-class _FavoriteRemote implements CatalogFavoriteRemoteApi {
-  const _FavoriteRemote(this.ids);
-
-  final List<String> ids;
-
-  @override
-  Future<List<CatalogFavorite>> list() async => ids
-      .map(
-        (id) => CatalogFavorite(
-          catalogObjectId: id,
-          createdAt: DateTime.utc(2026, 1, 1),
-          updatedAt: DateTime.utc(2026, 1, 1),
-        ),
-      )
-      .toList(growable: false);
-
-  @override
-  Future<CatalogFavorite> add(String catalogObjectId) =>
-      throw UnimplementedError();
-
-  @override
-  Future<CatalogFavoriteDeleteResult> remove(String catalogObjectId) =>
-      throw UnimplementedError();
-}
-
-class _FavoriteCache implements CatalogFavoriteCacheDataSource {
-  @override
-  Future<List<CatalogFavorite>> read() async => const [];
-
-  @override
-  Future<void> write(List<CatalogFavorite> favorites) async {}
 }

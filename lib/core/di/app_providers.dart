@@ -450,6 +450,15 @@ class AppProviders {
       galleryShootingRecordRepository,
     );
 
+    final catalogFavorites = CatalogFavoriteController(
+      remoteApi: TcBackendCatalogFavoriteService(
+        settingsService: tcBackendSettingsService,
+        authHeaders: tcBackendAuthHeaders,
+      ),
+      cache: CatalogFavoriteCacheLocalDataSource(galleryCache),
+      catalogRepository: catalogRepository,
+    );
+
     // Home/Catalog/Gallery/Stats 등은 AppStartupViewModel이 순차 preload한다.
     // 탭 첫 진입 시 MainShell._ensureTabLoaded는 hasLoaded면 재로드하지 않는다.
     final catalogViewModel = CatalogViewModel(
@@ -458,6 +467,7 @@ class AppProviders {
       equipmentRepository,
       equipmentRecommendationService,
       captureProjection: catalogCaptureProjection,
+      catalogFavorites: catalogFavorites,
     );
 
     galleryViewModel = GalleryViewModel(
@@ -535,6 +545,8 @@ class AppProviders {
       catalogRepository,
       equipmentRepository,
       activeObservationSiteViewModel,
+      null,
+      catalogFavorites,
     );
 
     final appNavigationNotifier = AppNavigationNotifier();
@@ -549,14 +561,7 @@ class AppProviders {
       Provider<AstronomyEventRepository>.value(value: astronomyEventRepository),
       Provider<CatalogRepository>.value(value: catalogRepository),
       ChangeNotifierProvider<CatalogFavoriteController>(
-        create: (_) => CatalogFavoriteController(
-          remoteApi: TcBackendCatalogFavoriteService(
-            settingsService: tcBackendSettingsService,
-            authHeaders: tcBackendAuthHeaders,
-          ),
-          cache: CatalogFavoriteCacheLocalDataSource(galleryCache),
-          catalogRepository: catalogRepository,
-        ),
+        create: (_) => catalogFavorites,
       ),
       Provider<EquipmentRepository>.value(value: equipmentRepository),
       Provider<ShootingRecordRepository>.value(value: shootingRecordRepository),

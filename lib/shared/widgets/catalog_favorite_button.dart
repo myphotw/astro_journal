@@ -24,11 +24,12 @@ class CatalogFavoriteButton extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final favorite = controller.isFavorite(catalogObjectId);
-    final pending = controller.isPending(catalogObjectId);
+    final pending =
+        !controller.initialized || controller.isPending(catalogObjectId);
     final pc = PcDesign.isActive(context);
     return IconButton(
       key: ValueKey('catalog-favorite-$catalogObjectId'),
-      tooltip: favorite ? '즐겨찾기 해제' : '즐겨찾기 등록',
+      tooltip: favorite ? '유명천체 해제' : '유명천체 등록',
       onPressed: pending
           ? null
           : () async {

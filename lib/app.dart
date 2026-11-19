@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'core/di/app_providers.dart';
 import 'core/theme/app_theme.dart';
+import 'data/models/tc_backend_models.dart';
 import 'features/catalog/viewmodel/catalog_view_model.dart';
 import 'features/gallery/viewmodel/gallery_view_model.dart';
 import 'features/home/viewmodel/home_view_model.dart';
@@ -19,6 +20,7 @@ import 'features/splash/viewmodel/app_startup_view_model.dart';
 import 'features/stats/viewmodel/stats_view_model.dart';
 import 'services/api_key_service.dart';
 import 'services/base_exposure_settings_service.dart';
+import 'services/catalog_favorite_controller.dart';
 import 'services/recommendation_settings_service.dart';
 import 'services/splash_image_service.dart';
 import 'services/tc_backend_startup_resume_service.dart';
@@ -51,12 +53,18 @@ class _BackendConnectionLifecycleState
     extends State<_BackendConnectionLifecycle>
     with WidgetsBindingObserver {
   late final TcBackendConnectionManager _connectionManager;
+  late final CatalogFavoriteController _catalogFavorites;
+  Timer? _favoritesRefreshTimer;
+  bool _foreground = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _connectionManager = context.read<TcBackendConnectionManager>();
+    _catalogFavorites = context.read<CatalogFavoriteController>();
+    unawaited(_catalogFavorites.restoreCache());
+    _connectionManager.addListener(_refreshFavoritesWhenConnected);
     _connectionManager.start();
   }
 
@@ -64,6 +72,7 @@ class _BackendConnectionLifecycleState
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
+        _foreground = true;
         _connectionManager.resume();
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           unawaited(_refreshGalleryAfterResume());
@@ -72,10 +81,30 @@ class _BackendConnectionLifecycleState
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
+        _foreground = false;
+        _favoritesRefreshTimer?.cancel();
+        _favoritesRefreshTimer = null;
         unawaited(_connectionManager.pause());
         break;
       case AppLifecycleState.inactive:
         break;
+    }
+  }
+
+  void _startFavoritesRefreshTimer() {
+    _favoritesRefreshTimer ??= Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _refreshFavoritesWhenConnected(),
+    );
+  }
+
+  void _refreshFavoritesWhenConnected() {
+    final status = _connectionManager.status;
+    if (_foreground &&
+        (status == TcBackendConnectionStatus.connected ||
+            status == TcBackendConnectionStatus.degraded)) {
+      _startFavoritesRefreshTimer();
+      unawaited(_catalogFavorites.initialize());
     }
   }
 
@@ -92,6 +121,8 @@ class _BackendConnectionLifecycleState
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _favoritesRefreshTimer?.cancel();
+    _connectionManager.removeListener(_refreshFavoritesWhenConnected);
     _connectionManager.dispose();
     super.dispose();
   }

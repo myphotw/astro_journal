@@ -1,16 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/catalog_favorite_button.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
-import '../../../services/catalog_favorite_controller.dart';
 import '../viewmodel/sky_map_view_model.dart';
 
 Future<void> showSkyMapObjectDetailSheet({
@@ -18,11 +14,6 @@ Future<void> showSkyMapObjectDetailSheet({
   required SkyMapViewModel viewModel,
   required CatalogObject object,
 }) {
-  // Only the separate favorite action in this sheet needs the user's data.
-  final favorites = context.read<CatalogFavoriteController?>();
-  if (favorites != null) {
-    unawaited(favorites.initialize().catchError((_) {}));
-  }
   final isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
   if (isWindows) {
     return showDialog<void>(

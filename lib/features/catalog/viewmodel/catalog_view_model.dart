@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/constants/catalog_kind_filter.dart';
 import '../../../core/constants/catalog_sort_order.dart';
 import '../../../core/constants/catalog_type.dart';
-import '../../../core/constants/famous_celestial_objects.dart';
+import '../../../core/constants/catalog_display_scope.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/shooting_record.dart';
@@ -14,6 +14,7 @@ import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/repositories/shooting_record_repository.dart';
 import '../../../services/catalog_object_sorter.dart';
 import '../../../services/catalog_capture_projection_service.dart';
+import '../../../services/catalog_favorite_controller.dart';
 import '../../../services/catalog_search_index.dart';
 import '../../../services/catalog_search_service.dart';
 import '../../../services/catalog_thumbnail_resolver.dart';
@@ -28,12 +29,14 @@ class CatalogViewModel extends ChangeNotifier {
     EquipmentRepository equipmentRepository,
     EquipmentRecommendationService equipmentRecommendationService, {
     CatalogCaptureProjectionService? captureProjection,
+    CatalogFavoriteController? catalogFavorites,
   }) => CatalogViewModel._(
     catalogRepository,
     shootingRecordRepository,
     equipmentRepository,
     equipmentRecommendationService,
     captureProjection,
+    catalogFavorites,
   );
 
   CatalogViewModel._(
@@ -42,8 +45,11 @@ class CatalogViewModel extends ChangeNotifier {
     this._equipmentRepository,
     this._equipmentRecommendationService,
     this._captureProjection,
+    this._catalogFavorites,
   ) {
     _captureProjection?.addListener(_onCaptureProjectionChanged);
+    _lastFavoriteIds = _catalogFavorites?.favoriteIds ?? const {};
+    _catalogFavorites?.addListener(_onFavoritesChanged);
   }
 
   final CatalogRepository _catalogRepository;
@@ -51,6 +57,8 @@ class CatalogViewModel extends ChangeNotifier {
   final EquipmentRepository _equipmentRepository;
   final EquipmentRecommendationService _equipmentRecommendationService;
   final CatalogCaptureProjectionService? _captureProjection;
+  final CatalogFavoriteController? _catalogFavorites;
+  late Set<String> _lastFavoriteIds;
 
   bool _isLoading = false;
   bool _hasLoaded = false;
@@ -84,6 +92,8 @@ class CatalogViewModel extends ChangeNotifier {
   CatalogKindFilter get kindFilter => _kindFilter;
   CatalogSortOrder get sortOrder => _sortOrder;
   CatalogDisplayScope get displayScope => _displayScope;
+  Set<String>? get allowedSearchIds =>
+      _displayScope == CatalogDisplayScope.famous ? _lastFavoriteIds : null;
 
   /// 탭/필터 없이 전체 목록 (검색용)
   List<CatalogObject> get allObjects => List.unmodifiable(_allObjects);
@@ -143,9 +153,19 @@ class CatalogViewModel extends ChangeNotifier {
     unawaited(load(silent: true));
   }
 
+  void _onFavoritesChanged() {
+    final ids = _catalogFavorites!.favoriteIds;
+    if (identical(ids, _lastFavoriteIds)) return;
+    _lastFavoriteIds = ids;
+    if (_displayScope != CatalogDisplayScope.famous) return;
+    _invalidateVisibleObjects();
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _captureProjection?.removeListener(_onCaptureProjectionChanged);
+    _catalogFavorites?.removeListener(_onFavoritesChanged);
     super.dispose();
   }
 
@@ -154,8 +174,9 @@ class CatalogViewModel extends ChangeNotifier {
       _visibleObjects ??= _computeVisibleObjects();
 
   List<CatalogObject> _computeVisibleObjects() {
+    final ids = allowedSearchIds;
     Iterable<CatalogObject> filtered = _allObjects.where(
-      (object) => object.isPrimaryCatalog && _displayScope.includes(object.id),
+      (object) => object.isPrimaryCatalog && (ids?.contains(object.id) ?? true),
     );
 
     if (_selectedTab != null) {

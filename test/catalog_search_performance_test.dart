@@ -1,5 +1,6 @@
 import 'package:astro_journal/core/constants/catalog_kind_filter.dart';
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/core/constants/catalog_display_scope.dart';
 import 'package:astro_journal/core/constants/object_type.dart';
 import 'package:astro_journal/data/datasources/catalog_local_datasource.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
@@ -188,6 +189,7 @@ void main() {
 
       final stopwatch = Stopwatch()..start();
       await viewModel.load();
+      viewModel.selectDisplayScope(CatalogDisplayScope.all);
       viewModel.selectTab(CatalogType.messier);
       viewModel.selectShootingFilter(ShootingFilter.captured);
       viewModel.selectKindFilter(CatalogKindFilter.nebula);

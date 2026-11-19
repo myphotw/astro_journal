@@ -9,7 +9,7 @@ import '../../../core/constants/catalog_kind_filter.dart';
 import '../../../core/constants/catalog_sort_order.dart';
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/data_source.dart';
-import '../../../core/constants/famous_celestial_objects.dart';
+import '../../../core/constants/catalog_display_scope.dart';
 import '../../../core/policies/catalog_deletion_policy.dart';
 import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
@@ -434,11 +434,11 @@ class _CatalogScreenState extends State<CatalogScreen>
           // State의 context(this.context)를 사용해야 한다.
           builder: (_, value, _) {
             return InlineCatalogSearchResults(
-              key: ValueKey(viewModel.displayScope),
+              key: ValueKey((viewModel.displayScope, viewModel.allowedSearchIds)),
               query: value.text,
               allObjects: viewModel.allObjects,
               searchIndex: viewModel.searchIndex,
-              allowedPrimaryIds: viewModel.displayScope.allowedIds,
+              allowedPrimaryIds: viewModel.allowedSearchIds,
               userPhotoFor: viewModel.userPhotoFor,
               onObjectSelected: (object) {
                 final resolved = viewModel.resolveForNavigation(object);

@@ -7,7 +7,6 @@ import 'package:flutter/scheduler.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/constellation_names.dart';
-import '../../../core/constants/famous_celestial_objects.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/fov_box.dart';
@@ -19,6 +18,7 @@ import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/sky_map/sky_map_constellation_catalog.dart';
 import '../../../data/sky_map/sky_map_star_names_ko.dart';
 import '../../../services/celestial_position_service.dart';
+import '../../../services/catalog_favorite_controller.dart';
 import '../../../services/equipment/fov_framing_engine.dart';
 import '../../../services/sky_map_angular_size.dart';
 import '../../../services/sky_map_horizontal_projection_service.dart';
@@ -172,8 +172,11 @@ class SkyMapViewModel extends ChangeNotifier {
     this._equipmentRepository, [
     this._activeObservationSiteViewModel,
     DateTime Function()? now,
+    this._catalogFavorites,
   ]) : _now = now ?? DateTime.now {
     _activeObservationSiteViewModel?.addListener(_handleObservationSiteChange);
+    _lastFavoriteIds = _catalogFavorites?.favoriteIds ?? const {};
+    _catalogFavorites?.addListener(_onFavoritesChanged);
     _observationTime = _roundedToMinute(_now());
     _observationDate = _nightTimelineService.observationDateFor(
       _observationTime,
@@ -184,6 +187,8 @@ class SkyMapViewModel extends ChangeNotifier {
   final CatalogRepository _catalogRepository;
   final EquipmentRepository _equipmentRepository;
   final ActiveObservationSiteViewModel? _activeObservationSiteViewModel;
+  final CatalogFavoriteController? _catalogFavorites;
+  late Set<String> _lastFavoriteIds;
   final DateTime Function() _now;
   final SkyMapMilkyWayService _milkyWayService = const SkyMapMilkyWayService();
   final SkyMapNightTimelineService _nightTimelineService =
@@ -212,6 +217,7 @@ class SkyMapViewModel extends ChangeNotifier {
   List<CatalogObject> _solarSystemObjects = [];
   List<CatalogObject> _constellationCatalogObjects = [];
   List<CatalogObject> _famousDeepSkyObjects = [];
+  Map<String, CatalogObject> _catalogById = const {};
   List<Equipment> _equipment = [];
   SkyMapFilters _filters = const SkyMapFilters();
   String _searchQuery = '';
@@ -309,6 +315,26 @@ class SkyMapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _onFavoritesChanged() {
+    final ids = _catalogFavorites!.favoriteIds;
+    if (identical(ids, _lastFavoriteIds)) return;
+    _lastFavoriteIds = ids;
+    _updateFamousObjects();
+    if (!_hasLoaded || !_filters.famousOnly) return;
+    _refreshCatalogHorizontalCoordinates();
+    _rebuildVisible();
+    notifyListeners();
+  }
+
+  void _updateFamousObjects() {
+    _famousDeepSkyObjects = [
+      for (final id in _lastFavoriteIds)
+        if (_catalogById[id] case final object?
+            when object.catalog != CatalogType.solar)
+          object,
+    ];
+  }
+
   void _startClock() {
     _clockTimer ??= Timer.periodic(const Duration(minutes: 1), (_) {
       if (!_isFollowingCurrentTime) return;
@@ -337,6 +363,7 @@ class SkyMapViewModel extends ChangeNotifier {
     _activeObservationSiteViewModel?.removeListener(
       _handleObservationSiteChange,
     );
+    _catalogFavorites?.removeListener(_onFavoritesChanged);
     super.dispose();
   }
 
@@ -494,15 +521,10 @@ class SkyMapViewModel extends ChangeNotifier {
                 SkyMapFilters.constellationQueryCatalogs.contains(o.catalog),
           )
           .toList(growable: false);
-      // The famous mode can show audited IDs from outside the normal catalog
+      // The famous mode can show registered IDs from outside the normal catalog
       // filters. Solar objects still use the existing dynamic ephemeris.
-      _famousDeepSkyObjects = all
-          .where(
-            (object) =>
-                object.catalog != CatalogType.solar &&
-                famousCelestialObjectIds.contains(object.id),
-          )
-          .toList(growable: false);
+      _catalogById = {for (final object in all) object.id: object};
+      _updateFamousObjects();
 
       _equipment = await _equipmentRepository.getAll(activeOnly: true);
       try {
@@ -685,7 +707,7 @@ class SkyMapViewModel extends ChangeNotifier {
     var changed = false;
     var famousOnly = _filters.famousOnly;
     final visibleThroughFamous =
-        famousOnly && famousCelestialObjectIds.contains(object.id);
+        famousOnly && _lastFavoriteIds.contains(object.id);
     if (famousOnly && !visibleThroughFamous) {
       famousOnly = false;
       changed = true;
@@ -889,7 +911,7 @@ class SkyMapViewModel extends ChangeNotifier {
     final results = <SkyMapSearchResult>[];
 
     for (final obj in _solarSystemObjects) {
-      if (_filters.famousOnly && !famousCelestialObjectIds.contains(obj.id)) {
+      if (_filters.famousOnly && !_lastFavoriteIds.contains(obj.id)) {
         continue;
       }
       final position = _solarSystemPositions[obj.id];
@@ -1204,7 +1226,7 @@ class SkyMapViewModel extends ChangeNotifier {
 
     if (_filters.showSolarSystem || _filters.famousOnly) {
       for (final obj in _solarSystemObjects) {
-        if (_filters.famousOnly && !famousCelestialObjectIds.contains(obj.id)) {
+        if (_filters.famousOnly && !_lastFavoriteIds.contains(obj.id)) {
           continue;
         }
         final position = _solarSystemPositions[obj.id];

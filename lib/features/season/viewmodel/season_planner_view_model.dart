@@ -2,13 +2,14 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/astro_season.dart';
 import '../../../core/constants/catalog_type.dart';
-import '../../../core/constants/famous_celestial_objects.dart';
+import '../../../core/constants/catalog_display_scope.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/season_planner_item.dart';
 import '../../../data/models/shooting_record.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/shooting_record_repository.dart';
 import '../../../services/season_planner_filter_service.dart';
+import '../../../services/catalog_favorite_controller.dart';
 import '../../../services/season_planner_service.dart';
 
 enum SeasonPlannerViewMode { bySeason, byMonth }
@@ -19,17 +20,24 @@ class SeasonPlannerViewModel extends ChangeNotifier {
     this._shootingRecordRepository,
     this._filterService, {
     SeasonPlannerService? seasonPlannerService,
+    CatalogFavoriteController? catalogFavorites,
     SeasonPlannerViewMode initialViewMode = SeasonPlannerViewMode.bySeason,
     int? initialMonth,
   }) : _seasonPlannerService =
            seasonPlannerService ?? const SeasonPlannerService(),
        _viewMode = initialViewMode,
-       _selectedMonth = initialMonth ?? DateTime.now().month;
+       _selectedMonth = initialMonth ?? DateTime.now().month,
+       _catalogFavorites = catalogFavorites {
+    _lastFavoriteIds = catalogFavorites?.favoriteIds ?? const {};
+    catalogFavorites?.addListener(_onFavoritesChanged);
+  }
 
   final CatalogRepository _catalogRepository;
   final ShootingRecordRepository _shootingRecordRepository;
   final SeasonPlannerFilterService _filterService;
   final SeasonPlannerService _seasonPlannerService;
+  final CatalogFavoriteController? _catalogFavorites;
+  late Set<String> _lastFavoriteIds;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -58,6 +66,21 @@ class SeasonPlannerViewModel extends ChangeNotifier {
 
   int get uncapturedCount => _items.where((i) => !i.object.captured).length;
   int get capturedCount => _items.length - uncapturedCount;
+
+  void _onFavoritesChanged() {
+    final ids = _catalogFavorites!.favoriteIds;
+    if (identical(ids, _lastFavoriteIds)) return;
+    _lastFavoriteIds = ids;
+    if (displayScope == CatalogDisplayScope.famous && !_isLoading) {
+      _rebuildItems(_loadedObjects);
+    }
+  }
+
+  @override
+  void dispose() {
+    _catalogFavorites?.removeListener(_onFavoritesChanged);
+    super.dispose();
+  }
 
   Future<void> load() async {
     _isLoading = true;
@@ -152,7 +175,7 @@ class SeasonPlannerViewModel extends ChangeNotifier {
 
   void _rebuildItems(List<CatalogObject> objects) {
     _loadedObjects = objects;
-    final ids = displayScope.allowedIds;
+    final ids = displayScope == CatalogDisplayScope.famous ? _lastFavoriteIds : null;
     _items = _seasonPlannerService.buildItems(
       objects: ids == null
           ? objects

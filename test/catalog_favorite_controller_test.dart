@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:astro_journal/core/constants/catalog_type.dart';
 import 'package:astro_journal/data/datasources/catalog_favorite_cache_data_source.dart';
 import 'package:astro_journal/data/datasources/gallery_cache_local_datasource.dart';
@@ -36,7 +38,7 @@ void main() {
     await controller.initialize();
 
     expect(controller.isFavorite('solar_6'), isTrue);
-    expect(controller.favoriteObjects.single.id, 'solar_6');
+    expect(controller.favoriteIds, {'solar_6'});
     expect(controller.lastSyncError, isNotNull);
   });
 
@@ -80,6 +82,31 @@ void main() {
 
     expect(windows.isFavorite('solar_6'), isTrue);
     expect(android.isFavorite('solar_6'), isTrue);
+    await android.toggle('solar_6');
+    await windows.refreshFromServer();
+    expect(android.favoriteIds, isEmpty);
+    expect(windows.favoriteIds, isEmpty);
+  });
+
+  test('refresh coalesces and queued clicks cannot double-toggle', () async {
+    final remote = _Remote();
+    final controller = CatalogFavoriteController(
+      remoteApi: remote,
+      cache: _Cache([]),
+      catalogRepository: _CatalogRepository([_jupiter]),
+    );
+    addTearDown(controller.dispose);
+    final listing = Completer<void>();
+    remote.listGate = listing;
+    final first = controller.refreshFromServer();
+    expect(identical(controller.refreshFromServer(), first), isTrue);
+    final change = controller.toggle('solar_6');
+    await controller.toggle('solar_6');
+    expect(remote.mutationCalls, 0);
+    listing.complete();
+    await Future.wait([first, change]);
+    expect(remote.mutationCalls, 1);
+    expect(controller.favoriteIds, {'solar_6'});
   });
 
   test('failed mutation preserves the previous state', () async {
@@ -120,6 +147,7 @@ void main() {
       cache: _Cache([]),
       catalogRepository: _CatalogRepository([_jupiter]),
     );
+    await controller.restoreCache();
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: controller,
@@ -137,11 +165,13 @@ void main() {
     );
 
     expect(find.byIcon(Icons.star_border_rounded), findsNWidgets(2));
+    expect(find.byTooltip('유명천체 등록'), findsNWidgets(2));
     await tester.tap(
       find.byKey(const ValueKey('catalog-favorite-solar_6')).first,
     );
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.star_rounded), findsNWidgets(2));
+    expect(find.byTooltip('유명천체 해제'), findsNWidgets(2));
   });
 }
 
@@ -197,9 +227,11 @@ class _Remote implements CatalogFavoriteRemoteApi {
   final bool failMutations;
   final Map<String, CatalogFavorite> values = {};
   int mutationCalls = 0;
+  Completer<void>? listGate;
 
   @override
   Future<List<CatalogFavorite>> list() async {
+    await listGate?.future;
     if (failList) throw _offline;
     return values.values.toList(growable: false);
   }

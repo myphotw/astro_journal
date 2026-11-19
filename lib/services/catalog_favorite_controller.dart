@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import '../data/datasources/catalog_favorite_cache_data_source.dart';
 import '../data/models/catalog_favorite.dart';
-import '../data/models/catalog_object.dart';
 import '../data/repositories/catalog_repository.dart';
 import 'tc_backend_catalog_favorite_service.dart';
 
@@ -35,18 +34,20 @@ class CatalogFavoriteController extends ChangeNotifier {
   final CatalogRepository _catalogRepository;
 
   final Map<String, CatalogFavorite> _favorites = {};
-  final Map<String, CatalogObject> _objects = {};
   final Set<String> _pendingIds = {};
+  Set<String> _favoriteIds = const {};
+  Future<void> _queue = Future.value();
+  Future<void>? _cacheFuture;
   Future<void>? _refreshFuture;
   bool _initialized = false;
   bool _refreshing = false;
+  bool _disposed = false;
   String? _lastSyncError;
 
   bool get initialized => _initialized;
   bool get refreshing => _refreshing;
   String? get lastSyncError => _lastSyncError;
-  Set<String> get favoriteIds => Set.unmodifiable(_favorites.keys.toSet());
-  List<CatalogObject> get favoriteObjects => List.unmodifiable(_objects.values);
+  Set<String> get favoriteIds => _favoriteIds;
 
   bool isFavorite(String catalogObjectId) =>
       _favorites.containsKey(catalogObjectId);
@@ -55,11 +56,6 @@ class CatalogFavoriteController extends ChangeNotifier {
       _pendingIds.contains(catalogObjectId);
 
   Future<void> initialize() async {
-    if (_initialized) return refreshFromServer();
-    final cached = await _cache.read();
-    await _replace(cached, persist: false);
-    _initialized = true;
-    notifyListeners();
     try {
       await refreshFromServer();
     } catch (_) {
@@ -67,79 +63,126 @@ class CatalogFavoriteController extends ChangeNotifier {
     }
   }
 
+  Future<void> restoreCache() => _cacheFuture ??= _restoreCache();
+
+  Future<void> _restoreCache() async {
+    try {
+      _replace(await _cache.read());
+    } catch (_) {
+      _lastSyncError = '저장된 유명천체 목록을 불러오지 못했습니다.';
+    } finally {
+      _initialized = true;
+      _notify();
+    }
+  }
+
   Future<void> refreshFromServer() {
     final active = _refreshFuture;
     if (active != null) return active;
-    final future = _refreshFromServer();
-    _refreshFuture = future;
-    return future.whenComplete(() => _refreshFuture = null);
+    return _refreshFuture = _serialize(_refreshFromServer).whenComplete(
+      () => _refreshFuture = null,
+    );
   }
 
   Future<void> _refreshFromServer() async {
+    await restoreCache();
     _refreshing = true;
-    notifyListeners();
+    _notify();
     try {
       final remote = await _remoteApi.list();
-      await _replace(remote, persist: true);
       _lastSyncError = null;
+      _replace(remote);
+      _notify();
+      await _saveCache();
     } catch (error) {
       _lastSyncError = _messageFor(error);
       rethrow;
     } finally {
       _refreshing = false;
-      notifyListeners();
+      _notify();
     }
   }
 
   Future<void> toggle(String catalogObjectId) async {
     if (_pendingIds.contains(catalogObjectId)) return;
-    final object = await _catalogRepository.getById(catalogObjectId);
-    if (object == null || object.isDeleted) {
-      throw const CatalogFavoriteActionException('카탈로그에서 해당 천체를 찾을 수 없습니다.');
-    }
-
     _pendingIds.add(catalogObjectId);
-    notifyListeners();
+    // Keep the action the user clicked even if a pending refresh changes
+    // the server snapshot before this mutation reaches the front of the queue.
+    final remove = isFavorite(catalogObjectId);
+    _notify();
     try {
-      if (isFavorite(catalogObjectId)) {
-        await _remoteApi.remove(catalogObjectId);
-        _favorites.remove(catalogObjectId);
-        _objects.remove(catalogObjectId);
-      } else {
-        final favorite = await _remoteApi.add(catalogObjectId);
-        _favorites[catalogObjectId] = favorite;
-        _objects[catalogObjectId] = object;
-      }
-      await _cache.write(_orderedFavorites());
-      _lastSyncError = null;
+      await _serialize(() async {
+        await restoreCache();
+        final object = await _catalogRepository.getById(catalogObjectId);
+        if (object == null || object.isDeleted || object.id != catalogObjectId) {
+          throw const CatalogFavoriteActionException('카탈로그에서 해당 천체를 찾을 수 없습니다.');
+        }
+        if (remove) {
+          final result = await _remoteApi.remove(catalogObjectId);
+          if (result.catalogObjectId != catalogObjectId) {
+            throw const FormatException('Mismatched favorite ID.');
+          }
+          _favorites.remove(catalogObjectId);
+        } else {
+          final favorite = await _remoteApi.add(catalogObjectId);
+          if (favorite.catalogObjectId != catalogObjectId) {
+            throw const FormatException('Mismatched favorite ID.');
+          }
+          _favorites[catalogObjectId] = favorite;
+        }
+        _lastSyncError = null;
+        _updateIds();
+        _notify();
+        await _saveCache();
+      });
     } catch (error) {
       _lastSyncError = _messageFor(error);
       throw CatalogFavoriteActionException(_lastSyncError!);
     } finally {
       _pendingIds.remove(catalogObjectId);
-      notifyListeners();
+      _notify();
     }
   }
 
-  Future<void> _replace(
-    List<CatalogFavorite> values, {
-    required bool persist,
-  }) async {
-    final nextFavorites = {
-      for (final favorite in values) favorite.catalogObjectId: favorite,
-    };
-    final nextObjects = <String, CatalogObject>{};
-    for (final id in nextFavorites.keys) {
-      final object = await _catalogRepository.getById(id);
-      if (object != null && !object.isDeleted) nextObjects[id] = object;
-    }
+  void _replace(List<CatalogFavorite> values) {
     _favorites
       ..clear()
-      ..addAll(nextFavorites);
-    _objects
-      ..clear()
-      ..addAll(nextObjects);
-    if (persist) await _cache.write(_orderedFavorites());
+      ..addEntries(values.map((value) => MapEntry(value.catalogObjectId, value)));
+    _updateIds();
+  }
+
+  void _updateIds() {
+    if (_favoriteIds.length != _favorites.length ||
+        !_favoriteIds.every(_favorites.containsKey)) {
+      _favoriteIds = Set.unmodifiable(_favorites.keys);
+    }
+  }
+
+  Future<void> _serialize(Future<void> Function() action) {
+    final run = _queue.then((_) async {
+      if (!_disposed) await action();
+    });
+    _queue = run.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return run;
+  }
+
+  Future<void> _saveCache() async {
+    try {
+      await _cache.write(_orderedFavorites());
+    } catch (_) {
+      // The server already accepted the change. Do not roll back its UI state.
+      _lastSyncError = '유명천체 목록을 기기에 저장하지 못했습니다.';
+    }
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   List<CatalogFavorite> _orderedFavorites() {
@@ -156,6 +199,6 @@ class CatalogFavoriteController extends ChangeNotifier {
   static String _messageFor(Object error) {
     if (error is CatalogFavoriteRemoteException) return error.message;
     if (error is CatalogFavoriteActionException) return error.message;
-    return '즐겨찾기를 동기화하지 못했습니다.';
+    return '유명천체를 동기화하지 못했습니다.';
   }
 }

@@ -25,6 +25,7 @@ import '../../../services/target_imaging_availability_service.dart';
 import '../../../services/season_planner_filter_service.dart';
 import '../../../services/season_planner_service.dart';
 import '../../../services/catalog_capture_projection_service.dart';
+import '../../../services/catalog_favorite_controller.dart';
 import '../../../shared/widgets/catalog_display_scope_selector.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
 import '../../../shared/widgets/mobile_content_layout.dart';
@@ -53,6 +54,7 @@ class SeasonPlannerScreen extends StatelessWidget {
     final catalogRepo = context.read<CatalogRepository>();
     final shootingRepo = context.read<GalleryShootingRecordRepositoryAdapter>();
     final filterService = context.read<SeasonPlannerFilterService>();
+    final catalogFavorites = context.read<CatalogFavoriteController?>();
 
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -61,6 +63,7 @@ class SeasonPlannerScreen extends StatelessWidget {
             catalogRepo,
             shootingRepo,
             filterService,
+            catalogFavorites: catalogFavorites,
             initialViewMode: initialViewMode,
             initialMonth: initialMonth,
           )..load(),
