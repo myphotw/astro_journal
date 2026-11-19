@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/constellation_names.dart';
+import '../../../core/constants/famous_celestial_objects.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/equipment.dart';
 import '../../../data/models/fov_box.dart';
@@ -18,7 +19,6 @@ import '../../../data/repositories/equipment_repository.dart';
 import '../../../data/sky_map/sky_map_constellation_catalog.dart';
 import '../../../data/sky_map/sky_map_star_names_ko.dart';
 import '../../../services/celestial_position_service.dart';
-import '../../../services/catalog_favorite_controller.dart';
 import '../../../services/equipment/fov_framing_engine.dart';
 import '../../../services/sky_map_angular_size.dart';
 import '../../../services/sky_map_horizontal_projection_service.dart';
@@ -82,7 +82,7 @@ class SkyMapFilters {
     this.showMilkyWay = true,
     this.showSolarSystem = true,
     this.showObservationSiteHorizon = true,
-    this.favoritesOnly = false,
+    this.famousOnly = false,
   });
 
   final Set<CatalogType> catalogs;
@@ -92,7 +92,7 @@ class SkyMapFilters {
   final bool showMilkyWay;
   final bool showSolarSystem;
   final bool showObservationSiteHorizon;
-  final bool favoritesOnly;
+  final bool famousOnly;
 
   static const supportedCatalogs = <CatalogType>[
     CatalogType.messier,
@@ -138,7 +138,7 @@ class SkyMapFilters {
     bool? showMilkyWay,
     bool? showSolarSystem,
     bool? showObservationSiteHorizon,
-    bool? favoritesOnly,
+    bool? famousOnly,
   }) {
     return SkyMapFilters(
       catalogs: catalogs ?? this.catalogs,
@@ -149,7 +149,7 @@ class SkyMapFilters {
       showSolarSystem: showSolarSystem ?? this.showSolarSystem,
       showObservationSiteHorizon:
           showObservationSiteHorizon ?? this.showObservationSiteHorizon,
-      favoritesOnly: favoritesOnly ?? this.favoritesOnly,
+      famousOnly: famousOnly ?? this.famousOnly,
     );
   }
 }
@@ -184,7 +184,6 @@ class SkyMapViewModel extends ChangeNotifier {
   final CatalogRepository _catalogRepository;
   final EquipmentRepository _equipmentRepository;
   final ActiveObservationSiteViewModel? _activeObservationSiteViewModel;
-  CatalogFavoriteController? _catalogFavorites;
   final DateTime Function() _now;
   final SkyMapMilkyWayService _milkyWayService = const SkyMapMilkyWayService();
   final SkyMapNightTimelineService _nightTimelineService =
@@ -212,7 +211,7 @@ class SkyMapViewModel extends ChangeNotifier {
   List<CatalogObject> _deepSkyObjects = [];
   List<CatalogObject> _solarSystemObjects = [];
   List<CatalogObject> _constellationCatalogObjects = [];
-  List<CatalogObject> _favoriteObjects = [];
+  List<CatalogObject> _famousDeepSkyObjects = [];
   List<Equipment> _equipment = [];
   SkyMapFilters _filters = const SkyMapFilters();
   String _searchQuery = '';
@@ -278,8 +277,6 @@ class SkyMapViewModel extends ChangeNotifier {
       List.unmodifiable(_visibleConstellations);
   List<CatalogObject> get solarSystemObjects =>
       List.unmodifiable(_solarSystemObjects);
-  List<CatalogObject> get favoriteObjects =>
-      List.unmodifiable(_favoriteObjects);
   Map<String, SolarSystemPosition> get solarSystemPositions =>
       Map.unmodifiable(_solarSystemPositions);
   SolarSystemPosition? solarSystemPositionFor(String catalogId) =>
@@ -312,29 +309,6 @@ class SkyMapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void attachCatalogFavorites(CatalogFavoriteController controller) {
-    if (identical(_catalogFavorites, controller)) return;
-    _catalogFavorites?.removeListener(_handleCatalogFavoritesChange);
-    _catalogFavorites = controller;
-    _favoriteObjects = controller.favoriteObjects;
-    controller.addListener(_handleCatalogFavoritesChange);
-    if (_hasLoaded) {
-      _refreshCatalogHorizontalCoordinates();
-      _rebuildVisible();
-      notifyListeners();
-    }
-  }
-
-  void _handleCatalogFavoritesChange() {
-    final controller = _catalogFavorites;
-    if (controller == null) return;
-    _favoriteObjects = controller.favoriteObjects;
-    if (!_hasLoaded) return;
-    _refreshCatalogHorizontalCoordinates();
-    _rebuildVisible();
-    notifyListeners();
-  }
-
   void _startClock() {
     _clockTimer ??= Timer.periodic(const Duration(minutes: 1), (_) {
       if (!_isFollowingCurrentTime) return;
@@ -363,7 +337,6 @@ class SkyMapViewModel extends ChangeNotifier {
     _activeObservationSiteViewModel?.removeListener(
       _handleObservationSiteChange,
     );
-    _catalogFavorites?.removeListener(_handleCatalogFavoritesChange);
     super.dispose();
   }
 
@@ -521,7 +494,15 @@ class SkyMapViewModel extends ChangeNotifier {
                 SkyMapFilters.constellationQueryCatalogs.contains(o.catalog),
           )
           .toList(growable: false);
-      _favoriteObjects = _catalogFavorites?.favoriteObjects ?? const [];
+      // The famous mode can show audited IDs from outside the normal catalog
+      // filters. Solar objects still use the existing dynamic ephemeris.
+      _famousDeepSkyObjects = all
+          .where(
+            (object) =>
+                object.catalog != CatalogType.solar &&
+                famousCelestialObjectIds.contains(object.id),
+          )
+          .toList(growable: false);
 
       _equipment = await _equipmentRepository.getAll(activeOnly: true);
       try {
@@ -555,9 +536,9 @@ class SkyMapViewModel extends ChangeNotifier {
   }
 
   void setFilters(SkyMapFilters filters) {
-    final favoriteModeChanged = _filters.favoritesOnly != filters.favoritesOnly;
+    final famousModeChanged = _filters.famousOnly != filters.famousOnly;
     _filters = filters;
-    if (favoriteModeChanged) _refreshCatalogHorizontalCoordinates();
+    if (famousModeChanged) _refreshCatalogHorizontalCoordinates();
     _rebuildVisible();
     notifyListeners();
   }
@@ -607,8 +588,8 @@ class SkyMapViewModel extends ChangeNotifier {
     setFilters(_filters.copyWith(showObservationSiteHorizon: value));
   }
 
-  void setFavoritesOnly(bool value) {
-    setFilters(_filters.copyWith(favoritesOnly: value));
+  void setFamousOnly(bool value) {
+    setFilters(_filters.copyWith(famousOnly: value));
   }
 
   void setSearchQuery(String query) {
@@ -702,22 +683,22 @@ class SkyMapViewModel extends ChangeNotifier {
 
   void _ensureObjectVisibleInFilters(CatalogObject object) {
     var changed = false;
-    var favoritesOnly = _filters.favoritesOnly;
-    final visibleThroughFavorites =
-        favoritesOnly && (_catalogFavorites?.isFavorite(object.id) ?? false);
-    if (favoritesOnly && !visibleThroughFavorites) {
-      favoritesOnly = false;
+    var famousOnly = _filters.famousOnly;
+    final visibleThroughFamous =
+        famousOnly && famousCelestialObjectIds.contains(object.id);
+    if (famousOnly && !visibleThroughFamous) {
+      famousOnly = false;
       changed = true;
     }
     var showSolarSystem = _filters.showSolarSystem;
-    if (!visibleThroughFavorites &&
+    if (!visibleThroughFamous &&
         object.catalog == CatalogType.solar &&
         !showSolarSystem) {
       showSolarSystem = true;
       changed = true;
     }
     final catalogs = Set<CatalogType>.from(_filters.catalogs);
-    if (!visibleThroughFavorites &&
+    if (!visibleThroughFamous &&
         SkyMapFilters.supportedCatalogs.contains(object.catalog) &&
         !catalogs.contains(object.catalog)) {
       catalogs.add(object.catalog);
@@ -728,7 +709,7 @@ class SkyMapViewModel extends ChangeNotifier {
     final needed = SkyMapObjectTypeFilter.forObjectType(
       object.resolvedObjectType,
     );
-    if (!visibleThroughFavorites &&
+    if (!visibleThroughFamous &&
         needed != null &&
         !objectTypes.contains(needed)) {
       objectTypes.add(needed);
@@ -740,7 +721,7 @@ class SkyMapViewModel extends ChangeNotifier {
         catalogs: catalogs,
         objectTypes: objectTypes,
         showSolarSystem: showSolarSystem,
-        favoritesOnly: favoritesOnly,
+        famousOnly: famousOnly,
       );
     }
   }
@@ -908,6 +889,9 @@ class SkyMapViewModel extends ChangeNotifier {
     final results = <SkyMapSearchResult>[];
 
     for (final obj in _solarSystemObjects) {
+      if (_filters.famousOnly && !famousCelestialObjectIds.contains(obj.id)) {
+        continue;
+      }
       final position = _solarSystemPositions[obj.id];
       if (position == null) continue;
       final hay = <String>[
@@ -976,8 +960,7 @@ class SkyMapViewModel extends ChangeNotifier {
       if (results.length >= 40) return results;
     }
 
-    for (final obj in _deepSkyObjects) {
-      if (!_filters.matches(obj)) continue;
+    for (final obj in _activeDeepSkyObjects) {
       final hay = '${obj.displayName} ${obj.displayCommonName} ${obj.name}'
           .toLowerCase();
       if (!hay.contains(q)) continue;
@@ -1103,14 +1086,13 @@ class SkyMapViewModel extends ChangeNotifier {
     }
   }
 
+  Iterable<CatalogObject> get _activeDeepSkyObjects => _filters.famousOnly
+      ? _famousDeepSkyObjects
+      : _deepSkyObjects.where(_filters.matches);
+
   void _refreshCatalogHorizontalCoordinates() {
     _catalogAltAz.clear();
-    final objects = _filters.favoritesOnly
-        ? _favoriteObjects.where(
-            (object) => object.catalog != CatalogType.solar,
-          )
-        : _deepSkyObjects.where(_filters.matches);
-    for (final object in objects) {
+    for (final object in _activeDeepSkyObjects) {
       final altAz = _altAzForObject(object);
       if (altAz != null) _catalogAltAz[object.id] = altAz;
     }
@@ -1146,12 +1128,7 @@ class SkyMapViewModel extends ChangeNotifier {
     const margin = 80.0;
     final result = <SkyMapRenderObject>[];
 
-    final deepSkyCandidates = _filters.favoritesOnly
-        ? _favoriteObjects.where(
-            (object) => object.catalog != CatalogType.solar,
-          )
-        : _deepSkyObjects.where(_filters.matches);
-    for (final obj in deepSkyCandidates) {
+    for (final obj in _activeDeepSkyObjects) {
       if (query.isNotEmpty) {
         final hay = '${obj.displayName} ${obj.displayCommonName} ${obj.name}'
             .toLowerCase();
@@ -1225,10 +1202,11 @@ class SkyMapViewModel extends ChangeNotifier {
       );
     }
 
-    final favoriteIds = _catalogFavorites?.favoriteIds ?? const <String>{};
-    if (_filters.showSolarSystem || _filters.favoritesOnly) {
+    if (_filters.showSolarSystem || _filters.famousOnly) {
       for (final obj in _solarSystemObjects) {
-        if (_filters.favoritesOnly && !favoriteIds.contains(obj.id)) continue;
+        if (_filters.famousOnly && !famousCelestialObjectIds.contains(obj.id)) {
+          continue;
+        }
         final position = _solarSystemPositions[obj.id];
         if (position == null) continue;
         if (query.isNotEmpty) {

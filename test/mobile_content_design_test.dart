@@ -1,6 +1,7 @@
 import 'package:astro_journal/core/constants/catalog_kind_filter.dart';
 import 'package:astro_journal/core/constants/catalog_sort_order.dart';
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/core/constants/famous_celestial_objects.dart';
 import 'package:astro_journal/core/constants/gallery_object_category.dart';
 import 'package:astro_journal/core/navigation/app_navigation_notifier.dart';
 import 'package:astro_journal/core/theme/app_theme.dart';
@@ -40,9 +41,23 @@ const _target = CatalogObject(
   magnitude: '-',
 );
 
+const _famous = CatalogObject(
+  id: 'M31',
+  number: 31,
+  catalog: CatalogType.messier,
+  name: '안드로메다 은하',
+  type: '은하',
+  constellation: '-',
+  ra: '00h',
+  dec: '+41°',
+  magnitude: '-',
+);
+
 class _Catalog extends Fake implements CatalogRepository {
   @override
-  Future<List<CatalogObject>> getAll({bool listOnly = true}) async => [_target];
+  Future<List<CatalogObject>> getAll({bool listOnly = true}) async => [
+    _famous, _target,
+  ];
 }
 
 class _Records extends Fake implements ShootingRecordRepository {
@@ -118,6 +133,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(_grid(tester).crossAxisCount, 1);
+    expect(vm.objects.map((object) => object.id), ['M31']);
     expect(
       Theme.of(tester.element(find.byType(CatalogObjectCard))).cardTheme.color,
       PcDesign.card,
@@ -127,6 +143,12 @@ void main() {
       tester.getTopLeft(_chip('전체')).dy,
       lessThan(tester.getTopLeft(_chip('기타')).dy),
     );
+    await tester.tap(find.text('전체보기'));
+    await tester.pumpAndSettle();
+    expect(vm.displayScope, CatalogDisplayScope.all);
+    expect(vm.objects.map((object) => object.id), unorderedEquals(['M31', 'NGC9999']));
+    await tester.tap(find.text('유명천체'));
+    await tester.pumpAndSettle();
     await tester.tap(_chip('은하'));
     await tester.pumpAndSettle();
     expect(vm.kindFilter, CatalogKindFilter.galaxy);
@@ -164,6 +186,9 @@ void main() {
     await tester.enterText(find.byType(TextField), 'NGC9999');
     await tester.pumpAndSettle();
     final results = find.byType(InlineCatalogSearchResults);
+    expect(find.text('검색 결과가 없습니다.'), findsOneWidget);
+    await tester.tap(find.text('전체보기'));
+    await tester.pumpAndSettle();
     expect(
       find.descendant(of: results, matching: find.byType(ListTile)),
       findsOneWidget,
@@ -295,9 +320,16 @@ void main() {
       expect(find.byType(MobileContentLayout), findsNothing);
       expect(_grid(tester).crossAxisCount, 8);
       expect(_grid(tester).crossAxisSpacing, 12);
+      expect(vm.objects.map((object) => object.id), ['M31']);
       expect(
         PcDesign.isActive(tester.element(find.byType(CatalogObjectCard))),
         isTrue,
+      );
+      await tester.tap(find.text('전체보기'));
+      await tester.pumpAndSettle();
+      expect(
+        vm.objects.map((object) => object.id),
+        unorderedEquals(['M31', 'NGC9999']),
       );
 
       await tester.pumpWidget(
@@ -406,6 +438,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(_grid(tester).crossAxisCount, 1);
+    await tester.ensureVisible(find.text('전체보기'));
+    await tester.tap(find.text('전체보기'));
+    await tester.pumpAndSettle();
+    expect(planner.displayScope, CatalogDisplayScope.all);
     await tester.ensureVisible(_chip('미촬영만'));
     await tester.tap(_chip('미촬영만'));
     await tester.pumpAndSettle();

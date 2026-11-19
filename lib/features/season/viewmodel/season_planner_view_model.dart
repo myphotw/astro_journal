@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/astro_season.dart';
 import '../../../core/constants/catalog_type.dart';
+import '../../../core/constants/famous_celestial_objects.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/season_planner_item.dart';
 import '../../../data/models/shooting_record.dart';
@@ -33,6 +34,7 @@ class SeasonPlannerViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   List<SeasonPlannerItem> _items = const [];
+  List<CatalogObject> _loadedObjects = const [];
   final Map<String, String> _thumbnailMap = {};
 
   SeasonPlannerViewMode _viewMode;
@@ -40,11 +42,14 @@ class SeasonPlannerViewModel extends ChangeNotifier {
   int _selectedMonth;
   bool _uncapturedOnly = false;
   Set<CatalogType> _catalogFilters = {};
+  final Map<SeasonPlannerViewMode, CatalogDisplayScope> _displayScopes = {};
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   List<SeasonPlannerItem> get items => List.unmodifiable(_items);
   SeasonPlannerViewMode get viewMode => _viewMode;
+  CatalogDisplayScope get displayScope =>
+      _displayScopes[_viewMode] ?? CatalogDisplayScope.famous;
   AstroSeason get selectedSeason => _selectedSeason;
   int get selectedMonth => _selectedMonth;
   bool get uncapturedOnly => _uncapturedOnly;
@@ -77,6 +82,12 @@ class SeasonPlannerViewModel extends ChangeNotifier {
     if (_viewMode == mode) return;
     _viewMode = mode;
     _refreshItems();
+  }
+
+  void selectDisplayScope(CatalogDisplayScope scope) {
+    if (displayScope == scope) return;
+    _displayScopes[_viewMode] = scope;
+    _rebuildItems(_loadedObjects);
   }
 
   void selectSeason(AstroSeason season) {
@@ -140,8 +151,12 @@ class SeasonPlannerViewModel extends ChangeNotifier {
   }
 
   void _rebuildItems(List<CatalogObject> objects) {
+    _loadedObjects = objects;
+    final ids = displayScope.allowedIds;
     _items = _seasonPlannerService.buildItems(
-      objects: objects,
+      objects: ids == null
+          ? objects
+          : objects.where((object) => ids.contains(object.id)).toList(),
       month: _selectedMonth,
       season: _viewMode == SeasonPlannerViewMode.bySeason
           ? _selectedSeason

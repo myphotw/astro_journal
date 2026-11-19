@@ -167,23 +167,28 @@ void main() {
     );
     expect(switchFinder, findsOneWidget);
     expect(find.text('태양계'), findsOneWidget);
-    expect(find.byKey(const ValueKey('sky-map-favorite-mode')), findsOneWidget);
-    expect(find.text('즐겨찾기만'), findsOneWidget);
+    expect(find.byKey(const ValueKey('sky-map-famous-mode')), findsOneWidget);
+    expect(find.text('유명천체'), findsOneWidget);
+    expect(find.text('즐겨찾기만'), findsNothing);
+    await tester.tap(find.text('유명천체'));
+    await tester.pumpAndSettle();
+    expect(viewModel.filters.famousOnly, isTrue);
     await tester.tap(switchFinder);
     await tester.pump();
     expect(viewModel.filters.showSolarSystem, isFalse);
   });
 
   testWidgets(
-    'favorites mode bypasses catalog filters without changing normal mode',
+    'famous mode bypasses normal filters without reading user favorites',
     (tester) async {
       final repository = _CatalogRepository(const [
         ..._solarObjects,
         _pluto,
         _ngc2237,
+        _unapproved,
       ]);
       final favorites = CatalogFavoriteController(
-        remoteApi: _FavoriteRemote(const ['NGC2237', 'solar_6']),
+        remoteApi: _FavoriteRemote(const ['NGC40']),
         cache: _FavoriteCache(),
         catalogRepository: repository,
       );
@@ -193,7 +198,6 @@ void main() {
         null,
         () => DateTime.utc(2026, 1, 1),
       );
-      favoriteViewModel.attachCatalogFavorites(favorites);
       await favorites.initialize();
       await favoriteViewModel.load();
       favoriteViewModel.updateCanvasSize(const Size(900, 700));
@@ -204,12 +208,18 @@ void main() {
         ),
       );
 
-      favoriteViewModel.setFavoritesOnly(true);
+      favoriteViewModel.setFamousOnly(true);
       favoriteViewModel.focusOnSkyPosition(raDeg: 97.5, decDeg: 5.0);
       expect(
         favoriteViewModel.visibleObjects.map((object) => object.catalogId),
         contains('NGC2237'),
       );
+      expect(
+        favoriteViewModel.visibleObjects.map((object) => object.catalogId),
+        isNot(contains('NGC40')),
+      );
+      expect(favoriteViewModel.searchResults('NGC 2237').map((r) => r.id), contains('NGC2237'));
+      expect(favoriteViewModel.searchResults('NGC 40').map((r) => r.id), isNot(contains('NGC40')));
 
       final jupiter = favoriteViewModel.solarSystemPositionFor('solar_6')!;
       favoriteViewModel.focusOnSkyPosition(
@@ -228,10 +238,10 @@ void main() {
           (object) => object.id == 'solar_6',
         ),
       );
-      expect(favoriteViewModel.filters.favoritesOnly, isTrue);
+      expect(favoriteViewModel.filters.famousOnly, isTrue);
       expect(favoriteViewModel.filters.showSolarSystem, isFalse);
 
-      favoriteViewModel.setFavoritesOnly(false);
+      favoriteViewModel.setFamousOnly(false);
       expect(favoriteViewModel.filters.catalogs, {CatalogType.messier});
       expect(favoriteViewModel.filters.showSolarSystem, isFalse);
       favoriteViewModel.focusOnSkyPosition(raDeg: 97.5, decDeg: 5.0);
@@ -239,6 +249,7 @@ void main() {
         favoriteViewModel.visibleObjects.map((object) => object.catalogId),
         isNot(contains('NGC2237')),
       );
+      expect(favorites.favoriteIds, {'NGC40'});
       favoriteViewModel.dispose();
       favorites.dispose();
       await tester.pump();
@@ -437,6 +448,18 @@ const _ngc2237 = CatalogObject(
   constellation: 'Mon',
   ra: '06h 30m 00s',
   dec: '+05° 00′ 00″',
+  magnitude: '9.0',
+);
+
+const _unapproved = CatalogObject(
+  id: 'NGC40',
+  number: 40,
+  catalog: CatalogType.ngc,
+  name: 'NGC 40',
+  type: '성운',
+  constellation: '-',
+  ra: '06h 30m',
+  dec: '+05°',
   magnitude: '9.0',
 );
 

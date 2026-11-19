@@ -61,7 +61,11 @@ class CatalogSearchIndex {
 
   int get length => _entries.length;
 
-  List<CatalogObject> search(String query, {int limit = 50}) {
+  List<CatalogObject> search(
+    String query, {
+    int limit = 50,
+    Set<String>? allowedPrimaryIds,
+  }) {
     final trimmed = query.trim();
     if (trimmed.isEmpty || limit <= 0) {
       return const [];
@@ -73,18 +77,25 @@ class CatalogSearchIndex {
     if (_isCatalogDesignationQuery(normalizedQuery)) {
       final exact = _designationLookup[normalizedQuery];
       if (exact != null) {
-        return [exact];
+        return _isAllowed(exact, allowedPrimaryIds) ? [exact] : const [];
       }
     }
 
     final top = _TopKScored(limit);
     for (final entry in _entries) {
+      if (!_isAllowed(entry.object, allowedPrimaryIds)) continue;
       final score = entry.score(lowerQuery, normalizedQuery);
       if (score > 0) {
         top.add(entry.object, score);
       }
     }
     return top.toObjects();
+  }
+
+  static bool _isAllowed(CatalogObject object, Set<String>? allowedPrimaryIds) {
+    if (allowedPrimaryIds == null) return true;
+    final id = object.isPrimaryCatalog ? object.id : object.effectivePrimaryId;
+    return allowedPrimaryIds.contains(id);
   }
 
   static String _normalize(String input) =>

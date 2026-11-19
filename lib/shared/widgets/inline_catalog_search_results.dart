@@ -21,6 +21,7 @@ class InlineCatalogSearchResults extends StatefulWidget {
     required this.onObjectSelected,
     this.searchIndex,
     this.searchService,
+    this.allowedPrimaryIds,
     this.userPhotoFor,
     this.emptyHint = '천체명 또는 번호를 입력하세요',
     this.debounceDuration = const Duration(milliseconds: 180),
@@ -31,6 +32,7 @@ class InlineCatalogSearchResults extends StatefulWidget {
   final ValueChanged<CatalogObject> onObjectSelected;
   final CatalogSearchIndex? searchIndex;
   final CatalogSearchService? searchService;
+  final Set<String>? allowedPrimaryIds;
 
   /// Catalog rows opt in to their existing representative thumbnail lookup.
   final String? Function(CatalogObject)? userPhotoFor;
@@ -59,6 +61,7 @@ class _InlineCatalogSearchResultsState
     super.didUpdateWidget(oldWidget);
     if (oldWidget.query != widget.query ||
         oldWidget.searchIndex != widget.searchIndex ||
+        oldWidget.allowedPrimaryIds != widget.allowedPrimaryIds ||
         oldWidget.allObjects != widget.allObjects) {
       _scheduleSearch(widget.query);
     }
@@ -90,6 +93,7 @@ class _InlineCatalogSearchResultsState
         trimmed,
         widget.allObjects,
         index: widget.searchIndex,
+        allowedPrimaryIds: widget.allowedPrimaryIds,
       );
 
       setState(() {

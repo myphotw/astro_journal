@@ -9,6 +9,7 @@ import '../../../core/constants/catalog_kind_filter.dart';
 import '../../../core/constants/catalog_sort_order.dart';
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/data_source.dart';
+import '../../../core/constants/famous_celestial_objects.dart';
 import '../../../core/policies/catalog_deletion_policy.dart';
 import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
@@ -28,6 +29,7 @@ import '../../../services/observation_condition_service.dart';
 import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
+import '../../../shared/widgets/catalog_display_scope_selector.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
 import '../../../shared/widgets/mobile_content_layout.dart';
 import '../../../shared/widgets/pc_card_grid.dart';
@@ -104,7 +106,8 @@ class _CatalogScreenState extends State<CatalogScreen>
   }
 
   String _scrollStorageKey(CatalogViewModel vm) =>
-      '${vm.selectedTab}_${vm.shootingFilter}_${vm.kindFilter}_${vm.sortOrder}';
+      '${vm.selectedTab}_${vm.shootingFilter}_${vm.kindFilter}_${vm.sortOrder}'
+      '_${vm.displayScope}';
 
   void _saveScrollPosition(CatalogViewModel vm) {
     if (!_scrollController.hasClients) return;
@@ -132,6 +135,12 @@ class _CatalogScreenState extends State<CatalogScreen>
     final vm = context.read<CatalogViewModel>();
     _saveScrollPosition(vm);
     vm.selectKindFilter(filter);
+    _restoreScrollPosition(vm);
+  }
+
+  void _onDisplayScopeChanged(CatalogViewModel vm, CatalogDisplayScope scope) {
+    _saveScrollPosition(vm);
+    vm.selectDisplayScope(scope);
     _restoreScrollPosition(vm);
   }
 
@@ -405,6 +414,18 @@ class _CatalogScreenState extends State<CatalogScreen>
           ),
           child: searchField,
         ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppTheme.spacingLg,
+          AppTheme.spacingSm,
+          AppTheme.spacingLg,
+          0,
+        ),
+        child: CatalogDisplayScopeSelector(
+          scope: viewModel.displayScope,
+          onChanged: (scope) => _onDisplayScopeChanged(viewModel, scope),
+        ),
+      ),
       if (_isSearching)
         ValueListenableBuilder<TextEditingValue>(
           valueListenable: _searchController,
@@ -413,9 +434,11 @@ class _CatalogScreenState extends State<CatalogScreen>
           // State의 context(this.context)를 사용해야 한다.
           builder: (_, value, _) {
             return InlineCatalogSearchResults(
+              key: ValueKey(viewModel.displayScope),
               query: value.text,
               allObjects: viewModel.allObjects,
               searchIndex: viewModel.searchIndex,
+              allowedPrimaryIds: viewModel.displayScope.allowedIds,
               userPhotoFor: viewModel.userPhotoFor,
               onObjectSelected: (object) {
                 final resolved = viewModel.resolveForNavigation(object);

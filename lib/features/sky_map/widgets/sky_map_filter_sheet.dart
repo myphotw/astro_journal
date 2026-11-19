@@ -43,7 +43,7 @@ Future<void> showSkyMapFilterSheet({
                     SizedBox(
                       width: double.infinity,
                       child: SegmentedButton<bool>(
-                        key: const ValueKey('sky-map-favorite-mode'),
+                        key: const ValueKey('sky-map-famous-mode'),
                         segments: const [
                           ButtonSegment<bool>(
                             value: false,
@@ -53,12 +53,12 @@ Future<void> showSkyMapFilterSheet({
                           ButtonSegment<bool>(
                             value: true,
                             icon: Icon(Icons.star_rounded),
-                            label: Text('즐겨찾기만'),
+                            label: Text('유명천체'),
                           ),
                         ],
-                        selected: {filters.favoritesOnly},
+                        selected: {filters.famousOnly},
                         onSelectionChanged: (selection) =>
-                            viewModel.setFavoritesOnly(selection.single),
+                            viewModel.setFamousOnly(selection.single),
                       ),
                     ),
                     const SizedBox(height: 16),

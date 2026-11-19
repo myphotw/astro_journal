@@ -81,6 +81,7 @@ class CatalogSearchService {
     String query,
     List<CatalogObject> allObjects, {
     CatalogSearchIndex? index,
+    Set<String>? allowedPrimaryIds,
   }) {
     if (query.trim().isEmpty) return [];
 
@@ -91,7 +92,7 @@ class CatalogSearchService {
     final resolvedIndex = index ?? _cachedIndex!;
 
     return mapToPrimaryCatalogResults(
-      resolvedIndex.search(query),
+      resolvedIndex.search(query, allowedPrimaryIds: allowedPrimaryIds),
       allObjects,
     );
   }

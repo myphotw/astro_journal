@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/constants/catalog_kind_filter.dart';
 import '../../../core/constants/catalog_sort_order.dart';
 import '../../../core/constants/catalog_type.dart';
+import '../../../core/constants/famous_celestial_objects.dart';
 import '../../../data/models/catalog_equipment_chips.dart';
 import '../../../data/models/catalog_object.dart';
 import '../../../data/models/shooting_record.dart';
@@ -61,6 +62,7 @@ class CatalogViewModel extends ChangeNotifier {
   ShootingFilter _shootingFilter = ShootingFilter.all;
   CatalogKindFilter _kindFilter = CatalogKindFilter.all;
   CatalogSortOrder _sortOrder = CatalogSortOrder.defaultOrder;
+  CatalogDisplayScope _displayScope = CatalogDisplayScope.famous;
 
   /// 천체 ID → 가장 최근 촬영 사진 경로
   final Map<String, String> _thumbnailMap = {};
@@ -81,6 +83,7 @@ class CatalogViewModel extends ChangeNotifier {
   ShootingFilter get shootingFilter => _shootingFilter;
   CatalogKindFilter get kindFilter => _kindFilter;
   CatalogSortOrder get sortOrder => _sortOrder;
+  CatalogDisplayScope get displayScope => _displayScope;
 
   /// 탭/필터 없이 전체 목록 (검색용)
   List<CatalogObject> get allObjects => List.unmodifiable(_allObjects);
@@ -152,7 +155,7 @@ class CatalogViewModel extends ChangeNotifier {
 
   List<CatalogObject> _computeVisibleObjects() {
     Iterable<CatalogObject> filtered = _allObjects.where(
-      (object) => object.isPrimaryCatalog,
+      (object) => object.isPrimaryCatalog && _displayScope.includes(object.id),
     );
 
     if (_selectedTab != null) {
@@ -176,6 +179,13 @@ class CatalogViewModel extends ChangeNotifier {
 
   void _invalidateVisibleObjects() {
     _visibleObjects = null;
+  }
+
+  void selectDisplayScope(CatalogDisplayScope scope) {
+    if (_displayScope == scope) return;
+    _displayScope = scope;
+    _invalidateVisibleObjects();
+    notifyListeners();
   }
 
   void selectTab(CatalogType? type) {

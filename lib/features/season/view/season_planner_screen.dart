@@ -25,6 +25,7 @@ import '../../../services/target_imaging_availability_service.dart';
 import '../../../services/season_planner_filter_service.dart';
 import '../../../services/season_planner_service.dart';
 import '../../../services/catalog_capture_projection_service.dart';
+import '../../../shared/widgets/catalog_display_scope_selector.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
 import '../../../shared/widgets/mobile_content_layout.dart';
 import '../../../shared/widgets/pc_card_grid.dart';
@@ -207,6 +208,11 @@ class _PlannerHeaderPanel extends StatelessWidget {
                 _SeasonSelector(viewModel: viewModel)
               else
                 _MonthSelector(viewModel: viewModel),
+              const SizedBox(height: AppTheme.spacingSm),
+              CatalogDisplayScopeSelector(
+                scope: viewModel.displayScope,
+                onChanged: vm.selectDisplayScope,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: AppTheme.spacingSm,

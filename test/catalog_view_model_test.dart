@@ -1,6 +1,7 @@
 import 'package:astro_journal/core/constants/catalog_kind_filter.dart';
 import 'package:astro_journal/core/constants/catalog_sort_order.dart';
 import 'package:astro_journal/core/constants/catalog_type.dart';
+import 'package:astro_journal/core/constants/famous_celestial_objects.dart';
 import 'package:astro_journal/core/constants/object_type.dart';
 import 'package:astro_journal/data/models/catalog_candidate.dart';
 import 'package:astro_journal/data/models/catalog_object.dart';
@@ -170,6 +171,7 @@ void main() {
         const EquipmentRecommendationService(),
       );
       await vm.load();
+      vm.selectDisplayScope(CatalogDisplayScope.all);
     });
 
     test('kind filter narrows by object type', () {
@@ -214,10 +216,65 @@ void main() {
         const EquipmentRecommendationService(),
       );
       await sortVm.load();
+      sortVm.selectDisplayScope(CatalogDisplayScope.all);
 
       sortVm.selectSortOrder(CatalogSortOrder.nameAsc);
       expect(sortVm.objects.map((object) => object.id).toList(), ['m1', 'm42']);
     });
+  });
+
+  test('famous IDs are exact and combine with catalog and kind filters', () async {
+    final vm = CatalogViewModel(
+      _FakeCatalogRepository([
+        obj(id: 'M42', type: '발광성운'),
+        obj(id: 'M31', type: '은하'),
+        obj(id: 'NGC2237', type: '발광성운', catalog: CatalogType.ngc),
+        obj(id: 'NGC40', type: '행성상성운', catalog: CatalogType.ngc),
+        obj(id: 'm42', type: '발광성운'),
+      ]),
+      _FakeShootingRecordRepository(),
+      _FakeEquipmentRepository(),
+      const EquipmentRecommendationService(),
+    );
+    addTearDown(vm.dispose);
+    await vm.load();
+
+    expect(vm.displayScope, CatalogDisplayScope.famous);
+    expect(vm.objects.map((o) => o.id), unorderedEquals([
+      'M42', 'M31', 'NGC2237',
+    ]));
+    vm.selectTab(CatalogType.ngc);
+    vm.selectKindFilter(CatalogKindFilter.nebula);
+    expect(vm.objects.map((o) => o.id), ['NGC2237']);
+    vm.selectDisplayScope(CatalogDisplayScope.all);
+    expect(vm.objects.map((o) => o.id), unorderedEquals(['NGC40', 'NGC2237']));
+    vm.selectDisplayScope(CatalogDisplayScope.famous);
+    expect(vm.objects.map((o) => o.id), ['NGC2237']);
+  });
+
+  test('scoped search preserves approved alias hits and omits unapproved IDs', () {
+    final alias = obj(
+      id: 'NGC1976',
+      type: '성운',
+      isPrimary: false,
+      primaryCatalogId: 'M42',
+    );
+    final objects = [
+      obj(id: 'M42', type: '성운', aliases: ['Test cloud']),
+      obj(id: 'NGC40', type: '성운', aliases: ['Test cloud']),
+      alias,
+    ];
+    CatalogSearchService.invalidateIndex();
+    addTearDown(CatalogSearchService.invalidateIndex);
+    final service = CatalogSearchService();
+
+    expect(service.search('NGC1976', objects, allowedPrimaryIds: famousCelestialObjectIds)
+        .map((o) => o.id), ['M42']);
+    expect(service.search('Test cloud', objects, allowedPrimaryIds: famousCelestialObjectIds)
+        .map((o) => o.id), ['M42']);
+    expect(service.search('NGC40', objects, allowedPrimaryIds: famousCelestialObjectIds),
+        isEmpty);
+    expect(service.search('NGC40', objects).map((o) => o.id), ['NGC40']);
   });
 
   group('CatalogViewModel search navigation', () {
