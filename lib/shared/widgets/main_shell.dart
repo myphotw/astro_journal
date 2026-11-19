@@ -35,6 +35,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   AppNavigationNotifier? _navNotifier;
+  int? _lastScreenIndex;
 
   static const int _photoRegistrationNavIndex = 6;
   static const int _screenCount = 6;
@@ -76,6 +77,7 @@ class _MainShellState extends State<MainShell> {
     if (_navNotifier != notifier) {
       _navNotifier?.removeListener(_onNavChanged);
       _navNotifier = notifier;
+      _lastScreenIndex = notifier.currentIndex;
       _navNotifier!.addListener(_onNavChanged);
     }
   }
@@ -89,6 +91,11 @@ class _MainShellState extends State<MainShell> {
   void _onNavChanged() {
     if (!mounted) return;
     final screenIndex = _navNotifier?.currentIndex ?? 0;
+    final leavingSkyMap = _lastScreenIndex == 4 && screenIndex != 4;
+    _lastScreenIndex = screenIndex;
+    if (leavingSkyMap) {
+      context.read<SkyMapViewModel>().restorePreferredDisplayScope();
+    }
     _ensureTabLoaded(screenIndex);
 
     final pending = _navNotifier?.pendingCatalogType;
@@ -111,7 +118,7 @@ class _MainShellState extends State<MainShell> {
     if (!skyMap.hasLoaded) {
       await skyMap.load();
     }
-    if (!mounted) return;
+    if (!mounted || _navNotifier?.currentIndex != 4) return;
     skyMap.focusObjectLocation(object);
   }
 

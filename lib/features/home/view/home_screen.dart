@@ -441,6 +441,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 onDetailTap: () => _showObservationDetail(context),
                 onRefresh: _refreshHome,
                 contextControls: HomeObservationContextControls(
+                  compactMobile: true,
                   siteViewModel: viewModel.activeObservationSiteViewModel,
                   equipment: viewModel.activeEquipment,
                   selectedEquipmentId: activeEquipmentId,
@@ -460,7 +461,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 ),
               ),
             ),
-          const SizedBox(height: AppTheme.spacingMd),
+          const SizedBox(height: AppTheme.spacingSm),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
             child: Column(
@@ -501,7 +502,7 @@ class _HomeBodyState extends State<_HomeBody> {
               ],
             ),
           ),
-          const SizedBox(height: AppTheme.spacingSm),
+          const SizedBox(height: AppTheme.spacingXs),
           if (viewModel.recommendationState !=
               RecommendationComputationState.current)
             Padding(
@@ -593,13 +594,18 @@ class _HomeBodyState extends State<_HomeBody> {
 }
 
 class _MobileHomePanel extends StatelessWidget {
-  const _MobileHomePanel({super.key, required this.child});
+  const _MobileHomePanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(AppTheme.spacingMd),
+  });
 
   final Widget child;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) => ObservatoryPanel(
-    padding: const EdgeInsets.all(AppTheme.spacingMd),
+    padding: padding,
     backgroundColor: PcDesign.card,
     borderColor: PcDesign.border,
     child: child,
@@ -817,8 +823,105 @@ class _ObservationIndexCard extends StatelessWidget {
     final scoreCol = condition.isObservationFeasible
         ? PcDesign.secondary
         : Theme.of(context).colorScheme.error;
+    final score = Column(
+      key: const Key('home-observation-score'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          condition.isObservationFeasible
+              ? '${condition.score} / 100'
+              : '기상 조건 주의',
+          style: TextStyle(
+            color: scoreCol,
+            fontSize: 21,
+            fontWeight: FontWeight.bold,
+            height: 1.1,
+          ),
+        ),
+        const Text(
+          '참고 지수',
+          style: TextStyle(color: PcDesign.muted, fontSize: 11),
+        ),
+        if (condition.isObservationFeasible) ...[
+          _StarsRow(count: condition.starCount),
+          const SizedBox(height: 3),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: condition.score / 100,
+              minHeight: 3,
+              backgroundColor: scoreCol.withAlpha(38),
+              valueColor: AlwaysStoppedAnimation<Color>(scoreCol),
+            ),
+          ),
+        ],
+      ],
+    );
+    final status = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          condition.commentText,
+          key: const Key('home-observation-status'),
+          style: const TextStyle(
+            color: PcDesign.text,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '기상 예보는 참고 정보 · 추천 순위 미반영',
+                style: TextStyle(color: PcDesign.muted, fontSize: 11),
+              ),
+            ),
+            if (isWeatherLoading)
+              const SizedBox.square(
+                dimension: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              )
+            else ...[
+              if (condition.isWeatherFromCache)
+                Tooltip(
+                  message: condition.weatherCachedAt != null
+                      ? '오프라인 · ${_formatDateTime(condition.weatherCachedAt!)} 저장'
+                      : '오프라인 · 저장된 날씨 정보',
+                  child: const Icon(
+                    Icons.offline_bolt_outlined,
+                    size: 13,
+                    color: PcDesign.secondary,
+                  ),
+                ),
+              if (condition.weatherError != null && !condition.hasWeather)
+                Tooltip(
+                  message: condition.weatherError!,
+                  child: const Icon(
+                    Icons.cloud_off_outlined,
+                    size: 13,
+                    color: PcDesign.muted,
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ],
+    );
+    final detail = TextButton.icon(
+      onPressed: onDetailTap,
+      icon: const Icon(Icons.expand_more, size: 14),
+      label: const Text('상세'),
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 32),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+      ),
+    );
 
     return _MobileHomePanel(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -827,115 +930,36 @@ class _ObservationIndexCard extends StatelessWidget {
             icon: Icons.nightlight_outlined,
             titleColor: PcDesign.text,
             iconColor: PcDesign.muted,
-            trailing: IconButton(
-              tooltip: '관측 정보 새로고침',
-              onPressed: isWeatherLoading ? null : onRefresh,
-              icon: const Icon(Icons.refresh),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                detail,
+                IconButton(
+                  tooltip: '관측 정보 새로고침',
+                  onPressed: isWeatherLoading ? null : onRefresh,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '기상 예보는 참고 정보 · 추천 순위 미반영',
-                  style: const TextStyle(color: PcDesign.muted, fontSize: 12),
-                ),
-              ),
-              if (isWeatherLoading)
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.5),
-                )
-              else ...[
-                if (condition.isWeatherFromCache)
-                  Tooltip(
-                    message: condition.weatherCachedAt != null
-                        ? '오프라인 · ${_formatDateTime(condition.weatherCachedAt!)} 저장'
-                        : '오프라인 · 저장된 날씨 정보',
-                    child: const Icon(
-                      Icons.offline_bolt_outlined,
-                      size: 13,
-                      color: PcDesign.secondary,
-                    ),
-                  ),
-                if (condition.weatherError != null && !condition.hasWeather)
-                  Tooltip(
-                    message: condition.weatherError!,
-                    child: const Icon(
-                      Icons.cloud_off_outlined,
-                      size: 13,
-                      color: PcDesign.muted,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingSm),
-          Wrap(
-            key: const Key('home-observation-score'),
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: AppTheme.spacingMd,
-            runSpacing: AppTheme.spacingXs,
-            children: [
-              if (condition.isObservationFeasible) ...[
-                Text(
-                  '${condition.score} / 100',
-                  style: TextStyle(
-                    color: scoreCol,
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                    height: 1,
-                  ),
-                ),
-              ] else ...[
-                Text(
-                  '기상 조건 주의',
-                  style: TextStyle(
-                    color: scoreCol,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    height: 1,
-                  ),
-                ),
-              ],
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
+          LayoutBuilder(
+            builder: (context, limits) {
+              final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
+              if (limits.maxWidth < 276 * scale) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [score, const SizedBox(height: 4), status],
+                );
+              }
+              return Row(
                 children: [
-                  const Text(
-                    '참고 지수',
-                    style: TextStyle(color: PcDesign.muted, fontSize: 11),
-                  ),
-                  if (condition.isObservationFeasible)
-                    _StarsRow(count: condition.starCount),
+                  Expanded(flex: 2, child: score),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 3, child: status),
                 ],
-              ),
-            ],
-          ),
-          if (condition.isObservationFeasible) ...[
-            const SizedBox(height: 4),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: condition.score / 100,
-                minHeight: 3,
-                backgroundColor: scoreCol.withAlpha(38),
-                valueColor: AlwaysStoppedAnimation<Color>(scoreCol),
-              ),
-            ),
-          ],
-          const SizedBox(height: 6),
-          Text(
-            condition.commentText,
-            key: const Key('home-observation-status'),
-            style: const TextStyle(
-              color: PcDesign.text,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
-            ),
+              );
+            },
           ),
           if (condition.observationWindow != null) ...[
             const SizedBox(height: 4),
@@ -966,19 +990,11 @@ class _ObservationIndexCard extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           _MetricsRow(condition: condition, bortle: bortle),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: onDetailTap,
-              icon: const Icon(Icons.expand_more, size: 14),
-              label: const Text('상세'),
-            ),
-          ),
-          const SizedBox(height: AppTheme.spacingSm),
+          const SizedBox(height: 5),
           const Divider(height: 1, color: PcDesign.border),
-          const SizedBox(height: AppTheme.spacingSm),
+          const SizedBox(height: 5),
           const Text(
             '촬영 조건',
             style: TextStyle(
@@ -987,7 +1003,7 @@ class _ObservationIndexCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 3),
           KeyedSubtree(
             key: const Key('home-observation-context-section'),
             child: contextControls,
@@ -1151,21 +1167,23 @@ class _ObservationDetailSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppTheme.spacingMd),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (condition.isObservationFeasible)
-                      _StarsRow(count: condition.starCount),
-                    if (condition.isObservationFeasible)
-                      const SizedBox(height: 2),
-                    Text(
-                      condition.commentText,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 13,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (condition.isObservationFeasible)
+                        _StarsRow(count: condition.starCount),
+                      if (condition.isObservationFeasible)
+                        const SizedBox(height: 2),
+                      Text(
+                        condition.commentText,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -2028,7 +2046,7 @@ class _RecommendedObjectGrid extends StatelessWidget {
             for (var i = 0; i < items.length; i += columns)
               Padding(
                 padding: EdgeInsets.only(
-                  bottom: i + columns < items.length ? AppTheme.spacingSm : 0,
+                  bottom: i + columns < items.length ? 5 : 0,
                 ),
                 child: twoColumns
                     ? IntrinsicHeight(
@@ -2099,95 +2117,83 @@ class _RecommendCompactCard extends StatelessWidget {
     ];
 
     return Card(
+      key: ValueKey('home-recommendation-${object.id}'),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingMd),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CatalogObjectImage(
-                    object: object,
-                    userPhotoPath: userPhotoPath,
-                    width: 54,
-                    height: 54,
-                    borderRadius: BorderRadius.circular(8),
-                    backgroundColor: PcDesign.background,
-                  ),
-                  const SizedBox(width: AppTheme.spacingMd),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CatalogObjectImage(
+                object: object,
+                userPhotoPath: userPhotoPath,
+                width: 48,
+                height: 48,
+                borderRadius: BorderRadius.circular(8),
+                backgroundColor: PcDesign.background,
+              ),
+              const SizedBox(width: AppTheme.spacingSm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '#$rank · ${CatalogObjectDisplayFormatter.catalogTitle(object)}',
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    if (subtitle.isNotEmpty)
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: PcDesign.muted),
+                      ),
+                    const SizedBox(height: 2),
+                    Wrap(
+                      spacing: AppTheme.spacingSm,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(
-                          '#$rank · ${CatalogObjectDisplayFormatter.catalogTitle(object)}',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ObservatoryStatusBadge(
+                          label: object.captured ? '촬영' : '미촬영',
+                          color: object.captured
+                              ? PcDesign.captured
+                              : PcDesign.muted,
                         ),
-                        if (subtitle.isNotEmpty)
-                          Text(
-                            subtitle,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: PcDesign.muted),
+                        if (assessment != null)
+                          RecommendationImagingStatusChips(
+                            assessment: assessment,
                           ),
-                        const SizedBox(height: AppTheme.spacingXs),
-                        Wrap(
-                          spacing: AppTheme.spacingSm,
-                          runSpacing: AppTheme.spacingXs,
-                          children: [
-                            ObservatoryStatusBadge(
-                              label: object.captured ? '촬영' : '미촬영',
-                              color: object.captured
-                                  ? PcDesign.captured
-                                  : PcDesign.muted,
-                            ),
-                            if (assessment != null)
-                              RecommendationImagingStatusChips(
-                                assessment: assessment,
-                              ),
-                          ],
-                        ),
-                        if (!equipmentChips.isEmpty) ...[
-                          const SizedBox(height: AppTheme.spacingXs),
-                          CatalogEquipmentChipsRow(chips: equipmentChips),
-                        ],
-                        if (metrics.isNotEmpty) ...[
-                          const SizedBox(height: AppTheme.spacingXs),
-                          Text(
-                            metrics.join(' · '),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: PcDesign.secondary),
+                        if (showPlanButton)
+                          ShootingPlanActionButton(
+                            compact: true,
+                            isPlanned: isPlanned,
+                            isScheduled: isScheduled,
+                            onToggle: onTogglePlan,
                           ),
-                        ],
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (showPlanButton)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppTheme.spacingMd,
-                0,
-                AppTheme.spacingMd,
-                AppTheme.spacingSm,
-              ),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: ShootingPlanActionButton(
-                  isPlanned: isPlanned,
-                  isScheduled: isScheduled,
-                  onToggle: onTogglePlan,
+                    if (!equipmentChips.isEmpty) ...[
+                      const SizedBox(height: 2),
+                      CatalogEquipmentChipsRow(chips: equipmentChips),
+                    ],
+                    if (metrics.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        metrics.join(' · '),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: PcDesign.secondary),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

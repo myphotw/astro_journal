@@ -45,6 +45,8 @@ class ShootingPlanActionButton extends StatelessWidget {
       return OutlinedButton(
         onPressed: onToggle,
         style: OutlinedButton.styleFrom(
+          minimumSize: compact ? const Size(0, 32) : null,
+          padding: compact ? const EdgeInsets.symmetric(horizontal: 8) : null,
           backgroundColor: isPlanned ? PcDesign.card : PcDesign.raised,
           foregroundColor: isScheduled ? PcDesign.muted : PcDesign.text,
           side: BorderSide(

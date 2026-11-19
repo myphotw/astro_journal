@@ -10,6 +10,7 @@ import '../../../core/constants/catalog_sort_order.dart';
 import '../../../core/constants/catalog_type.dart';
 import '../../../core/constants/data_source.dart';
 import '../../../core/constants/catalog_display_scope.dart';
+import '../../../core/formatters/catalog_object_display_formatter.dart';
 import '../../../core/policies/catalog_deletion_policy.dart';
 import '../../../core/navigation/app_navigation_notifier.dart';
 import '../../../core/theme/app_colors.dart';
@@ -29,9 +30,11 @@ import '../../../services/observation_condition_service.dart';
 import '../../../services/photo_registration_service.dart';
 import '../../../services/target_imaging_availability_service.dart';
 import '../../../shared/widgets/catalog_object_card.dart';
+import '../../../shared/widgets/catalog_object_image.dart';
 import '../../../shared/widgets/catalog_display_scope_selector.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
 import '../../../shared/widgets/mobile_content_layout.dart';
+import '../../../shared/widgets/mobile_photo_tile.dart';
 import '../../../shared/widgets/pc_card_grid.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../../../services/catalog_metadata_enricher.dart';
@@ -522,7 +525,9 @@ class _CatalogScreenState extends State<CatalogScreen>
           )
         : LayoutBuilder(
             builder: (context, constraints) {
-              const padding = EdgeInsets.all(AppTheme.spacingLg);
+              final padding = mobile
+                  ? MobilePhotoTile.gridPadding
+                  : const EdgeInsets.all(AppTheme.spacingLg);
               final gridKey = _scrollStorageKey(viewModel);
               final objects = viewModel.objects;
               return GridView.builder(
@@ -535,27 +540,78 @@ class _CatalogScreenState extends State<CatalogScreen>
                         contentWidth: constraints.maxWidth - padding.horizontal,
                         childAspectRatio: 1.1,
                       )
-                    : MobileContentGrid.delegate(
+                    : MobilePhotoTile.gridDelegate(
                         context,
-                        contentWidth: constraints.maxWidth - padding.horizontal,
-                        childAspectRatio: 1.1,
-                        minimumCardHeight: 176,
+                        width: constraints.maxWidth,
+                        minTileWidth: 118,
+                        imageAspectRatio: 1.34,
                       ),
                 itemCount: objects.length,
                 itemBuilder: (context, index) {
                   final object = objects[index];
                   final thumbnail = viewModel.userPhotoFor(object);
+                  final equipment = viewModel.equipmentChipsFor(object.id);
+                  void openDetail() => _openCatalogDetail(
+                    context,
+                    object: object,
+                    navigationObjects: objects,
+                  );
+                  if (mobile) {
+                    final title =
+                        CatalogObjectDisplayFormatter.catalogTitle(object);
+                    final subtitle = [
+                      object.displayType,
+                      if (object.displayConstellation.trim().isNotEmpty &&
+                          object.displayConstellation != '-')
+                        object.displayConstellation,
+                    ].join(' · ');
+                    return Tooltip(
+                      message: [
+                        title,
+                        subtitle,
+                        object.captured ? '촬영 완료' : '미촬영',
+                        ...equipment.items.map((chip) => chip.label),
+                      ].join('\n'),
+                      excludeFromSemantics: true,
+                      child: MobilePhotoTile(
+                        key: ValueKey('mobile-catalog-tile-${object.id}'),
+                        title: title,
+                        subtitle: subtitle,
+                        onTap: openDetail,
+                        image: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CatalogObjectImage(
+                              object: object,
+                              userPhotoPath: thumbnail,
+                              backgroundColor: PcDesign.background,
+                              fillCard: true,
+                            ),
+                            if (object.captured)
+                              const Positioned(
+                                right: 5,
+                                top: 5,
+                                child: CircleAvatar(
+                                  radius: 10,
+                                  backgroundColor: PcDesign.background,
+                                  child: Icon(
+                                    Icons.check_circle,
+                                    color: PcDesign.captured,
+                                    size: 16,
+                                    semanticLabel: '촬영 완료',
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
                   return CatalogObjectCard(
                     object: object,
                     thumbnailPath: thumbnail,
-                    equipmentChips: viewModel.equipmentChipsFor(object.id),
-                    onTap: () {
-                      _openCatalogDetail(
-                        context,
-                        object: object,
-                        navigationObjects: objects,
-                      );
-                    },
+                    equipmentChips: equipment,
+                    onTap: openDetail,
                   );
                 },
               );

@@ -20,6 +20,7 @@ import '../../../data/sky_map/sky_map_star_names_ko.dart';
 import '../../../services/celestial_position_service.dart';
 import '../../../services/catalog_favorite_controller.dart';
 import '../../../services/equipment/fov_framing_engine.dart';
+import '../../../services/mobile_display_scope_preferences.dart';
 import '../../../services/sky_map_angular_size.dart';
 import '../../../services/sky_map_horizontal_projection_service.dart';
 import '../../../services/sky_map_milky_way_service.dart';
@@ -173,7 +174,9 @@ class SkyMapViewModel extends ChangeNotifier {
     this._activeObservationSiteViewModel,
     DateTime Function()? now,
     this._catalogFavorites,
-  ]) : _now = now ?? DateTime.now {
+    this._displayPreferences,
+  ]) : _now = now ?? DateTime.now,
+       _filters = SkyMapFilters(famousOnly: _displayPreferences != null) {
     _activeObservationSiteViewModel?.addListener(_handleObservationSiteChange);
     _lastFavoriteIds = _catalogFavorites?.favoriteIds ?? const {};
     _catalogFavorites?.addListener(_onFavoritesChanged);
@@ -188,6 +191,9 @@ class SkyMapViewModel extends ChangeNotifier {
   final EquipmentRepository _equipmentRepository;
   final ActiveObservationSiteViewModel? _activeObservationSiteViewModel;
   final CatalogFavoriteController? _catalogFavorites;
+  final MobileDisplayScopePreferences? _displayPreferences;
+  bool? _preferredFamousOnly;
+  bool get usesMobileDisplayScope => _displayPreferences != null;
   late Set<String> _lastFavoriteIds;
   final DateTime Function() _now;
   final SkyMapMilkyWayService _milkyWayService = const SkyMapMilkyWayService();
@@ -210,6 +216,7 @@ class SkyMapViewModel extends ChangeNotifier {
       defaultViewHeightDeg * (defaultHorizonScreenFraction - 0.5);
 
   bool _isLoading = false;
+  Future<void>? _loadInFlight;
   bool _hasLoaded = false;
   String? _errorMessage;
 
@@ -219,7 +226,7 @@ class SkyMapViewModel extends ChangeNotifier {
   List<CatalogObject> _famousDeepSkyObjects = [];
   Map<String, CatalogObject> _catalogById = const {};
   List<Equipment> _equipment = [];
-  SkyMapFilters _filters = const SkyMapFilters();
+  SkyMapFilters _filters;
   String _searchQuery = '';
 
   double _centerAzimuthDeg = defaultCenterAzimuthDeg;
@@ -489,13 +496,23 @@ class SkyMapViewModel extends ChangeNotifier {
     );
   }
 
-  Future<void> load() async {
-    if (_isLoading) return;
+  Future<void> load() => _loadInFlight ??=
+      Future<void>.microtask(_load).whenComplete(() => _loadInFlight = null);
+
+  Future<void> _load() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
+      final preferences = _displayPreferences;
+      if (preferences != null && _preferredFamousOnly == null) {
+        final saved = await preferences.read(MobileDisplayScreen.skyMap);
+        if (_preferredFamousOnly == null) {
+          _preferredFamousOnly = saved ?? true;
+          _filters = _filters.copyWith(famousOnly: _preferredFamousOnly);
+        }
+      }
       final all = await _catalogRepository.getAll(listOnly: true);
 
       _deepSkyObjects = all
@@ -611,7 +628,21 @@ class SkyMapViewModel extends ChangeNotifier {
   }
 
   void setFamousOnly(bool value) {
+    final preferences = _displayPreferences;
+    if (preferences != null) {
+      _preferredFamousOnly = value;
+      unawaited(preferences.write(MobileDisplayScreen.skyMap, value));
+    }
     setFilters(_filters.copyWith(famousOnly: value));
+  }
+
+  /// External focus can widen the visible scope without rewriting the choice.
+  void restorePreferredDisplayScope() {
+    if (!usesMobileDisplayScope) return;
+    final preferred = _preferredFamousOnly ?? true;
+    if (_filters.famousOnly != preferred) {
+      setFilters(_filters.copyWith(famousOnly: preferred));
+    }
   }
 
   void setSearchQuery(String query) {

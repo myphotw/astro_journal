@@ -44,13 +44,17 @@ Future<void> showSkyMapFilterSheet({
                       width: double.infinity,
                       child: SegmentedButton<bool>(
                         key: const ValueKey('sky-map-famous-mode'),
-                        segments: const [
+                        segments: [
                           ButtonSegment<bool>(
                             value: false,
-                            icon: Icon(Icons.auto_awesome_mosaic_outlined),
-                            label: Text('일반'),
+                            icon: const Icon(
+                              Icons.auto_awesome_mosaic_outlined,
+                            ),
+                            label: Text(
+                              viewModel.usesMobileDisplayScope ? '전체보기' : '일반',
+                            ),
                           ),
-                          ButtonSegment<bool>(
+                          const ButtonSegment<bool>(
                             value: true,
                             icon: Icon(Icons.star_rounded),
                             label: Text('유명천체'),

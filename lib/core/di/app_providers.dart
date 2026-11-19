@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
@@ -57,6 +58,7 @@ import '../../services/exif_service.dart';
 import '../../services/geocoding_service.dart';
 import '../../services/location_service.dart';
 import '../../services/metadata_service.dart';
+import '../../services/mobile_display_scope_preferences.dart';
 import '../../services/catalog_search_service.dart';
 import '../../services/catalog_favorite_controller.dart';
 import '../../services/catalog_capture_projection_service.dart';
@@ -461,6 +463,11 @@ class AppProviders {
 
     // Home/Catalog/Gallery/Stats 등은 AppStartupViewModel이 순차 preload한다.
     // 탭 첫 진입 시 MainShell._ensureTabLoaded는 hasLoaded면 재로드하지 않는다.
+    // Same Windows shell condition as AstroJournalApp.
+    final mobileDisplayPreferences =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+        ? null
+        : const MobileDisplayScopePreferences();
     final catalogViewModel = CatalogViewModel(
       catalogRepository,
       galleryShootingRecordRepository,
@@ -468,6 +475,7 @@ class AppProviders {
       equipmentRecommendationService,
       captureProjection: catalogCaptureProjection,
       catalogFavorites: catalogFavorites,
+      displayPreferences: mobileDisplayPreferences,
     );
 
     galleryViewModel = GalleryViewModel(
@@ -547,6 +555,7 @@ class AppProviders {
       activeObservationSiteViewModel,
       null,
       catalogFavorites,
+      mobileDisplayPreferences,
     );
 
     final appNavigationNotifier = AppNavigationNotifier();

@@ -30,6 +30,7 @@ class HomeObservationContextControls extends StatelessWidget {
     this.onSaveCurrentLocation,
     this.stackOnNarrow = false,
     this.accentColor,
+    this.compactMobile = false,
   });
 
   final ActiveObservationSiteViewModel siteViewModel;
@@ -49,6 +50,7 @@ class HomeObservationContextControls extends StatelessWidget {
   final int? currentLocationBortle;
   final bool stackOnNarrow;
   final Color? accentColor;
+  final bool compactMobile;
 
   static const double _selectorCardHeight = 58;
 
@@ -56,10 +58,12 @@ class HomeObservationContextControls extends StatelessWidget {
   Widget build(BuildContext context) {
     PerformanceProbe.event('widget.observation_context_controls.build');
     final mobile = PcDesign.isMobileContent(context);
+    final compact = mobile && compactMobile;
     final textScale = MediaQuery.textScalerOf(context).scale(13) / 13;
+    final baseHeight = compact ? 48.0 : _selectorCardHeight;
     final selectorHeight = mobile && textScale > 1
-        ? _selectorCardHeight * textScale
-        : _selectorCardHeight;
+        ? baseHeight * textScale
+        : baseHeight;
     final siteSelector = ActiveObservationSiteSelector(
       viewModel: siteViewModel,
       equipmentName: selectedEquipmentName,
@@ -102,27 +106,34 @@ class HomeObservationContextControls extends StatelessWidget {
                   selected: trackingMode,
                   onChanged: onTrackingChanged,
                   accentColor: accentColor,
+                  compact: compact,
                 ),
               ),
             ],
           );
         }
 
-        if (stackOnNarrow ||
-            (mobile && constraints.maxWidth < 500 * textScale)) {
+        final inlineTracking =
+            compact && constraints.maxWidth >= 240 * textScale;
+        final stackSelectors =
+            stackOnNarrow ||
+            (mobile &&
+                constraints.maxWidth < (compact ? 260 : 500) * textScale);
+        if (stackSelectors) {
           return Column(
             key: const Key('home-context-compact-layout'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               siteSelector,
-              const SizedBox(height: AppTheme.spacingSm),
+              SizedBox(height: compact ? 4 : AppTheme.spacingSm),
               equipmentSelector,
-              const SizedBox(height: AppTheme.spacingSm),
+              SizedBox(height: compact ? 4 : AppTheme.spacingSm),
               _TrackingModeSelector(
                 selected: trackingMode,
                 onChanged: onTrackingChanged,
                 accentColor: accentColor,
-                inline: !mobile,
+                inline: !mobile || inlineTracking,
+                compact: compact,
               ),
             ],
           );
@@ -138,12 +149,13 @@ class HomeObservationContextControls extends StatelessWidget {
                 Expanded(child: equipmentSelector),
               ],
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: compact ? 2 : 6),
             _TrackingModeSelector(
               selected: trackingMode,
               onChanged: onTrackingChanged,
               accentColor: accentColor,
               inline: true,
+              compact: compact,
             ),
           ],
         );
@@ -258,12 +270,14 @@ class _TrackingModeSelector extends StatelessWidget {
     required this.onChanged,
     this.inline = false,
     this.accentColor,
+    this.compact = false,
   });
 
   final TrackingMode selected;
   final ValueChanged<TrackingMode> onChanged;
   final bool inline;
   final Color? accentColor;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -293,7 +307,15 @@ class _TrackingModeSelector extends StatelessWidget {
       expandedInsets: EdgeInsets.zero,
       onSelectionChanged: (selection) => onChanged(selection.first),
       style: mobile
-          ? null
+          ? (compact
+                ? const ButtonStyle(
+                    minimumSize: WidgetStatePropertyAll(Size(0, 32)),
+                    padding: WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                  )
+                : null)
           : ButtonStyle(
               visualDensity: VisualDensity.compact,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -326,7 +348,7 @@ class _TrackingModeSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         label,
-        const SizedBox(height: 5),
+        SizedBox(height: compact ? 2 : 5),
         SizedBox(width: double.infinity, child: selector),
       ],
     );

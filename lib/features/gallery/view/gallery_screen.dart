@@ -16,6 +16,7 @@ import '../../../shared/widgets/app_file_image.dart';
 import '../../../shared/widgets/double_tap_date_picker.dart';
 import '../../../shared/widgets/inline_catalog_search_results.dart';
 import '../../../shared/widgets/mobile_content_layout.dart';
+import '../../../shared/widgets/mobile_photo_tile.dart';
 import '../../../shared/widgets/responsive_filter_chips.dart';
 import '../viewmodel/gallery_view_model.dart';
 import 'gallery_detail_screen.dart';
@@ -963,17 +964,19 @@ class _DateGroupRecordRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.spacingLg,
-            vertical: AppTheme.spacingSm,
-          ),
+          padding: mobile
+              ? const EdgeInsets.symmetric(horizontal: 8, vertical: 5)
+              : const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spacingLg,
+                  vertical: AppTheme.spacingSm,
+                ),
           child: Row(
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: SizedBox(
-                  width: 56,
-                  height: 56,
+                  width: mobile ? 64 : 56,
+                  height: mobile ? 64 : 56,
                   child: photoUri != null && photoUri.isNotEmpty
                       ? AppFileImage(
                           path: photoUri,
@@ -1048,9 +1051,9 @@ class _DateGroupRecordRow extends StatelessWidget {
     return mobile
         ? Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppTheme.spacingLg,
+              6,
               0,
-              AppTheme.spacingLg,
+              6,
               AppTheme.spacingXs,
             ),
             child: row,
@@ -1127,22 +1130,26 @@ class _ObjectGridView extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final contentWidth = constraints.maxWidth - AppTheme.spacingLg * 2;
         final mobileDelegate = PcDesign.isMobileContent(context)
-            ? MobileContentGrid.delegate(
+            ? MobilePhotoTile.gridDelegate(
                 context,
-                contentWidth: contentWidth,
-                childAspectRatio: 0.85,
-                minimumCardHeight: 174,
+                width: constraints.maxWidth,
+                minTileWidth: 156,
+                imageAspectRatio: 1.05,
               )
             : null;
+        final padding = mobileDelegate == null
+            ? const EdgeInsets.all(AppTheme.spacingLg)
+            : MobilePhotoTile.gridPadding;
         final columns =
             mobileDelegate?.crossAxisCount ??
             _gridCrossAxisCount(constraints.maxWidth);
-        final spacing = columns >= 6 ? 6.0 : AppTheme.spacingSm;
+        final spacing =
+            mobileDelegate?.crossAxisSpacing ??
+            (columns >= 6 ? 6.0 : AppTheme.spacingSm);
         final tileWidth =
             (constraints.maxWidth -
-                AppTheme.spacingLg * 2 -
+                padding.horizontal -
                 spacing * (columns - 1)) /
             columns;
         final requestedCacheSize =
@@ -1153,7 +1160,7 @@ class _ObjectGridView extends StatelessWidget {
             ? 480
             : requestedCacheSize;
         return GridView.builder(
-          padding: const EdgeInsets.all(AppTheme.spacingLg),
+          padding: padding,
           gridDelegate:
               mobileDelegate ??
               SliverGridDelegateWithFixedCrossAxisCount(
@@ -1204,6 +1211,53 @@ class _GalleryGroupCard extends StatelessWidget {
     final theme = Theme.of(context);
     final color = pc ? PcDesign.text : _catalogColor(group.object.catalog);
     final photoUri = group.representativeRecord.galleryThumbnailUri;
+    final image = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (photoUri != null && photoUri.isNotEmpty)
+          AppFileImage(
+            path: photoUri,
+            fit: BoxFit.cover,
+            memCacheWidth: thumbnailCacheSize,
+            memCacheHeight: thumbnailCacheSize,
+            filterQuality: FilterQuality.low,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => const _PhotoPlaceholder(),
+          )
+        else
+          const _PhotoPlaceholder(),
+        if (group.photoCount > 1)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: _CountBadge(count: group.photoCount, pc: pc),
+          ),
+        if (group.representativeRecord.isFavorite)
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Icon(
+              Icons.star,
+              color: pc ? PcDesign.accent : Colors.amber,
+              size: 20,
+            ),
+          ),
+      ],
+    );
+    if (PcDesign.isMobileContent(context)) {
+      final title = group.object.displayName;
+      final name = group.object.displayCommonName;
+      return MobilePhotoTile(
+        key: ValueKey('mobile-gallery-tile-${group.object.id}'),
+        image: image,
+        title: title,
+        subtitle: [
+          if (name.isNotEmpty && name != title) name,
+          '${group.photoCount}장',
+        ].join(' · '),
+        onTap: onTap,
+      );
+    }
 
     return Card(
       color: pc ? PcDesign.card : null,
@@ -1219,41 +1273,7 @@ class _GalleryGroupCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (photoUri != null && photoUri.isNotEmpty)
-                    AppFileImage(
-                      path: photoUri,
-                      fit: BoxFit.cover,
-                      memCacheWidth: thumbnailCacheSize,
-                      memCacheHeight: thumbnailCacheSize,
-                      filterQuality: FilterQuality.low,
-                      gaplessPlayback: true,
-                      errorBuilder: (_, _, _) => const _PhotoPlaceholder(),
-                    )
-                  else
-                    const _PhotoPlaceholder(),
-                  if (group.photoCount > 1)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: _CountBadge(count: group.photoCount, pc: pc),
-                    ),
-                  if (group.representativeRecord.isFavorite)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Icon(
-                        Icons.star,
-                        color: pc ? PcDesign.accent : Colors.amber,
-                        size: 20,
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            Expanded(child: image),
             Padding(
               padding: const EdgeInsets.all(AppTheme.spacingSm),
               child: Column(

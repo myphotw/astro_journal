@@ -19,6 +19,7 @@ import '../../../services/catalog_search_index.dart';
 import '../../../services/catalog_search_service.dart';
 import '../../../services/catalog_thumbnail_resolver.dart';
 import '../../../services/equipment/equipment_recommendation_service.dart';
+import '../../../services/mobile_display_scope_preferences.dart';
 
 enum ShootingFilter { all, captured, notCaptured }
 
@@ -30,6 +31,7 @@ class CatalogViewModel extends ChangeNotifier {
     EquipmentRecommendationService equipmentRecommendationService, {
     CatalogCaptureProjectionService? captureProjection,
     CatalogFavoriteController? catalogFavorites,
+    MobileDisplayScopePreferences? displayPreferences,
   }) => CatalogViewModel._(
     catalogRepository,
     shootingRecordRepository,
@@ -37,6 +39,7 @@ class CatalogViewModel extends ChangeNotifier {
     equipmentRecommendationService,
     captureProjection,
     catalogFavorites,
+    displayPreferences,
   );
 
   CatalogViewModel._(
@@ -46,7 +49,10 @@ class CatalogViewModel extends ChangeNotifier {
     this._equipmentRecommendationService,
     this._captureProjection,
     this._catalogFavorites,
-  ) {
+    this._displayPreferences,
+  ) : _displayScope = _displayPreferences == null
+           ? CatalogDisplayScope.famous
+           : CatalogDisplayScope.all {
     _captureProjection?.addListener(_onCaptureProjectionChanged);
     _lastFavoriteIds = _catalogFavorites?.favoriteIds ?? const {};
     _catalogFavorites?.addListener(_onFavoritesChanged);
@@ -58,6 +64,9 @@ class CatalogViewModel extends ChangeNotifier {
   final EquipmentRecommendationService _equipmentRecommendationService;
   final CatalogCaptureProjectionService? _captureProjection;
   final CatalogFavoriteController? _catalogFavorites;
+  final MobileDisplayScopePreferences? _displayPreferences;
+  Future<void>? _displayScopeRestore;
+  bool _displayScopeSelected = false;
   late Set<String> _lastFavoriteIds;
 
   bool _isLoading = false;
@@ -70,7 +79,7 @@ class CatalogViewModel extends ChangeNotifier {
   ShootingFilter _shootingFilter = ShootingFilter.all;
   CatalogKindFilter _kindFilter = CatalogKindFilter.all;
   CatalogSortOrder _sortOrder = CatalogSortOrder.defaultOrder;
-  CatalogDisplayScope _displayScope = CatalogDisplayScope.famous;
+  CatalogDisplayScope _displayScope;
 
   /// 천체 ID → 가장 최근 촬영 사진 경로
   final Map<String, String> _thumbnailMap = {};
@@ -204,9 +213,28 @@ class CatalogViewModel extends ChangeNotifier {
 
   void selectDisplayScope(CatalogDisplayScope scope) {
     if (_displayScope == scope) return;
+    final preferences = _displayPreferences;
+    if (preferences != null) {
+      _displayScopeSelected = true;
+      unawaited(
+        preferences.write(
+          MobileDisplayScreen.catalog,
+          scope == CatalogDisplayScope.famous,
+        ),
+      );
+    }
     _displayScope = scope;
     _invalidateVisibleObjects();
     notifyListeners();
+  }
+
+  Future<void> _restoreDisplayScope(
+    MobileDisplayScopePreferences preferences,
+  ) async {
+    final famous = await preferences.read(MobileDisplayScreen.catalog);
+    if (_displayScopeSelected || famous == null) return;
+    _displayScope = famous ? CatalogDisplayScope.famous : CatalogDisplayScope.all;
+    _invalidateVisibleObjects();
   }
 
   void selectTab(CatalogType? type) {
@@ -247,6 +275,10 @@ class CatalogViewModel extends ChangeNotifier {
 
     try {
       final sw = Stopwatch()..start();
+      final preferences = _displayPreferences;
+      if (preferences != null) {
+        await (_displayScopeRestore ??= _restoreDisplayScope(preferences));
+      }
       final objects = await _catalogRepository.getAll(listOnly: true);
       final records = await _shootingRecordRepository.getAll();
       _allObjects = objects;

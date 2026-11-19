@@ -13,6 +13,7 @@ import '../../viewmodel/astronomy_events_view_model.dart';
 import '../astronomy_events_screen.dart';
 import 'astronomy_event_card.dart';
 import 'pc_home_colors.dart';
+import 'pc_dashboard_layout.dart';
 
 class AstronomyEventsSection extends StatefulWidget {
   const AstronomyEventsSection({super.key, this.compactList = false});
@@ -49,6 +50,9 @@ class _AstronomyEventsSectionState extends State<AstronomyEventsSection> {
     final viewModel = context.watch<AstronomyEventsViewModel?>();
     if (viewModel == null) return const SizedBox.shrink();
     final mobile = PcDesign.isMobileContent(context);
+    final density = widget.compactList
+        ? (PcDashboardLayout.maybeOf(context)?.density ?? 0.0)
+        : 0.0;
 
     return Column(
       key: const Key('home-astronomy-events-section'),
@@ -70,6 +74,7 @@ class _AstronomyEventsSectionState extends State<AstronomyEventsSection> {
                               ? PcDesign.text
                               : AppColors.textPrimary,
                           fontWeight: FontWeight.bold,
+                          fontSize: density > 0 ? 14 + 3 * density : null,
                         ),
               ),
             ),
@@ -95,13 +100,16 @@ class _AstronomyEventsSectionState extends State<AstronomyEventsSection> {
             ),
           ],
         ),
-        SizedBox(height: widget.compactList ? 4 : AppTheme.spacingSm),
+        SizedBox(
+          height: widget.compactList ? 4 + 6 * density : AppTheme.spacingSm,
+        ),
         if (widget.compactList)
           Expanded(
             child: _HomeEventsBody(
               viewModel: viewModel,
               compactList: true,
               scrollController: _eventScrollController,
+              density: density,
             ),
           )
         else
@@ -116,11 +124,13 @@ class _HomeEventsBody extends StatelessWidget {
     required this.viewModel,
     required this.compactList,
     this.scrollController,
+    this.density = 0,
   });
 
   final AstronomyEventsViewModel viewModel;
   final bool compactList;
   final ScrollController? scrollController;
+  final double density;
 
   @override
   Widget build(BuildContext context) {
@@ -194,14 +204,14 @@ class _HomeEventsBody extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 54),
+                constraints: BoxConstraints(minHeight: 54 + 12 * density),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: EdgeInsets.symmetric(vertical: 6 + 2 * density),
                   child: Row(
                     children: [
                       Container(
-                        width: 40,
-                        height: 40,
+                        width: 40 + 8 * density,
+                        height: 40 + 8 * density,
                         decoration: BoxDecoration(
                           color: PcHomeColors.card,
                           borderRadius: BorderRadius.circular(8),
@@ -212,10 +222,10 @@ class _HomeEventsBody extends StatelessWidget {
                             events[index].type,
                           ),
                           color: PcHomeColors.muted,
-                          size: 20,
+                          size: 20 + 4 * density,
                         ),
                       ),
-                      const SizedBox(width: AppTheme.spacingMd),
+                      SizedBox(width: AppTheme.spacingMd + 5 * density),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,8 +234,8 @@ class _HomeEventsBody extends StatelessWidget {
                               events[index].title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
+                              style: TextStyle(
+                                fontSize: 12 + 2 * density,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -237,8 +247,8 @@ class _HomeEventsBody extends StatelessWidget {
                                   : events[index].tags.take(2).join(' · '),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 10,
+                              style: TextStyle(
+                                fontSize: 10 + 2 * density,
                                 color: PcHomeColors.muted,
                               ),
                             ),
@@ -247,14 +257,14 @@ class _HomeEventsBody extends StatelessWidget {
                       ),
                       const SizedBox(width: AppTheme.spacingSm),
                       SizedBox(
-                        width: 92,
+                        width: 92 + 24 * density,
                         child: Text(
                           AstronomyEventPresenter.dateLabel(events[index], now),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.right,
-                          style: const TextStyle(
-                            fontSize: 10,
+                          style: TextStyle(
+                            fontSize: 10 + 2 * density,
                             color: PcHomeColors.muted,
                           ),
                         ),
